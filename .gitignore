@@ -1,0 +1,33 @@
+# Maven
+target/
+*.iml
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+.mvn/wrapper/MavenWrapperDownloader.java
+mvnw
+mvnw.cmd
+
+# IntelliJ / Eclipse
+.idea/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+*.jar
+*.war
+*.zip
+
+# App preferences (client)
+.location/
+
+# Spotless cache
+.spotless/

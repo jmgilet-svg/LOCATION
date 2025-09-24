@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: location-server
+  main:
+    banner-mode: "off"
+logging.level.org.springframework.security: INFO
