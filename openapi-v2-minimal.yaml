@@ -1,0 +1,307 @@
+openapi: 3.0.3
+info:
+  title: Gestion Matériel — API v2 (minimal)
+  version: "0.1.0"
+  description: |
+    Spécification minimale des endpoints **v2** pour le nouveau projet.
+    Dernière màj: 2025-09-24T14:29:12Z
+servers:
+  - url: https://api.example.com
+    description: Production (exemple)
+  - url: http://localhost:8080
+    description: Développement local
+tags:
+  - name: Quotes
+  - name: Settings
+  - name: Email
+  - name: Templates
+  - name: Assets
+
+paths:
+  /api/v2/quotes/from-intervention:
+    post:
+      summary: Créer un devis à partir d'une intervention
+      tags: [Quotes]
+      operationId: createQuoteFromIntervention
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteFromInterventionRequest'
+      responses:
+        '201':
+          description: Devis créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteRef'
+        '400':
+          description: Requête invalide
+        '404':
+          description: Intervention introuvable
+
+  /api/v2/settings:
+    get:
+      summary: Lire les paramètres d'agence
+      tags: [Settings]
+      operationId: getSettings
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: Paramètres de l'agence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+    put:
+      summary: Mettre à jour les paramètres d'agence
+      tags: [Settings]
+      operationId: putSettings
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '200':
+          description: Paramètres mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+
+  /api/v2/email/send:
+    post:
+      summary: Envoyer un email HTML (tracking pixel)
+      tags: [Email]
+      operationId: sendEmail
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSendRequest'
+      responses:
+        '202':
+          description: Email accepté pour envoi
+
+  /api/v2/templates:
+    get:
+      summary: Lister les templates de l'agence
+      tags: [Templates]
+      operationId: listTemplates
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - in: query
+          name: kind
+          schema:
+            $ref: '#/components/schemas/TemplateKind'
+      responses:
+        '200':
+          description: Liste des templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Template'
+    post:
+      summary: Créer/mettre à jour un template
+      tags: [Templates]
+      operationId: upsertTemplate
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Template'
+      responses:
+        '200':
+          description: Template enregistré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+
+  /api/v2/templates/{id}:
+    delete:
+      summary: Supprimer un template
+      tags: [Templates]
+      operationId: deleteTemplate
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Supprimé
+
+  /api/v2/assets:
+    get:
+      summary: Lister les assets (logos, tampons)
+      tags: [Assets]
+      operationId: listAssets
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      responses:
+        '200':
+          description: Liste des assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetMeta'
+    post:
+      summary: Uploader ou remplacer un asset
+      tags: [Assets]
+      operationId: uploadAsset
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                key:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+                mime:
+                  type: string
+      responses:
+        '201':
+          description: Asset stocké
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetMeta'
+
+  /api/v2/assets/{key}:
+    delete:
+      summary: Supprimer un asset
+      tags: [Assets]
+      operationId: deleteAsset
+      parameters:
+        - $ref: '#/components/parameters/AgencyHeader'
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Supprimé
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    AgencyHeader:
+      in: header
+      name: X-Agency-Id
+      required: true
+      schema:
+        type: string
+      description: Identifiant de l'agence courante
+
+  schemas:
+    TemplateKind:
+      type: string
+      enum: [QUOTE, INVOICE, EMAIL, PARTIAL]
+
+    Template:
+      type: object
+      required: [id, key, kind, html]
+      properties:
+        id: {{ type: string }}
+        key: {{ type: string }}
+        kind: {{ $ref: '#/components/schemas/TemplateKind' }}
+        html: {{ type: string }}
+
+    AssetMeta:
+      type: object
+      required: [key, mime, size]
+      properties:
+        key: {{ type: string }}
+        mime: {{ type: string }}
+        size: {{ type: integer, format: int64 }}
+
+    QuoteFromInterventionRequest:
+      type: object
+      required: [interventionId]
+      properties:
+        interventionId:
+          type: string
+
+    QuoteRef:
+      type: object
+      required: [id, reference, interventionId]
+      properties:
+        id: {{ type: string }}
+        reference: {{ type: string }}
+        interventionId: {{ type: string }}
+
+    Settings:
+      type: object
+      properties:
+        tvaPercent: {{ type: number, format: double, example: 20.0 }}
+        cgvHtml: {{ type: string }}
+        emailTemplates:
+          type: object
+          additionalProperties: {{ type: string }}
+        partials:
+          type: object
+          additionalProperties: {{ type: string }}
+        assets:
+          type: array
+          items: {{ $ref: '#/components/schemas/AssetMeta' }}
+
+    EmailAttachment:
+      type: object
+      properties:
+        fileName: {{ type: string }}
+        mime: {{ type: string }}
+        dataBase64: {{ type: string, description: "Contenu encodé Base64" }}
+
+    EmailSendRequest:
+      type: object
+      required: [to, subject, html]
+      properties:
+        to:
+          type: array
+          items: {{ type: string, format: email }}
+        cc:
+          type: array
+          items: {{ type: string, format: email }}
+        bcc:
+          type: array
+          items: {{ type: string, format: email }}
+        subject: {{ type: string }}
+        html: {{ type: string }}
+        attachments:
+          type: array
+          items: {{ $ref: '#/components/schemas/EmailAttachment' }}
+
+security:
+  - bearerAuth: []
