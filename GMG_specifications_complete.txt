@@ -1,0 +1,279 @@
+GESTION MATÉRIEL — SPÉCIFICATIONS TECHNIQUES & FONCTIONNELLES
+Dernière mise à jour: 2025-09-24T13:46:39Z
+
+
+============================================================
+1) OBJECTIF & PÉRIMÈTRE
+------------------------------------------------------------
+Suite applicative de gestion opérationnelle (levage, transport, manutention) couvrant:
+- Planification des interventions
+- Pré-devis et devis
+- Facturation
+- Référentiels (Ressources / Types / Clients / Contacts)
+- Multi-agences, modèles de documents (HTML->PDF), envoi email avec tracking
+- Sécurité par rôles et session
+- Mode Mock et mode API (compatibles et interchangeables)
+
+Composants:
+- FRONTEND: client Java/Swing
+- BACKEND: Spring Boot (API REST), V1 legacy conservée, V2 étendue
+- Données de démonstration (mocks) riches et scalables
+
+============================================================
+2) UX GLOBALE & NAVIGATION
+------------------------------------------------------------
+- Barre latérale (Sidebar) compacte/élargie avec icônes + libellés; "pin" pour fixer.
+- Survol = affiche libellés; compact = icônes seules.
+- Masquage/activation dynamique des entrées selon rôle utilisateur.
+- En-tête avec bouton Déconnexion et gestion d'expiration de session.
+- Écran d'accueil: sélection Agence, puis choix Backend (Mock/API), puis Login/MDP.
+- Écrans principaux:
+  * Planning (écran pivot)
+  * Liste (vision tabulaire des interventions — optionnel selon build)
+  * Pipeline (workflow interventions/devis/factures — optionnel)
+  * Ventes: Devis / Factures (tables + édition inline)
+  * Paramètres (Général, Templates, Assets, Types d’intervention, Types de ressources, Utilisateurs/Comptes)
+  * Référentiels: Ressources, Clients/Contacts
+- Suppression des onglets "Calendrier" et "Cartes" indépendants: la vue Planning unique intègre les fonctionnalités.
+
+============================================================
+3) PLANNING — COMPORTEMENTS & INTERACTIONS
+------------------------------------------------------------
+3.1 Surface de planification
+- Tuiles Intervention avec rendu moderne (coins arrondis, dégradé léger, bord coloré selon statut).
+- Zoom vertical via Ctrl+molette (bornes ~0.5..6.0 min/px).
+- Scroll vertical fluide (surface scrollable = grille réelle).
+- Surlignage de la ligne ressource sous la souris (hover).
+
+3.2 Drag & Drop + Resize (pixel parfait)
+- Déplacement vertical (heure) et horizontal (jour).
+- Drop sur une autre ligne ressource = réaffectation.
+- Redimensionnement par bords haut/bas (curseurs N/S resize).
+- Accrochage (snap) à un pas configurable (par défaut 30 min) + guide visuel.
+- Tooltip live pendant drag/resize: HH:mm–HH:mm + ressource cible.
+- Save() sur drop + reload() du planning.
+- Gestion multi-ressources: la ressource à l’index 0 est l’affectation principale (remplacée au drop); les autres sont conservées.
+
+3.3 Filtres & tri (barre supérieure)
+- Filtre statut (Brouillon, Planifié, En cours, Terminé, Annulé/Problème).
+- Filtre “À deviser / Déjà devisé” (marqueur booléen intervention.devisGenere).
+- Filtre par Type de ressource, par Agence.
+- Mode compacte vs confortable (densité).
+- Recherche globale (icônes colorées intégrées).
+
+3.4 Édition rapide
+- Double-clic ouvre la fiche Intervention.
+- Menu contextuel (clic droit) sur la grille: ouvrir, éditer, marquer terminé (selon rôle), générer devis.
+- Palette contextuelle (si activée): “Générer devis pour N interventions sélectionnées”, rappel des filtres actifs, aide avec raccourcis.
+
+============================================================
+4) INTERVENTION — MODÈLE & DIALOGUE D’ÉDITION
+------------------------------------------------------------
+4.1 Données principales
+- Titre / Label (+ référence interne éventuelle)
+- Client (sélecteur) + Contacts (multi, avec Contact principal auto-coché si défini)
+- Type d’intervention (paramétrable; ordre, duplication)
+- Adresse/chantier (texte libre ou référentiel; prévu pour géocodage futur)
+- Date/heure de début/fin prévues (plannedStart/plannedEnd) + effectives (réel)
+- Description (publique / visible) + Note interne + Note de fin
+- Statut (brouillon, planifié, en cours, terminé, annulé)
+- Ressources (liste hétérogène): chaque ressource référence son type (icône SVG) et son PU
+- Signature client (PNG), “signé par” + date/heure
+- Marqueur “devis généré” (bool)
+
+4.2 Pré-devis intégré
+- Génération automatique des lignes depuis les ressources sélectionnées (PU pris sur la Ressource, pas sur le Type).
+- Table “facturation” dans la fiche: colonnes désignation, quantité, PU HT, total HT/ttc (selon paramètres TVA).
+- Bouton “Générer le devis” (endpoint V2).
+- Après création: affichage de la référence du devis lié + verrouillage des régénérations (idempotence soft).
+
+4.3 Ergonomie
+- Onglets: Général (titre/client/dates/description/note interne), Intervention (ressources, notes fin, signature), Facturation (pré-devis).
+- Mode plein écran pour les dispatchers + taille ajustable.
+- Filtre local des ressources par Type + recherche texte + colonnes avec PU HT visibles.
+- Ajout/suppression par cases à cocher; liste de sélection vs disponibles.
+- Génération de devis en lot depuis le planning: si devis existe déjà pour l'intervention, on ne regénère pas.
+
+============================================================
+5) RESSOURCES & TYPES
+------------------------------------------------------------
+5.1 Types de ressources
+- Référentiel paramétrable (création/édition/suppression).
+- Icône SVG colorée affectée au Type (affichée dans la tuile, la recherche globale, les toasts, les listes).
+- Tri/ordre configurable.
+
+5.2 Ressources
+- Écran de gestion dans le panneau (comme Clients): édition inline, pas de modales.
+- Champs: id, nom, type (combo), PU (tarif), indisponibilités (périodes début/fin).
+- Filtre par Type + tri par Type par défaut.
+- Icône héritée du Type (affichage dans listes/planning).
+- Indisponibilités: structure {{dateDebut, dateFin}} (liste), UI avec datepickers.
+
+============================================================
+6) CLIENTS & CONTACTS
+------------------------------------------------------------
+- Clients: référentiel avec filtres; édition dans le panneau.
+- Contacts: 2–4 contacts par client (mock boosté), champ “contact principal”.
+- Sélection dans Intervention: multi-contacts; “principal” coché d’office si existant.
+- Recherche globale unifiée (icônes intégrées).
+
+============================================================
+7) VENTES — DEVIS & FACTURES
+------------------------------------------------------------
+7.1 Devis
+- Tables avec recherche/tri, édition inline des lignes / totaux, export PDF (HTML->PDF), export CSV/Excel.
+- Génération depuis Intervention (endpoint /api/v2/quotes/from-intervention).
+- Conversion Devis -> Facture (unitaire ou multiple).
+- Envoi PDF par email (groupé, CC/BCC, modèles par agence).
+
+7.2 Factures
+- Tables analogues (recherche/tri, inline).
+- Génération depuis Devis (sélection multiple possible).
+- Export PDF/CSV/Excel, email avec pièces jointes.
+
+============================================================
+8) EMAILS & TRACKING
+------------------------------------------------------------
+- Emails HTML avec modèle par Agence (variables de fusion).
+- Pièces jointes PDF (devis/factures détaillés).
+- Envoi groupé (plusieurs destinataires; CC/BCC).
+- Tracking d’ouverture via pixel (v12.2).
+- Modèles: gestion dans Paramètres -> Templates (partiels supportés).
+
+============================================================
+9) GÉNÉRATION DOCUMENTS (HTML → PDF)
+------------------------------------------------------------
+- Éditeur de templates avec prévisualisation PDF live.
+- Partials ({{>partial:nom}}) et assets ({{asset:clé}}).
+- Fallback CGV: si partial “cgv” absent, insertion des CGV Agence.
+- Gabarits QUOTE/INVOICE/EMAIL/PARTIAL par agence.
+- Onglet “Assets”: upload/logos/tampons (PNG/JPG/SVG), clés utilisables dans templates.
+
+============================================================
+10) PARAMÈTRES & AGENCES
+------------------------------------------------------------
+- Sélection agence au login.
+- X-Agency-Id obligatoire sur tous les clients HTTP (interventions/resources/clients/devis/factures).
+- Paramètres -> Général:
+  * TVA (%) par Agence
+  * CGV (HTML) par Agence (éditeur + preview PDF)
+  * Intervalle d’autosave des fiches (15/30/60 s)
+- Paramètres -> Templates & Assets (par Agence)
+- Paramètres -> Types d’intervention (ordre/duplication)
+- Paramètres -> Types de ressources
+- Paramètres -> Comptes/Utilisateurs (création, rôles, reset MDP; changement de MDP utilisateur)
+- Masquage des entrées du menu selon rôle.
+
+============================================================
+11) SÉCURITÉ & RÔLES
+------------------------------------------------------------
+Rôles principaux:
+- ADMIN: tous les droits.
+- SALES: lecture Planning, droits complets sur Devis/BC/BL/Factures; pas de configuration sensible.
+- CONFIGURATEUR: lecture globale, écriture limitée aux ressources/types/paramètres.
+Mécaniques:
+- Masquage/disable UI selon rôle (menu + dialogs).
+- Lecture-seule forcée dans les dialogs de ventes si rôle insuffisant.
+- Expiration de session (inactivité), bouton Déconnexion header.
+- Migration future possible vers JWT côté API (préparée).
+
+============================================================
+12) API — CONTRATS & EXTENSIONS
+------------------------------------------------------------
+V1 (legacy):
+- Endpoints existants conservés; schémas historiques (number, lines, totalHT, totalTtc, etc.).
+- Compatibilité maintenue (pas de cassure).
+
+V2 (nouvelles routes/DTOs):
+- POST /api/v2/quotes/from-intervention
+  * Entrée: interventionId (+ agency header).
+  * Sortie: quoteRef / id (et liaison stockée côté intervention).
+- GET/PUT /api/v2/settings (par Agence)
+  * TVA, CGV HTML, email models/partials optionnels.
+- Email send endpoints (HTML + tracking).
+- Alignement JSON: respecter camelCase `totalTtc` (Jackson @JsonProperty si besoin).
+
+Entêtes:
+- X-Agency-Id: obligatoire sur interventions/resources/clients/devis/factures.
+
+Gateways côté client (ServiceLocator):
+- interventions(): list(filter), get(id), save(item), delete(id)
+- resources(): listAll(), get(id), save(item), delete(id)
+- clients(): listAll(), get(id), save(item), delete(id)
+- quotesV2(): fromIntervention(interventionId) …
+- invoices(): …
+(les méthodes get(...) ont été ajoutées quand nécessaire pour la résolution d’email/ressource).
+
+============================================================
+13) MOCKS & DONNÉES DE DÉMO
+------------------------------------------------------------
+- ~60 ressources (grues, camions, chariots, techniciens…) avec icônes et PU variés.
+- Indisponibilités renseignées sur plusieurs ressources.
+- ~60 interventions réparties sur 2 semaines (types variés, statuts mixés).
+- ~20 clients × 2–4 contacts chacun; contact principal par client.
+- ~15 utilisateurs couvrant les rôles ADMIN/SALES/CONFIGURATEUR.
+- Icônes SVG colorées disponibles via un registre commun (recherche/notifications/planning).
+
+============================================================
+14) RACCOURCIS & INTERACTIONS
+------------------------------------------------------------
+- Ctrl + molette: zoom vertical.
+- Drag tile: déplacer (heure/jour) — drop sur ligne = changer la ressource principale.
+- Resize bords: ajuster durée.
+- Tooltip live: HH:mm–HH:mm + ressource.
+- Palette (si activée): actions contextuelles ("Générer devis pour N interventions sélectionnées", etc.).
+
+============================================================
+15) TECHNIQUE — CLIENT
+------------------------------------------------------------
+- Java 17+, Swing.
+- Grille Planning: gestion interne des colonnes/jours et lignes ressources; APIs optionally exposées:
+  * rowAtPoint(Point), rowBounds(int) ou getRowHeight()+getResources()
+  * resourceAt(Point) et/ou getResourceAtRow(int)
+- Rendu tuiles: JComponent translucide, dégradé, antialiasing.
+- Listeners directs sur la grille (pas d’overlay), gestion du ghost dans paintComponent.
+- Autosave paramétrable (sur formulaires d’édition).
+- PDF Preview via PDFBox côté client (pour certaines previews).
+
+============================================================
+16) TECHNIQUE — SERVEUR
+------------------------------------------------------------
+- Spring Boot, Java.
+- OpenAPI: V1 conservé; V2 ajouté explicitement, sans casser V1.
+- Controllers V2 pour: settings (TVA/CGV), quote-from-intervention, email send, assets/templates gestion.
+- Respect du header X-Agency-Id avec propagation au service.
+- DTOs V2 alignés sur le camelCase attendu côté client (ex: totalTtc).
+- Signature PNG persistée (base64/byte[]), champs signéPar + signéLe.
+
+============================================================
+17) ERGONOMIE — ICÔNES & VISUELS
+------------------------------------------------------------
+- Registre d’icônes SVG colorées (types de ressources, recherche, toasts, tuiles).
+- Statuts par couleur: 🟢 Terminé, 🔵 Planifié/En cours, 🟡 Brouillon, 🔴 Annulé/Problème.
+- Alerte pastille rouge “!” si retard/matériel manquant (logique de détection configurable).
+
+============================================================
+18) NETTOYAGE & CODE MORT
+------------------------------------------------------------
+- Suppression des onglets "Calendrier" / "Cartes" et de leurs vues dédiées si non référencées.
+- Remplacement des anciennes tuiles par celles intégrées au Planning.
+- Script proposé (ripgrep + jdeps) pour identifier les classes non référencées.
+- Recommandation: activer inspections “Unused declaration” dans l’IDE et plugin maven-dependency:analyze-only.
+
+============================================================
+19) POINTS D’ATTENTION & QUALITÉ
+------------------------------------------------------------
+- Cohérence accessors modèle vs utilisation UI (ex: getDateHeureDebut vs getPlannedStart) — conversions gérées.
+- Casing JSON stable (totalTtc) — annotations @JsonProperty si méthode Java diffère.
+- ServiceLocator: exposer get(id) là où nécessaire (ResourcesGateway) pour éviter compile blockers.
+- Reload() : injecte réellement les données dans la grille/table (et pas uniquement dans un cache).
+- Tests manuels conseillés: 5 scénarios clés (drag-ressource, resize, générer devis, envoi email, export PDF/CSV).
+
+============================================================
+20) ROADMAP COURTE
+------------------------------------------------------------
+- Paramétrage UI du pas de snap (15/30/60) par Agence.
+- Tooltip drag avec durée totale/écarts (retard).
+- Import CSV ressources/clients.
+- Auth JWT côté API si durcissement requis.
+- Géocodage adresse chantier + estimation trajets/temps.
