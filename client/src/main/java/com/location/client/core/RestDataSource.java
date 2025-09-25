@@ -20,6 +20,7 @@ import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 
 public class RestDataSource implements DataSourceProvider {
@@ -193,6 +194,60 @@ public class RestDataSource implements DataSourceProvider {
       String body = entity == null ? "" : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
       throw new IOException("HTTP " + sc + " → " + body);
     });
+  }
+
+  public Path downloadCsvInterventions(
+      OffsetDateTime from,
+      OffsetDateTime to,
+      String resourceId,
+      String clientId,
+      String query,
+      Path target) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v1/interventions/csv");
+      List<String> params = new ArrayList<>();
+      if (from != null) {
+        params.add("from=" + encode(from.toString()));
+      }
+      if (to != null) {
+        params.add("to=" + encode(to.toString()));
+      }
+      if (resourceId != null && !resourceId.isBlank()) {
+        params.add("resourceId=" + encode(resourceId));
+      }
+      if (clientId != null && !clientId.isBlank()) {
+        params.add("clientId=" + encode(clientId));
+      }
+      if (query != null && !query.isBlank()) {
+        params.add("q=" + encode(query));
+      }
+      if (!params.isEmpty()) {
+        url.append('?').append(String.join("&", params));
+      }
+      HttpGet get = new HttpGet(url.toString());
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          response -> {
+            int sc = response.getCode();
+            HttpEntity entity = response.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private void ensureLogin() {

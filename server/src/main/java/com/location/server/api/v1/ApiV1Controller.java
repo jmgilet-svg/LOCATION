@@ -13,7 +13,9 @@ import com.location.server.service.InterventionService;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -77,6 +79,61 @@ public class ApiV1Controller {
         .stream()
         .map(InterventionDto::of)
         .collect(Collectors.toList());
+  }
+
+  @GetMapping(value = "/interventions/csv", produces = "text/csv")
+  public ResponseEntity<byte[]> exportCsv(
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to,
+      @RequestParam(required = false) String resourceId,
+      @RequestParam(required = false) String clientId,
+      @RequestParam(required = false) String q) {
+    List<InterventionDto> data =
+        interventionRepository.search(from, to, resourceId).stream().map(InterventionDto::of).toList();
+    Stream<InterventionDto> stream = data.stream();
+    if (clientId != null && !clientId.isBlank()) {
+      stream = stream.filter(item -> clientId.equals(item.clientId()));
+    }
+    if (q != null && !q.isBlank()) {
+      String query = q.toLowerCase();
+      stream =
+          stream.filter(
+              item -> item.title() != null && item.title().toLowerCase().contains(query));
+    }
+    StringBuilder csv =
+        new StringBuilder("id;title;agencyId;resourceId;clientId;start;end\n");
+    stream.forEach(
+        item ->
+            csv.append(item.id())
+                .append(';')
+                .append(sanitize(item.title()))
+                .append(';')
+                .append(item.agencyId())
+                .append(';')
+                .append(item.resourceId())
+                .append(';')
+                .append(item.clientId())
+                .append(';')
+                .append(item.start())
+                .append(';')
+                .append(item.end())
+                .append('\n'));
+    byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"interventions.csv\"")
+        .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+        .body(bytes);
+  }
+
+  private static String sanitize(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.replace(';', ',');
   }
 
   @PostMapping("/interventions")

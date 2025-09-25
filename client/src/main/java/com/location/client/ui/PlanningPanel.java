@@ -2,9 +2,6 @@ package com.location.client.ui;
 
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
-import javax.swing.JPanel;
-import javax.swing.ToolTipManager;
-import javax.swing.JOptionPane;
 import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -25,13 +22,21 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.ToolTipManager;
 
 public class PlanningPanel extends JPanel {
   private final DataSourceProvider dsp;
+  private List<Models.Agency> agencies = List.of();
   private List<Models.Resource> resources = List.of();
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
   private LocalDate day = LocalDate.now();
+  private String filterAgencyId;
+  private String filterResourceId;
+  private String filterClientId;
+  private String filterQuery = "";
 
   private static final int HEADER_H = 28;
   private static final int ROW_H = 60;
@@ -78,16 +83,108 @@ public class PlanningPanel extends JPanel {
   }
 
   public void reload() {
-    resources = dsp.listResources();
+    agencies = dsp.listAgencies();
+    List<Models.Resource> fetchedResources = dsp.listResources();
+    String agency = filterAgencyId;
+    if (agency != null && !agency.isBlank()) {
+      fetchedResources =
+          fetchedResources.stream().filter(r -> agency.equals(r.agencyId())).toList();
+    }
+    if (filterResourceId != null && !filterResourceId.isBlank()) {
+      String rid = filterResourceId;
+      fetchedResources = fetchedResources.stream().filter(r -> rid.equals(r.id())).toList();
+    }
+    resources = fetchedResources;
+
     clients = dsp.listClients();
-    interventions = dsp.listInterventions(
-        day.atTime(0, 0).atOffset(ZoneOffset.UTC),
-        day.plusDays(1).atTime(0, 0).atOffset(ZoneOffset.UTC),
-        null);
+
+    var from = day.atTime(0, 0).atOffset(ZoneOffset.UTC);
+    var to = day.plusDays(1).atTime(0, 0).atOffset(ZoneOffset.UTC);
+    List<Models.Intervention> data = dsp.listInterventions(from, to, normalize(filterResourceId));
+    if (agency != null && !agency.isBlank()) {
+      data = data.stream().filter(i -> agency.equals(i.agencyId())).toList();
+    }
+    if (filterClientId != null && !filterClientId.isBlank()) {
+      String cid = filterClientId;
+      data = data.stream().filter(i -> cid.equals(i.clientId())).toList();
+    }
+    if (filterQuery != null && !filterQuery.isBlank()) {
+      String q = filterQuery.toLowerCase();
+      data =
+          data.stream()
+              .filter(i -> i.title() != null && i.title().toLowerCase().contains(q))
+              .toList();
+    }
+    interventions = data;
+  }
+
+  private String normalize(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  public void setDay(LocalDate value) {
+    if (value == null || value.equals(day)) {
+      return;
+    }
+    day = value;
+    reload();
+    repaint();
+  }
+
+  public LocalDate getDay() {
+    return day;
+  }
+
+  public void setFilterAgency(String value) {
+    filterAgencyId = normalize(value);
+    reload();
+    repaint();
+  }
+
+  public void setFilterResource(String value) {
+    filterResourceId = normalize(value);
+    reload();
+    repaint();
+  }
+
+  public void setFilterClient(String value) {
+    filterClientId = normalize(value);
+    reload();
+    repaint();
+  }
+
+  public void setFilterQuery(String value) {
+    filterQuery = value == null ? "" : value;
+    reload();
+    repaint();
+  }
+
+  public String getFilterAgencyId() {
+    return filterAgencyId;
+  }
+
+  public String getFilterResourceId() {
+    return filterResourceId;
+  }
+
+  public String getFilterClientId() {
+    return filterClientId;
+  }
+
+  public String getFilterQuery() {
+    return filterQuery;
   }
 
   public List<Models.Resource> getResources() {
     return resources;
+  }
+
+  public List<Models.Agency> getAgencies() {
+    return agencies;
   }
 
   public List<Models.Client> getClients() {
