@@ -17,6 +17,14 @@ LOCATION/
 - SSE : `/api/system/ping` via `SseEmitter`
 - Sécurité : `/api/**` protégé, `/auth/**` & `/api/system/ping` publics (Diff 1)
 
+**Diff 2** :
+- **Domain** : entités JPA `Agency`, `Client`, `ResourceType`, `Resource`, `Intervention` (+ `Driver`, `Contact` minimal), `Document` (stub).
+- **Repositories** Spring Data JPA.
+- **Services** : `InterventionService` → **détection de chevauchement**.
+- **Controllers** `/api/v1/**` + **validation**.
+- **ErrorHandling** : `@ControllerAdvice` JSON uniforme.
+- **Flyway** : `V2__core.sql` (tables + index), `V3__seed.sql` (jeu de données dev).
+
 ### Client (Swing)
 - Java 17, FlatLaf
 - **Injection** via `DataSourceProvider` :
@@ -24,6 +32,9 @@ LOCATION/
   - `RestDataSource` (HTTP + JWT)
 - Sélecteur de source au démarrage + mémorisation (`~/.location/app.properties`)
 - Argument CLI `--datasource=mock|rest` **prioritaire**
+
+**Diff 2** :
+- `RestDataSource` consomme `/api/v1/agencies` & `/api/v1/clients`.
 
 ## Diagramme (sélection de source)
 ```
@@ -59,6 +70,12 @@ LOCATION/
 - `GET /api/system/ping` : `text/event-stream`, event `ping:{timestamp}`
 
 > **Note** : En Diff 1, l’auth valide tout couple non vide (objectif bootstrap). En Diff 2, branchement sur comptes/roles (DB) + password hash.
+
+## Endpoints (Diff 2 — `/api/v1/**`)
+- `GET /agencies`, `GET /clients`, `GET /resources`
+- `GET /interventions?from&to&resourceId`
+- `POST /interventions` (validation + **409** en cas de **conflit**)
+- (stubs) `POST /documents/{id}/export/pdf`, `POST /documents/{id}/email`
 
 ## Sécurité
 - JWT signé HS256 avec secret env `JWT_SECRET` (défaut dev).
@@ -101,9 +118,23 @@ Objets simples `Agency`, `Client`, etc. **communs** aux implémentations Mock/RE
 - REST : gestion de `401/403/5xx`, retries basiques (non bloquant).
 - Mock : exceptions runtime avec message utilisateur.
 
+**Format d’erreur uniforme** (Diff 2) — `application/json`
+```json
+{
+  "timestamp": "2025-09-24T10:37:42Z",
+  "status": 409,
+  "error": "Conflict",
+  "message": "Intervention en conflit",
+  "path": "/api/v1/interventions"
+}
+```
+
 ## Tests
 - **Server** : `@WebMvcTest` pour `/auth/login`, test SSE via `MockMvc`.
 - **Client** : test résolution source (CLI > prefs > dialog).
+**Diff 2** :
+- `@DataJpaTest`/`@SpringBootTest` pour **InterventionService** (détection de conflit).
+- `@WebMvcTest` `/api/v1/agencies`.
 
 ## CI
 GitHub Actions (`.github/workflows/ci.yml`) :
@@ -119,3 +150,10 @@ GitHub Actions (`.github/workflows/ci.yml`) :
 - Règles de chevauchement en service.
 - HTML→PDF (OpenPDF/Flying Saucer) + abstraction emailing.
 - UI planning (drag/drop/resize/hover), éditeurs intégrés, exports.
+
+## Flyway
+- `V2__core.sql` : tables, clés, index.
+- `V3__seed.sql` : données de démo.
+
+## Export & Email (stubs)
+- Abstractions `PdfExporter` et `EmailSender` avec implémentations de développement. Les vraies implémentations arriveront en Diff 3 (ou prod).

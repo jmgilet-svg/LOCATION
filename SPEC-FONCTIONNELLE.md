@@ -72,3 +72,45 @@ Ces structures suffisent pour **démonstration** et seront **stabilisées** en D
 
 ## Hors périmètre Diff 1 (reporté)
 - Éditeurs intégrés, planning tuiles (drag/resize/hover), exports PDF/CSV, emailing, règles de chevauchement strictes, pagination/tri côté API — **prévu** Diff 2/3.
+
+---
+
+## (Nouveau) Périmètre Diff 2 — Modèle & API
+
+### Endpoints **`/api/v1/**`**
+- `GET /agencies` : liste des agences.
+- `GET /clients` : liste des clients.
+- `GET /resources` : liste des ressources (grue/camion/remorque…).
+- `GET /interventions?from&to&resourceId` : liste filtrée par période et/ou ressource.
+- `POST /interventions` : crée une intervention **avec détection de conflits**.
+- (stubs) `POST /documents/{id}/export/pdf` : renvoie un PDF minimal (stub).
+- (stubs) `POST /documents/{id}/email` : simule l’envoi (logs).
+
+### Règles — **Chevauchement**
+Deux interventions de **même ressource** (resourceId) sont déclarées en **conflit** si :
+
+`[start, end)` **∩** `[start', end')` **≠ ∅** (intervalle demi-ouvert).
+
+→ Le service refuse la création/modification et le contrôleur renvoie **409 Conflict** avec une **erreur structurée**.
+
+### Validation
+- `start < end` ; champs obligatoires `agenceId`, `resourceId`, `clientId`, `titre` (taille ≤ 140).
+
+### Seeds (profil `dev`)
+- 2 agences, 3 clients, 3 ressources, 2 chauffeurs, 3 interventions **non conflictuelles**.
+
+### Parité Mock/REST (client)
+- En mode REST, le client consomme `/api/v1/agencies` et `/api/v1/clients`.
+- En mode Mock, même rendu via `MockDataSource`.
+
+### Erreurs structurées
+Format JSON générique :
+```json
+{
+  "timestamp": "2025-09-24T10:37:42Z",
+  "status": 409,
+  "error": "Conflict",
+  "message": "Intervention en conflit pour la ressource R-123",
+  "path": "/api/v1/interventions"
+}
+```
