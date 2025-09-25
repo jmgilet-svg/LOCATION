@@ -9,6 +9,8 @@ public final class Models {
 
   public record Client(String id, String name, String billingEmail) {}
 
+  public record Resource(String id, String name, String licensePlate, Integer colorRgb, String agencyId) {}
+
   public record Intervention(
       String id,
       String agencyId,

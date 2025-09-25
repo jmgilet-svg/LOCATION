@@ -34,7 +34,7 @@ LOCATION/
 - Argument CLI `--datasource=mock|rest` **prioritaire**
 
 **Diff 2** :
-- `RestDataSource` consomme `/api/v1/agencies` & `/api/v1/clients`.
+- `RestDataSource` consomme `/api/v1/agencies`, `/api/v1/clients`, `/api/v1/resources`, `/api/v1/interventions` et permet la création d'interventions.
 
 ## Diagramme (sélection de source)
 ```
