@@ -1,0 +1,107 @@
+package com.location.server.api.v1;
+
+import com.location.server.api.v1.dto.ApiV1Dtos.AgencyDto;
+import com.location.server.api.v1.dto.ApiV1Dtos.ClientDto;
+import com.location.server.api.v1.dto.ApiV1Dtos.CreateInterventionRequest;
+import com.location.server.api.v1.dto.ApiV1Dtos.InterventionDto;
+import com.location.server.api.v1.dto.ApiV1Dtos.ResourceDto;
+import com.location.server.repo.AgencyRepository;
+import com.location.server.repo.ClientRepository;
+import com.location.server.repo.InterventionRepository;
+import com.location.server.repo.ResourceRepository;
+import com.location.server.service.InterventionService;
+import jakarta.validation.Valid;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1")
+public class ApiV1Controller {
+  private final AgencyRepository agencyRepository;
+  private final ClientRepository clientRepository;
+  private final ResourceRepository resourceRepository;
+  private final InterventionRepository interventionRepository;
+  private final InterventionService interventionService;
+
+  public ApiV1Controller(
+      AgencyRepository agencyRepository,
+      ClientRepository clientRepository,
+      ResourceRepository resourceRepository,
+      InterventionRepository interventionRepository,
+      InterventionService interventionService) {
+    this.agencyRepository = agencyRepository;
+    this.clientRepository = clientRepository;
+    this.resourceRepository = resourceRepository;
+    this.interventionRepository = interventionRepository;
+    this.interventionService = interventionService;
+  }
+
+  @GetMapping("/agencies")
+  public List<AgencyDto> agencies() {
+    return agencyRepository.findAll().stream().map(AgencyDto::of).collect(Collectors.toList());
+  }
+
+  @GetMapping("/clients")
+  public List<ClientDto> clients() {
+    return clientRepository.findAll().stream().map(ClientDto::of).collect(Collectors.toList());
+  }
+
+  @GetMapping("/resources")
+  public List<ResourceDto> resources() {
+    return resourceRepository.findAll().stream().map(ResourceDto::of).collect(Collectors.toList());
+  }
+
+  @GetMapping("/interventions")
+  public List<InterventionDto> interventions(
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to,
+      @RequestParam(required = false) String resourceId) {
+    return interventionRepository
+        .search(from, to, resourceId)
+        .stream()
+        .map(InterventionDto::of)
+        .collect(Collectors.toList());
+  }
+
+  @PostMapping("/interventions")
+  public InterventionDto create(@Valid @RequestBody CreateInterventionRequest request) {
+    return InterventionDto.of(
+        interventionService.create(
+            request.agencyId(),
+            request.resourceId(),
+            request.clientId(),
+            request.title(),
+            request.start(),
+            request.end()));
+  }
+
+  @PostMapping(value = "/documents/{id}/export/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+  public ResponseEntity<byte[]> exportPdf(@PathVariable String id) {
+    byte[] pdf = "%PDF-1.4\n% stub\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"document-" + id + ".pdf\"")
+        .body(pdf);
+  }
+
+  @PostMapping("/documents/{id}/email")
+  public ResponseEntity<Void> email(@PathVariable String id) {
+    System.out.println("EMAIL STUB for document " + id);
+    return ResponseEntity.ok().build();
+  }
+}

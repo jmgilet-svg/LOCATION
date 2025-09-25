@@ -11,7 +11,7 @@ Base exécutable **backend Spring Boot (Java 17)** + **frontend Java Swing (Flat
 
 > **Diff 1** : squelette complet + docs + CI + mode Mock fonctionnel côté client + stratégie d’injection (DataSourceProvider).
 >
-> **Diff 2** : **Modèle & API** — entités, services avec **détection de chevauchement**, endpoints **`/api/v1/**`** (agences, clients, ressources, interventions), **DTOs stables**, **validation**, **erreurs structurées**, **migrations Flyway V2+** et **seeds** (dev). **Stubs export PDF & emailing**.
+> **Diff 2** : **Modèle & API** — entités, services avec **détection de chevauchement**, endpoints **`/api/v1/**`** (agences, clients, ressources, interventions), **DTOs stables**, **validation**, **erreurs structurées**, **migrations Flyway V2+** et **seeds** (dev). **Stubs export PDF & emailing**. Côté client, `RestDataSource` implémente les listages + création d'intervention (mêmes règles en mode Mock).
 
 ## Démarrage rapide
 
