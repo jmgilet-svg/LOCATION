@@ -1,5 +1,12 @@
 # LOCATION — Spring Boot + Swing
 
+## Diff 3 — UI Swing & Intégration
+
+- Planning interactif (drag & drop, resize, hover)
+- Éditeurs intégrés (Client, Ressource, Intervention)
+- Exports CSV/PDF (stub) et envoi mail (stub)
+- Menu Paramètres (bascule Mock/REST, login JWT), Menu Données (réinitialiser démo)
+
 Base exécutable **backend Spring Boot (Java 17)** + **frontend Java Swing (FlatLaf)** avec **sélecteur de source Mock/Backend**, **SSE `/api/system/ping`**, **auth JWT `/auth/login`**, profils **dev(H2)** / **prod(Postgres)**, **Flyway**, **CI GitHub Actions**.
 
 > **Diff 1** : squelette complet + docs + CI + mode Mock fonctionnel côté client + stratégie d’injection (DataSourceProvider).
@@ -39,6 +46,11 @@ Variables d’env utiles :
 cd client
 mvn -q exec:java -Dexec.mainClass=com.location.client.LocationClientApp
 ```
+Ou après packaging :
+```bash
+mvn -pl client -DskipTests package
+java -cp client/target/location-client.jar com.location.client.ui.StandalonePlanner
+```
 Au **premier lancement**, une **fenêtre de sélection** s’ouvre :
 - **Mode Démo (Mock)** : données locales en mémoire (aucun réseau)
 - **Mode Connecté (Backend)** : appels REST vers Spring Boot sécurisé (JWT)
@@ -54,6 +66,10 @@ S’il est fourni, **la fenêtre est court-circuitée**.
 
 **Menu Paramètres → Source de données…** permet de changer la source (redémarrage conseillé).  
 **Menu Données → Réinitialiser la démo** recharge le jeu de données Mock.
+
+## Raccourcis UI
+- Double clic : éditer une intervention
+- Drag & drop / resize : déplacer/redimensionner
 
 ### Variables d’environnement côté client
 - `LOCATION_BACKEND_URL` (défaut: `http://localhost:8080`)
