@@ -71,4 +71,60 @@ public class Preferences {
   public void setRestPass(String value) {
     props.setProperty("restPass", value);
   }
+
+  public String getFilterAgencyId() {
+    return props.getProperty("filterAgencyId");
+  }
+
+  public void setFilterAgencyId(String value) {
+    if (value == null) {
+      props.remove("filterAgencyId");
+    } else {
+      props.setProperty("filterAgencyId", value);
+    }
+  }
+
+  public String getFilterResourceId() {
+    return props.getProperty("filterResourceId");
+  }
+
+  public void setFilterResourceId(String value) {
+    if (value == null) {
+      props.remove("filterResourceId");
+    } else {
+      props.setProperty("filterResourceId", value);
+    }
+  }
+
+  public String getFilterClientId() {
+    return props.getProperty("filterClientId");
+  }
+
+  public void setFilterClientId(String value) {
+    if (value == null) {
+      props.remove("filterClientId");
+    } else {
+      props.setProperty("filterClientId", value);
+    }
+  }
+
+  public String getFilterQuery() {
+    return props.getProperty("filterQuery", "");
+  }
+
+  public void setFilterQuery(String value) {
+    props.setProperty("filterQuery", value == null ? "" : value);
+  }
+
+  public String getDayIso() {
+    return props.getProperty("dayIso");
+  }
+
+  public void setDayIso(String value) {
+    if (value == null) {
+      props.remove("dayIso");
+    } else {
+      props.setProperty("dayIso", value);
+    }
+  }
 }

@@ -4,7 +4,6 @@ import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.core.Preferences;
 import com.location.client.core.RestDataSource;
-import javax.swing.*;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.GridLayout;
@@ -18,11 +17,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import javax.swing.*;
 
 public class MainFrame extends JFrame {
   private final DataSourceProvider dsp;
   private final Preferences prefs;
   private final PlanningPanel planning;
+  private final TopBar topBar;
   private final JLabel status = new JLabel();
 
   public MainFrame(DataSourceProvider dsp, Preferences prefs) {
@@ -30,8 +31,9 @@ public class MainFrame extends JFrame {
     this.dsp = dsp;
     this.prefs = prefs;
     this.planning = new PlanningPanel(dsp);
+    this.topBar = new TopBar(planning, prefs);
 
-    setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+    setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
     addWindowListener(new WindowAdapter() {
       @Override
       public void windowClosed(WindowEvent e) {
@@ -45,6 +47,7 @@ public class MainFrame extends JFrame {
     setLocationRelativeTo(null);
 
     setJMenuBar(buildMenuBar());
+    add(topBar, BorderLayout.NORTH);
     add(planning, BorderLayout.CENTER);
     status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
     add(status, BorderLayout.SOUTH);
@@ -73,6 +76,32 @@ public class MainFrame extends JFrame {
         showBackendConfig();
       }
     });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control LEFT"), "prevDay");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "prevDay",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                topBar.prevDay();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control RIGHT"), "nextDay");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "nextDay",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                topBar.nextDay();
+              }
+            });
   }
 
   private JMenuBar buildMenuBar() {
@@ -81,9 +110,12 @@ public class MainFrame extends JFrame {
     JMenu file = new JMenu("Fichier");
     JMenuItem exportCsv = new JMenuItem("Exporter planning en CSV");
     exportCsv.addActionListener(e -> exportCsv());
+    JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
+    exportCsvRest.addActionListener(e -> exportCsvRest());
     JMenuItem exportPdf = new JMenuItem("Exporter PDF (stub)");
     exportPdf.addActionListener(e -> exportPdfStub());
     file.add(exportCsv);
+    file.add(exportCsvRest);
     file.add(exportPdf);
 
     JMenu data = new JMenu("Données");
@@ -115,21 +147,25 @@ public class MainFrame extends JFrame {
   private void refreshData() {
     planning.reload();
     planning.repaint();
+    topBar.refreshCombos();
   }
 
   private void exportCsv() {
     try {
       Path tmp = Files.createTempFile("planning-", ".csv");
       List<Models.Intervention> items = planning.getInterventions();
-      StringBuilder sb = new StringBuilder("id;title;resourceId;clientId;start;end\n");
+      StringBuilder sb =
+          new StringBuilder("id;title;agencyId;resourceId;clientId;start;end\n");
       for (Models.Intervention i : items) {
         sb.append(i.id())
             .append(';')
             .append(escape(i.title()))
             .append(';')
-            .append(i.resourceId())
+            .append(escape(i.agencyId()))
             .append(';')
-            .append(i.clientId())
+            .append(escape(i.resourceId()))
+            .append(';')
+            .append(escape(i.clientId()))
             .append(';')
             .append(i.start())
             .append(';')
@@ -144,7 +180,25 @@ public class MainFrame extends JFrame {
     }
   }
 
+  private void exportCsvRest() {
+    if (!(dsp instanceof RestDataSource rd)) {
+      toast("Export CSV REST nécessite le mode REST");
+      return;
+    }
+    try {
+      Path tmp = Files.createTempFile("planning-rest-", ".csv");
+      rd.downloadCsvInterventions(
+          topBar.getFrom(), topBar.getTo(), topBar.getResourceId(), topBar.getClientId(), topBar.getQuery(), tmp);
+      Desktop.getDesktop().open(tmp.toFile());
+    } catch (Exception ex) {
+      error("Export CSV REST → " + ex.getMessage());
+    }
+  }
+
   private String escape(String value) {
+    if (value == null) {
+      return "";
+    }
     return value.replace(";", ",");
   }
 
