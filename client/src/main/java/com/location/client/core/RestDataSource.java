@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -20,13 +23,34 @@ import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 
 public class RestDataSource implements DataSourceProvider {
-  private final String baseUrl;
   private final CloseableHttpClient http = HttpClients.createDefault();
   private final ObjectMapper om = new ObjectMapper();
   private final AtomicReference<String> bearer = new AtomicReference<>();
 
+  private String baseUrl;
+  private String username;
+  private String password;
+
   public RestDataSource(String baseUrl) {
-    this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+    this(baseUrl, System.getenv().getOrDefault("LOCATION_DEMO_USER", "demo"), System.getenv().getOrDefault("LOCATION_DEMO_PASSWORD", "demo"));
+  }
+
+  public RestDataSource(String baseUrl, String username, String password) {
+    configure(baseUrl, username, password);
+  }
+
+  public synchronized void configure(String baseUrl, String username, String password) {
+    this.baseUrl = normalize(baseUrl);
+    this.username = username != null && !username.isBlank() ? username : "demo";
+    this.password = password != null ? password : "demo";
+    bearer.set(null);
+  }
+
+  private String normalize(String url) {
+    if (url == null || url.isBlank()) {
+      return "http://localhost:8080";
+    }
+    return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
   }
 
   @Override
@@ -36,7 +60,7 @@ public class RestDataSource implements DataSourceProvider {
 
   @Override
   public void resetDemoData() {
-    // no-op (server will expose admin/reset endpoints in Diff 2 si besoin)
+    // no-op pour REST
   }
 
   @Override
@@ -64,11 +88,7 @@ public class RestDataSource implements DataSourceProvider {
       List<Models.Client> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode client : node) {
-          result.add(
-              new Models.Client(
-                  client.path("id").asText(),
-                  client.path("name").asText(),
-                  client.path("billingEmail").asText()));
+          result.add(new Models.Client(client.path("id").asText(), client.path("name").asText(), client.path("billingEmail").asText()));
         }
       }
       return result;
@@ -100,8 +120,7 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
-  public List<Models.Intervention> listInterventions(
-      OffsetDateTime from, OffsetDateTime to, String resourceId) {
+  public List<Models.Intervention> listInterventions(OffsetDateTime from, OffsetDateTime to, String resourceId) {
     try {
       ensureLogin();
       StringBuilder url = new StringBuilder(baseUrl + "/api/v1/interventions");
@@ -153,29 +172,37 @@ public class RestDataSource implements DataSourceProvider {
       post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
       JsonNode node = executeForJson(post);
       String id = node.path("id").asText();
-      return new Models.Intervention(
-          id,
-          intervention.agencyId(),
-          intervention.resourceId(),
-          intervention.clientId(),
-          intervention.title(),
-          intervention.start(),
-          intervention.end());
+      return new Models.Intervention(id, intervention.agencyId(), intervention.resourceId(), intervention.clientId(), intervention.title(), intervention.start(), intervention.end());
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
   }
 
+  public void downloadPdfStub(String documentId, Path target) throws IOException {
+    ensureLogin();
+    HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encode(documentId) + "/export/pdf");
+    http.execute(post, response -> {
+      int sc = response.getCode();
+      HttpEntity entity = response.getEntity();
+      if (sc >= 200 && sc < 300 && entity != null) {
+        try (InputStream in = entity.getContent()) {
+          Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        return null;
+      }
+      String body = entity == null ? "" : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+      throw new IOException("HTTP " + sc + " → " + body);
+    });
+  }
+
   private void ensureLogin() {
     if (bearer.get() != null) return;
-    String user = System.getenv().getOrDefault("LOCATION_DEMO_USER", "demo");
-    String pass = System.getenv().getOrDefault("LOCATION_DEMO_PASSWORD", "demo");
     try {
       String url = baseUrl + "/auth/login";
       HttpPost post = new HttpPost(url);
       ObjectNode payload = om.createObjectNode();
-      payload.put("username", user);
-      payload.put("password", pass);
+      payload.put("username", username);
+      payload.put("password", password);
       post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
       JsonNode node = executeForJson(post);
       String token = node.path("token").asText(null);
@@ -188,18 +215,16 @@ public class RestDataSource implements DataSourceProvider {
 
   private JsonNode executeForJson(HttpUriRequestBase req) throws IOException {
     if (bearer.get() != null) req.addHeader("Authorization", "Bearer " + bearer.get());
-    return http.execute(
-        req,
-        res -> {
-          int sc = res.getCode();
-          HttpEntity entity = res.getEntity();
-          String body = entity == null ? "" : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-          if (sc >= 200 && sc < 300) {
-            if (body.isEmpty()) return om.nullNode();
-            return om.readTree(body);
-          }
-          throw new IOException("HTTP " + sc + " → " + body);
-        });
+    return http.execute(req, res -> {
+      int sc = res.getCode();
+      HttpEntity entity = res.getEntity();
+      String body = entity == null ? "" : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+      if (sc >= 200 && sc < 300) {
+        if (body.isEmpty()) return om.nullNode();
+        return om.readTree(body);
+      }
+      throw new IOException("HTTP " + sc + " → " + body);
+    });
   }
 
   private static String encode(String value) {

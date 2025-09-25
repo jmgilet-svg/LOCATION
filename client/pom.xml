@@ -49,7 +49,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.5.0</version>
         <configuration>
-          <mainClass>com.location.client.LocationClientApp</mainClass>
+          <mainClass>com.location.client.App</mainClass>
         </configuration>
       </plugin>
     </plugins>

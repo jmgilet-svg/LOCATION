@@ -1,0 +1,348 @@
+package com.location.client.ui;
+
+import com.location.client.core.DataSourceProvider;
+import com.location.client.core.Models;
+import javax.swing.JPanel;
+import javax.swing.ToolTipManager;
+import javax.swing.JOptionPane;
+import java.awt.AlphaComposite;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.Optional;
+
+public class PlanningPanel extends JPanel {
+  private final DataSourceProvider dsp;
+  private List<Models.Resource> resources = List.of();
+  private List<Models.Client> clients = List.of();
+  private List<Models.Intervention> interventions = List.of();
+  private LocalDate day = LocalDate.now();
+
+  private static final int HEADER_H = 28;
+  private static final int ROW_H = 60;
+  private static final int TIME_W = 80;
+  private static final int HOURS = 12;
+  private static final int START_HOUR = 7;
+
+  private int colWidth;
+  private Tile dragTile;
+  private Point dragStart;
+  private boolean dragResizeLeft;
+  private boolean dragResizeRight;
+
+  public PlanningPanel(DataSourceProvider dsp) {
+    this.dsp = dsp;
+    setBackground(Color.WHITE);
+    setOpaque(true);
+    reload();
+    ToolTipManager.sharedInstance().registerComponent(this);
+
+    MouseAdapter adapter = new MouseAdapter() {
+      @Override
+      public void mousePressed(MouseEvent e) {
+        onPress(e.getPoint());
+      }
+
+      @Override
+      public void mouseDragged(MouseEvent e) {
+        onDrag(e.getPoint());
+      }
+
+      @Override
+      public void mouseReleased(MouseEvent e) {
+        onRelease();
+      }
+
+      @Override
+      public void mouseMoved(MouseEvent e) {
+        updateCursor(e.getPoint());
+      }
+    };
+    addMouseListener(adapter);
+    addMouseMotionListener(adapter);
+  }
+
+  public void reload() {
+    resources = dsp.listResources();
+    clients = dsp.listClients();
+    interventions = dsp.listInterventions(
+        day.atTime(0, 0).atOffset(ZoneOffset.UTC),
+        day.plusDays(1).atTime(0, 0).atOffset(ZoneOffset.UTC),
+        null);
+  }
+
+  public List<Models.Resource> getResources() {
+    return resources;
+  }
+
+  public List<Models.Client> getClients() {
+    return clients;
+  }
+
+  public List<Models.Intervention> getInterventions() {
+    return interventions;
+  }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+    super.paintComponent(g);
+    Graphics2D g2 = (Graphics2D) g;
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    int w = getWidth();
+    int h = getHeight();
+    colWidth = (w - TIME_W) / HOURS;
+
+    g2.setColor(new Color(245, 245, 245));
+    g2.fillRect(0, 0, w, HEADER_H);
+    g2.setColor(Color.GRAY);
+    g2.drawLine(0, HEADER_H, w, HEADER_H);
+    g2.setColor(Color.DARK_GRAY);
+    for (int i = 0; i <= HOURS; i++) {
+      int x = TIME_W + i * colWidth;
+      g2.drawLine(x, 0, x, h);
+      if (i < HOURS) {
+        String txt = (START_HOUR + i) + ":00";
+        g2.drawString(txt, x + 4, HEADER_H - 8);
+      }
+    }
+
+    g2.setColor(new Color(250, 250, 255));
+    g2.fillRect(0, 0, TIME_W, h);
+
+    g2.setColor(Color.GRAY);
+    for (int r = 0; r < resources.size(); r++) {
+      int y = HEADER_H + r * ROW_H;
+      g2.drawLine(0, y, w, y);
+      g2.setColor(Color.DARK_GRAY);
+      g2.drawString(resources.get(r).name(), 8, y + 18);
+      g2.setColor(Color.GRAY);
+    }
+
+    for (Models.Intervention i : interventions) {
+      int r = indexOfResource(i.resourceId());
+      if (r < 0) continue;
+      Tile t = tileFor(i, r);
+      paintTile(g2, t);
+    }
+
+    if (dragTile != null) {
+      paintTile(g2, dragTile.withAlpha(0.6f));
+    }
+  }
+
+  private int indexOfResource(String id) {
+    for (int i = 0; i < resources.size(); i++) {
+      if (resources.get(i).id().equals(id)) return i;
+    }
+    return -1;
+  }
+
+  private Tile tileFor(Models.Intervention i, int row) {
+    int x1 = xForInstant(i.start());
+    int x2 = xForInstant(i.end());
+    return new Tile(i, row, x1, x2);
+  }
+
+  private int xForInstant(Instant instant) {
+    ZonedDateTime zoned = instant.atZone(ZoneId.systemDefault());
+    LocalDateTime ldt = zoned.toLocalDateTime();
+    if (!ldt.toLocalDate().equals(day)) {
+      ldt = LocalDateTime.of(day, LocalTime.of(START_HOUR, 0));
+    }
+    LocalTime time = ldt.toLocalTime();
+    int mins = (time.getHour() - START_HOUR) * 60 + time.getMinute();
+    mins = Math.max(0, Math.min(HOURS * 60, mins));
+    return TIME_W + Math.round((mins / 60f) * colWidth);
+  }
+
+  private Instant instantForX(int x) {
+    int rel = Math.max(0, Math.min(x - TIME_W, HOURS * colWidth));
+    float hours = rel / (float) colWidth;
+    int totalMins = Math.round(hours * 60f);
+    LocalDateTime ldt = LocalDateTime.of(day, LocalTime.of(START_HOUR, 0)).plusMinutes(totalMins);
+    return ldt.atZone(ZoneId.systemDefault()).toInstant();
+  }
+
+  private void paintTile(Graphics2D g2, Tile t) {
+    int y = HEADER_H + t.row * ROW_H + 6;
+    int height = ROW_H - 12;
+    int x = Math.min(t.x1, t.x2);
+    int w = Math.max(16, Math.abs(t.x2 - t.x1));
+
+    Color base = new Color(66, 133, 244);
+    if (hasConflict(t)) base = new Color(219, 68, 55);
+    if (t.alpha < 1f) {
+      g2.setComposite(AlphaComposite.SrcOver.derive(t.alpha));
+    }
+    g2.setColor(base);
+    g2.fillRoundRect(x, y, w, height, 10, 10);
+    g2.setColor(new Color(0, 0, 0, 80));
+    g2.drawRoundRect(x, y, w, height, 10, 10);
+    g2.setComposite(AlphaComposite.SrcOver);
+
+    g2.setColor(new Color(255, 255, 255, 160));
+    g2.fillRect(x, y, 4, height);
+    g2.fillRect(x + w - 4, y, 4, height);
+
+    g2.setColor(Color.WHITE);
+    g2.setFont(getFont().deriveFont(Font.BOLD));
+    g2.drawString(t.i.title(), x + 8, y + 18);
+  }
+
+  private boolean hasConflict(Tile t) {
+    Instant s = instantForX(Math.min(t.x1, t.x2));
+    Instant e = instantForX(Math.max(t.x1, t.x2));
+    String rId = resources.get(Math.max(0, Math.min(resources.size() - 1, t.row))).id();
+    for (Models.Intervention i : interventions) {
+      if (!i.resourceId().equals(rId) || i == t.i) continue;
+      if (i.end().isAfter(s) && i.start().isBefore(e)) return true;
+    }
+    return false;
+  }
+
+  private Optional<Tile> findTileAt(Point p) {
+    for (Models.Intervention i : interventions) {
+      int r = indexOfResource(i.resourceId());
+      Tile t = tileFor(i, r);
+      int y = HEADER_H + r * ROW_H + 6;
+      int height = ROW_H - 12;
+      int x = Math.min(t.x1, t.x2);
+      int w = Math.max(16, Math.abs(t.x2 - t.x1));
+      Rectangle rect = new Rectangle(x, y, w, height);
+      if (rect.contains(p)) return Optional.of(t);
+    }
+    return Optional.empty();
+  }
+
+  private void updateCursor(Point p) {
+    Optional<Tile> ot = findTileAt(p);
+    if (ot.isEmpty()) {
+      setCursor(Cursor.getDefaultCursor());
+      return;
+    }
+    Tile t = ot.get();
+    int x = Math.min(t.x1, t.x2);
+    int w = Math.max(16, Math.abs(t.x2 - t.x1));
+    if (Math.abs(p.x - x) <= 5 || Math.abs(p.x - (x + w)) <= 5) {
+      setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
+    } else {
+      setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+    }
+  }
+
+  private void onPress(Point p) {
+    Optional<Tile> ot = findTileAt(p);
+    dragStart = p;
+    dragResizeLeft = false;
+    dragResizeRight = false;
+    if (ot.isPresent()) {
+      dragTile = ot.get();
+      int x = Math.min(dragTile.x1, dragTile.x2);
+      int w = Math.max(16, Math.abs(dragTile.x2 - dragTile.x1));
+      if (Math.abs(p.x - x) <= 5) dragResizeLeft = true;
+      else if (Math.abs(p.x - (x + w)) <= 5) dragResizeRight = true;
+    }
+  }
+
+  private void onDrag(Point p) {
+    if (dragTile == null || dragStart == null) return;
+    int dx = p.x - dragStart.x;
+    int dy = p.y - dragStart.y;
+    int rowDelta = Math.round(dy / (float) ROW_H);
+    Tile t = dragTile;
+    if (dragResizeLeft) {
+      t = t.withX1(t.x1 + dx);
+    } else if (dragResizeRight) {
+      t = t.withX2(t.x2 + dx);
+    } else {
+      t = t.shift(dx, rowDelta);
+    }
+    dragTile = t;
+    repaint();
+  }
+
+  private void onRelease() {
+    if (dragTile == null) return;
+    boolean isMock = "MOCK".equals(dsp.getLabel());
+    if (!isMock) {
+      dragTile = null;
+      repaint();
+      JOptionPane.showMessageDialog(
+          this,
+          "Mode REST en lecture seule pour le drag/resize (pas d'endpoint PATCH)\nLa modification n'est pas enregistrée.",
+          "Info",
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    try {
+      int row = Math.max(0, Math.min(resources.size() - 1, dragTile.row));
+      Models.Resource newRes = resources.get(row);
+      Instant ns = instantForX(Math.min(dragTile.x1, dragTile.x2));
+      Instant ne = instantForX(Math.max(dragTile.x1, dragTile.x2));
+      dsp.resetDemoData();
+      dsp.createIntervention(
+          new Models.Intervention(
+              null,
+              newRes.agencyId(),
+              newRes.id(),
+              dragTile.i.clientId(),
+              dragTile.i.title(),
+              ns,
+              ne));
+      reload();
+      repaint();
+    } catch (Exception ex) {
+      JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+    } finally {
+      dragTile = null;
+      repaint();
+    }
+  }
+
+  @Override
+  public String getToolTipText(MouseEvent event) {
+    Optional<Tile> ot = findTileAt(event.getPoint());
+    if (ot.isPresent()) {
+      Models.Intervention i = ot.get().i;
+      return "<html><b>" + i.title() + "</b><br/>" + i.start() + " → " + i.end() + "</html>";
+    }
+    return null;
+  }
+
+  private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {
+    private Tile(Models.Intervention i, int row, int x1, int x2) {
+      this(i, row, x1, x2, 1f);
+    }
+
+    private Tile shift(int dx, int rowDelta) {
+      return new Tile(i, row + rowDelta, x1 + dx, x2 + dx, alpha);
+    }
+
+    private Tile withX1(int nx1) {
+      return new Tile(i, row, nx1, x2, alpha);
+    }
+
+    private Tile withX2(int nx2) {
+      return new Tile(i, row, x1, nx2, alpha);
+    }
+
+    private Tile withAlpha(float a) {
+      return new Tile(i, row, x1, x2, a);
+    }
+  }
+}

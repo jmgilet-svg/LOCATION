@@ -1,133 +1,43 @@
-# LOCATION — Spring Boot + Swing
+# LOCATION — Sprint 1 (Backend + Client complets)
 
-## Diff 3 — UI Swing & Intégration
+Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
-- Planning interactif (drag & drop, resize, hover)
-- Éditeurs intégrés (Client, Ressource, Intervention)
-- Exports CSV/PDF (stub) et envoi mail (stub)
-- Menu Paramètres (bascule Mock/REST, login JWT), Menu Données (réinitialiser démo)
+## Sprint 3 — UI Swing & Intégration (Full)
 
-Base exécutable **backend Spring Boot (Java 17)** + **frontend Java Swing (FlatLaf)** avec **sélecteur de source Mock/Backend**, **SSE `/api/system/ping`**, **auth JWT `/auth/login`**, profils **dev(H2)** / **prod(Postgres)**, **Flyway**, **CI GitHub Actions**.
+### Ce qui arrive dans ce patch
 
-> **Diff 1** : squelette complet + docs + CI + mode Mock fonctionnel côté client + stratégie d’injection (DataSourceProvider).
->
-> **Diff 2** : **Modèle & API** — entités, services avec **détection de chevauchement**, endpoints **`/api/v1/**`** (agences, clients, ressources, interventions), **DTOs stables**, **validation**, **erreurs structurées**, **migrations Flyway V2+** et **seeds** (dev). **Stubs export PDF & emailing**. Côté client, `RestDataSource` implémente les listages + création d'intervention (mêmes règles en mode Mock).
+- **Planning** interactif (tuiles) par ressource (jour) avec **hover**, **drag**, **resize** (Mock actif ; REST en lecture seule pour éviter les API non disponibles).
+- **Éditeurs intégrés** : création simple d’intervention depuis le planning (Mock) et via REST (POST) si pas de conflit (lecture/écriture limitée au POST).
+- **Exports** : PDF (via endpoint REST de stub) + **CSV** local depuis le client.
+- **Login REST** : boîte de dialogue (URL + credentials), JWT géré par `RestDataSource`.
+- **Menus** :
+  - **Paramètres** → *Changer de source de données* (Mock/REST) et *Configurer le backend (URL/identifiants)*.
+  - **Données** → *Réinitialiser la démo* (Mock).
+  - **Fichier** → *Exporter planning en CSV*, *Exporter document PDF (stub)*.
+- **Accessibilité** : navigation clavier basique, contraste FlatLaf, tooltips.
+- **Erreurs & retries** : toasts non intrusifs, messages clairs (409 conflit, 400 validation).
 
-## Démarrage rapide
+### Limitations connues (transparentes)
+- **Drag/resize** persistants uniquement en **mode Mock** (pas d’endpoint PATCH/PUT côté REST dans le périmètre Sprint 2). En mode REST, les interactions sont simulées visuellement et **non enregistrées** – un toast l’indique.
+- Export **PDF** utilise le stub `/api/v1/documents/{id}/export/pdf` (génère un mini-PDF de test).
 
-### Prérequis
-- Java 17+
-- Maven 3.9+
-
-### Lancer le backend (profil dev / H2)
+### Démarrage rapide
 ```bash
-cd server
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+# Autre terminal
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=mock
+# ou REST
+java -jar client/target/location-client.jar --datasource=rest
 ```
-Le backend expose :
-- `POST /auth/login` → JWT (acceptation basique : identifiants non vides dans Diff 1)
-- `GET  /api/system/ping` → SSE (un event ~toutes 15s)
-- **API v1** (Diff 2) :
-  - `GET /api/v1/agencies`
-  - `GET /api/v1/clients`
-  - `GET /api/v1/resources`
-  - `GET /api/v1/interventions?from=...&to=...&resourceId=...`
-  - `POST /api/v1/interventions` (validation + **anti-chevauchement**)
-  - (stubs) `POST /api/v1/documents/{id}/export/pdf`, `POST /api/v1/documents/{id}/email`
 
-Variables d’env utiles :
-- `JWT_SECRET` (défaut: `dev-secret-please-change`)
-- `SERVER_PORT` (via `server.port`, défaut: `8080`)
-- `SPRING_PROFILES_ACTIVE` (`dev` ou `prod`)
-- `SPRING_DATASOURCE_*` pour prod (Postgres)
+### Raccourcis (client)
+- `Ctrl+N` : Nouvelle intervention (Mock ou REST via POST).
+- `Ctrl+E` : Export CSV du planning affiché.
+- `Ctrl+L` : Login/Config REST.
 
-### Lancer le client (Swing)
-```bash
-cd client
-mvn -q exec:java -Dexec.mainClass=com.location.client.LocationClientApp
-```
-Ou après packaging :
-```bash
-mvn -pl client -DskipTests package
-java -cp client/target/location-client.jar com.location.client.ui.StandalonePlanner
-```
-Au **premier lancement**, une **fenêtre de sélection** s’ouvre :
-- **Mode Démo (Mock)** : données locales en mémoire (aucun réseau)
-- **Mode Connecté (Backend)** : appels REST vers Spring Boot sécurisé (JWT)
-- Case **“Mémoriser ce choix”** → persistance dans `~/.location/app.properties`
+### Tests inclus
+- Tests unitaires de **layout temporel** (pixel ↔ temps), et **détection de conflits** côté Mock.
 
-**Argument CLI prioritaire** :
-```
---datasource=mock|rest
-```
-S’il est fourni, **la fenêtre est court-circuitée**.
-
-**Badge d’état** en haut à droite de l’app : `MOCK` ou `REST`.
-
-**Menu Paramètres → Source de données…** permet de changer la source (redémarrage conseillé).  
-**Menu Données → Réinitialiser la démo** recharge le jeu de données Mock.
-
-## Raccourcis UI
-- Double clic : éditer une intervention
-- Drag & drop / resize : déplacer/redimensionner
-
-### Variables d’environnement côté client
-- `LOCATION_BACKEND_URL` (défaut: `http://localhost:8080`)
-- `LOCATION_DEMO_USER` / `LOCATION_DEMO_PASSWORD` (défaut: `demo` / `demo`)
-
-## Profils & BDD
-- **dev** : H2 embarqué, Flyway activé.
-- **prod** : Postgres, Flyway activé. Config via `application-prod.yml` & variables d’env.
-
-Flyway **V1** initialise le schéma minimal (placeholder). Le **modèle métier complet** arrivera en Diff 2 (migrations accréditives).
-
-## CI
-Une GitHub Action build & tests Maven :
-- `mvn -B -ntp -DskipTests=false verify`
-- Packaging des modules `server` et `client`.
-
-## Sécurité (Diff 1)
-- `/auth/login` : accepte tout couple `username/password` **non vides** et renvoie un JWT signé HS256 (secret env `JWT_SECRET`). Cette politique est **temporaire** pour accélérer la mise en place ; en **Diff 2**, on activera comptes/roles/validation.
-- `/api/**` : protégé par filtre JWT ; `/auth/**` et `/api/system/ping` sont publics (ping SSE lisible sans auth pour observabilité de base).
-
-## SSE Ping
-`GET /api/system/ping` renvoie un **SSE** (content-type `text/event-stream`) avec un message `ping` ~toutes les 15s. Utile pour vérifier la connectivité depuis le client REST.
-
-## Mode Mock (client)
-- **Repositories/services in-memory** pour : `Agence`, `Client`, `Contact`, `Chauffeur`, `RessourceType`, `Ressource`, `Intervention`, `Document(Devis/Facture/BL)` (structures légères, étoffées en Diff 2).
-- **Jeu de données cohérent** ré-initialisable via le menu.
-- Parité visible avec REST : les écrans consommeront **uniquement** `DataSourceProvider` (interface) pour éviter les dépendances HTTP directes.
-
-## Tests
-- **Server** : tests WebMvc pour `/auth/login` et SSE `/api/system/ping`.
-- **Client** : test unitaire sur la résolution du mode (argument CLI > préférences > dialogue).
-- **Diff 2** :
-  - Tests WebMvc `GET /api/v1/agencies` (200 + JSON)
-  - Test DataJpa/Service création d’intervention **en conflit** → **exception 409** (via service + contrôleur)
-
-## DTOs & Parité Mock/REST
-Le client a été mis à jour pour consommer les listes **Agences** et **Clients** depuis `/api/v1/**` en mode REST. Le **mode Mock** expose les mêmes DTOs côté client (`Models.Agency`, `Models.Client`), garantissant la compatibilité d’affichage.
-
-## Packaging
-```bash
-mvn -B -DskipTests package
-```
-Artifacts :
-- `server/target/location-server.jar`
-- `client/target/location-client.jar`
-
-## Réinitialisation préférences client
-Supprimer `~/.location/app.properties`.
-
-## Prochaine itération (Diff 2)
-- Modèle & API métier complets (`/api/v1/**`), validations, erreurs structurées, seeds, PDF HTML→PDF + emailing (abstraction) ; compat stricte DTO ↔ Mock.
-
----
-
-Voir : `SPEC-FONCTIONNELLE.md`, `SPEC-TECHNIQUE.md`, `MODELE-DONNEES.md` (source de vérité).
-
-## Notes Diff 2
-- **Conflits d’affectation** : deux interventions d’une **même ressource** sont en conflit si les périodes `[start,end)` se chevauchent (intersection **non vide**).
-- **Erreurs structurées** : format `application/json` : `{"timestamp": "...","status":409,"error":"Conflict","message":"...","path":"/api/v1/interventions"}`.
-- **Seeds (dev)** : 2 agences, 3 clients, 3 ressources, 2 chauffeurs, 3 interventions non conflictuelles.
-- **Exports** : endpoints présents, implémentation **stub** (retourne PDF minimal / email simulé en logs). 
+## Auth & SSE
+- `POST /auth/login` → `{ "token": "..." }`
