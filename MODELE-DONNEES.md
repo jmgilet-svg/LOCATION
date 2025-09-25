@@ -43,3 +43,31 @@ insert into app_info (id, name) values (1, 'LOCATION') on conflict do nothing;
 ## Seeds (dev)
 - En Diff 2 : seeds cohérents insérés via migrations conditionnelles ou scripts `data-dev.sql`.  
   Diff 1 n’en a pas besoin au-delà d’`app_info`.
+
+---
+
+## (Nouveau) Schéma Diff 2
+
+### Tables principales
+- `agency(id uuid pk, name text unique not null)`
+- `client(id uuid pk, name text not null, billing_email text)`
+- `resource_type(id uuid pk, label text not null)`
+- `resource(id uuid pk, type_id uuid fk, name text not null, license_plate text unique, color_rgb int, agency_id uuid fk, visible boolean not null)`
+- `driver(id uuid pk, name text not null)`
+- `contact(id uuid pk, client_id uuid fk, name text not null, email text, phone text)`
+- `intervention(id uuid pk, agency_id uuid fk, resource_id uuid fk, client_id uuid fk, start_ts timestamp not null, end_ts timestamp not null, title text not null)`
+- `document(id uuid pk, doc_type text not null, date_ts date not null, client_id uuid fk, total_cents bigint not null)`
+
+### Index clés
+- `idx_intervention_resource_start (resource_id, start_ts)`
+- `idx_intervention_agency_start (agency_id, start_ts)`
+- `idx_resource_agency (agency_id)`
+
+### Règle métier (service)
+Conflit si **intersection non vide** entre deux interv. de **même ressource** sur `[start,end)`.
+
+### Seeds (dev)
+- 2 agences (Agence 1, Agence 2)
+- 3 clients (Alpha, Beta, Gamma)
+- 3 ressources (Camion X, Grue Y, Remorque Z)
+- 3 interventions non conflictuelles
