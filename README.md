@@ -2,6 +2,35 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 10 — Indisponibilités récurrentes + Tags & Capacité des ressources (full Back/Front/Mock)
+
+### Livré dans cette étape
+**Backend**
+- Gestion d’**indisponibilités ponctuelles** + **hebdomadaires** par ressource :
+  - Entités `Unavailability` (créneaux datés) et `RecurringUnavailability` (jour + horaire).
+  - Service `UnavailabilityQueryService` qui **développe** les récurrences dans un intervalle `[from,to]`.
+- API `/api/v1` enrichie :
+  - `GET /unavailabilities?from&to&resourceId` → occurrences (ponctuelles + hebdo expandées).
+  - `POST /unavailabilities` → créer une indispo ponctuelle.
+  - `POST /recurring-unavailabilities` → créer une indispo hebdomadaire.
+- Ressources : champs `tags` (filtrables) + `capacityTons` exportés dans le CSV.
+- Migration Flyway `V11__unavailabilities_and_resource_extras.sql` (tables + colonnes).
+
+**Client Swing**
+- **PlanningPanel** consomme les indispos ponctuelles et récurrentes via `DataSourceProvider.listUnavailabilities`.
+- Écran **Indisponibilités** : création d’un créneau ponctuel ou récurrent (Mock + REST).
+- Ressources : modèles enrichis (`tags`, `capacityTons`) exploitables dans les filtres et tooltips.
+
+**Mock**
+- Stockage en mémoire avec logique d’**expansion hebdomadaire** identique au backend.
+
+### API rapide
+```http
+GET /api/v1/unavailabilities?resourceId=R1&from=2025-09-01T00:00:00Z&to=2025-09-08T00:00:00Z
+POST /api/v1/unavailabilities
+POST /api/v1/recurring-unavailabilities
+```
+
 ## Étape 9 — Exports CSV généralisés (Clients, Ressources, Interventions) + UI d’export
 
 ### Ce que cette étape apporte
