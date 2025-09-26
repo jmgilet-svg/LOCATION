@@ -60,6 +60,39 @@ public class Preferences {
     }
   }
 
+  public float getFontScale() {
+    String raw = props.getProperty("fontScale", "1.0");
+    try {
+      return Float.parseFloat(raw);
+    } catch (NumberFormatException ex) {
+      return 1.0f;
+    }
+  }
+
+  public void setFontScale(float value) {
+    props.setProperty("fontScale", Float.toString(value));
+  }
+
+  public boolean isHighContrast() {
+    return Boolean.parseBoolean(props.getProperty("highContrast", "false"));
+  }
+
+  public void setHighContrast(boolean value) {
+    props.setProperty("highContrast", Boolean.toString(value));
+  }
+
+  public String getLanguage() {
+    return props.getProperty("lang", "fr");
+  }
+
+  public void setLanguage(String code) {
+    if (code == null || code.isBlank()) {
+      props.remove("lang");
+    } else {
+      props.setProperty("lang", code);
+    }
+  }
+
   public String getBaseUrl() {
     return props.getProperty("baseUrl");
   }

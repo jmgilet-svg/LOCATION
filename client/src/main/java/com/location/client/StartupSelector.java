@@ -6,6 +6,7 @@ import com.location.client.core.MockDataSource;
 import com.location.client.core.Preferences;
 import com.location.client.core.RestDataSource;
 import com.location.client.ui.Theme;
+import com.location.client.ui.i18n.Language;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JDialog;
@@ -27,6 +28,7 @@ public class StartupSelector {
   public void showAndRun() {
     Preferences prefs = Preferences.load();
     Theme.initialize(prefs);
+    Language.initialize(prefs);
     String forced = Cli.parseDataSourceArg(args);
     if (forced != null) {
       DataSourceProvider dsp = forced.equals("rest")
