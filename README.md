@@ -2,6 +2,30 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 12 — Stabilisation finale : **SSE ping**, **résilience REST**, **accessibilité & raccourcis**, **indicateur d’état**
+
+### Livré (Back/Front/Mock)
+**Backend**
+- **SSE** `/api/system/ping` : émet un `ping` **toutes ~15s** (profil dev/prod).  
+  Permet au client d’afficher l’état de connexion au backend.
+
+**Client Swing**
+- **Indicateur d’état** (barre de status) : `🟢 REST connecté`, `🟡 tentative…`, `🔴 hors‑ligne` ou `🟣 Mock`.
+- **Abonnement SSE** : thread léger qui consomme `/api/system/ping`. Reconnexion automatique en cas de coupure.
+- **Résilience REST** : retrys exponentiels pour les appels (réseau) *hors* 4xx (limité à 3 essais).
+- **Accessibilité** : mnémotechniques & raccourcis
+  - `Alt+F` Fichier, `Alt+D` Données, `Alt+P` Paramètres, `Alt+A` Aide.
+  - `Ctrl+N` nouvelle intervention (via double‑clic ou menu), `Suppr` supprimer sélection (documents/indispos), `Ctrl+E` Exporter…
+
+**Mock**
+- Inchangé (SSE non utilisé), l’état affiche `🟣 Mock`.
+
+### Test rapide
+1. Lancez le serveur : `mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev`
+2. Lancez le client en REST : `java -jar client/target/location-client.jar --datasource=rest`  
+   Le badge doit passer à **🟢 REST connecté** et rebondir toutes ~15s.
+3. Coupez le serveur : le client affiche **🔴 hors‑ligne**, puis **🟡 tentative…** en boucle, et se reconnecte.
+
 ## Étape 11 — Modèles documents versionnés (HTML) + Email groupé (full Back/Front/Mock)
 
 ### Nouveautés

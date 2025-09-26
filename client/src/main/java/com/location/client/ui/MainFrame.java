@@ -28,12 +28,14 @@ public class MainFrame extends JFrame {
   private final Preferences prefs;
   private final PlanningPanel planning;
   private final TopBar topBar;
+  private final JLabel connectionBadge = new JLabel();
   private final JLabel status = new JLabel();
   private final JLabel modeBadge = new JLabel();
   private final JLabel agencyBadge = new JLabel();
   private final JMenu agencyMenu = new JMenu("Agence");
   private ButtonGroup agencyGroup = new ButtonGroup();
   private boolean updatingAgencyMenu;
+  private final Timer heartbeat;
 
   public MainFrame(DataSourceProvider dsp, Preferences prefs) {
     super("LOCATION — Planning");
@@ -44,10 +46,24 @@ public class MainFrame extends JFrame {
 
     initializeCurrentAgency();
 
+    if (dsp instanceof RestDataSource rest) {
+      rest.startPingThread();
+      connectionBadge.setText("🟡 REST — tentative de connexion…");
+      heartbeat = new Timer(1000, e -> updateConnectionBadge(rest));
+      heartbeat.start();
+    } else {
+      connectionBadge.setText("🟣 Mock — source de données locale");
+      Timer mockTimer = new Timer(2000, e -> connectionBadge.setText("🟣 Mock — source de données locale"));
+      mockTimer.setRepeats(false);
+      mockTimer.start();
+      heartbeat = mockTimer;
+    }
+
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
     addWindowListener(new WindowAdapter() {
       @Override
       public void windowClosed(WindowEvent e) {
+        heartbeat.stop();
         try {
           dsp.close();
         } catch (Exception ignored) {
@@ -62,6 +78,8 @@ public class MainFrame extends JFrame {
     add(planning, BorderLayout.CENTER);
     JPanel south = new JPanel(new BorderLayout());
     JPanel badges = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+    badges.add(connectionBadge);
+    badges.add(new JLabel("|"));
     badges.add(modeBadge);
     badges.add(new JLabel("|"));
     badges.add(agencyBadge);
@@ -79,13 +97,19 @@ public class MainFrame extends JFrame {
         createInterventionDialog();
       }
     });
-    getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("control E"), "editNotes");
-    getRootPane().getActionMap().put("editNotes", new AbstractAction() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        editNotes();
-      }
-    });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control E"), "exportDialog");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "exportDialog",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new ExportDialog(MainFrame.this, dsp).setVisible(true);
+              }
+            });
     getRootPane()
         .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
         .put(KeyStroke.getKeyStroke("control shift E"), "exportCsv");
@@ -201,6 +225,7 @@ public class MainFrame extends JFrame {
     JMenuBar bar = new JMenuBar();
 
     JMenu file = new JMenu("Fichier");
+    file.setMnemonic('F');
     JMenuItem exportCsv = new JMenuItem("Exporter planning en CSV");
     exportCsv.setAccelerator(KeyStroke.getKeyStroke("control shift E"));
     exportCsv.addActionListener(e -> exportCsv());
@@ -214,6 +239,7 @@ public class MainFrame extends JFrame {
                 new ExportDialog(MainFrame.this, dsp).setVisible(true);
               }
             });
+    exportGeneral.setAccelerator(KeyStroke.getKeyStroke("control E"));
     JMenuItem exportResources = new JMenuItem("Exporter ressources CSV");
     exportResources.addActionListener(e -> exportResourcesCsv());
     JMenuItem exportInterventionPdf = new JMenuItem("Exporter intervention (PDF)");
@@ -231,6 +257,7 @@ public class MainFrame extends JFrame {
     file.add(exportUnav);
 
     JMenu data = new JMenu("Données");
+    data.setMnemonic('D');
     JMenuItem reset = new JMenuItem("Réinitialiser la démo (Mock)");
     reset.addActionListener(e -> {
       dsp.resetDemoData();
@@ -238,9 +265,9 @@ public class MainFrame extends JFrame {
       toast("Données de démonstration réinitialisées");
     });
     JMenuItem create = new JMenuItem("Nouvelle intervention");
+    create.setAccelerator(KeyStroke.getKeyStroke("control N"));
     create.addActionListener(e -> createInterventionDialog());
-    JMenuItem editNotes = new JMenuItem("Éditer les notes (Ctrl+E)");
-    editNotes.setAccelerator(KeyStroke.getKeyStroke("control E"));
+    JMenuItem editNotes = new JMenuItem("Éditer les notes");
     editNotes.addActionListener(e -> editNotes());
     JMenuItem bulkEmail = new JMenuItem("Envoyer PDFs du jour (lot)");
     bulkEmail.addActionListener(e -> sendBulkForDay());
@@ -256,6 +283,7 @@ public class MainFrame extends JFrame {
                 deleteSelected();
               }
             });
+    deleteIntervention.setAccelerator(KeyStroke.getKeyStroke("DELETE"));
     JMenuItem emailPdf =
         new JMenuItem(
             new AbstractAction("Envoyer l'intervention par email… (Ctrl+M)") {
@@ -298,6 +326,7 @@ public class MainFrame extends JFrame {
     view.add(weekView);
 
     JMenu settings = new JMenu("Paramètres");
+    settings.setMnemonic('P');
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
     switchSrc.addActionListener(e -> switchSource());
     JMenuItem cfg = new JMenuItem("Configurer le backend (URL/Login)");
@@ -336,6 +365,7 @@ public class MainFrame extends JFrame {
     settings.add(docHtmlTmpl);
 
     JMenu help = new JMenu("Aide");
+    help.setMnemonic('A');
     JMenuItem about = new JMenuItem("À propos & fonctionnalités serveur");
     about.addActionListener(e -> showAbout());
     help.add(about);
@@ -436,6 +466,25 @@ public class MainFrame extends JFrame {
     modeBadge.setText(dsp instanceof RestDataSource ? "Backend REST" : "Mode Démo (Mock)");
     String agencyId = dsp.getCurrentAgencyId();
     agencyBadge.setText("Agence: " + (agencyId == null || agencyId.isBlank() ? "—" : agencyId));
+    if (!(dsp instanceof RestDataSource)) {
+      connectionBadge.setText("🟣 Mock — source de données locale");
+    }
+  }
+
+  private void updateConnectionBadge(RestDataSource rest) {
+    long last = rest.getLastPingEpochMs();
+    if (last <= 0L) {
+      connectionBadge.setText("🟡 REST — tentative de connexion…");
+      return;
+    }
+    long age = System.currentTimeMillis() - last;
+    if (age < 20_000L) {
+      connectionBadge.setText("🟢 REST connecté");
+    } else if (age < 40_000L) {
+      connectionBadge.setText("🟡 REST — ping en attente…");
+    } else {
+      connectionBadge.setText("🔴 REST déconnecté — reconnexion…");
+    }
   }
 
   private void exportCsv() {
