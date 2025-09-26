@@ -206,6 +206,14 @@ public class MainFrame extends JFrame {
     exportCsv.addActionListener(e -> exportCsv());
     JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
     exportCsvRest.addActionListener(e -> exportCsvRest());
+    JMenuItem exportGeneral =
+        new JMenuItem(
+            new AbstractAction("Exporter…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new ExportDialog(MainFrame.this, dsp).setVisible(true);
+              }
+            });
     JMenuItem exportResources = new JMenuItem("Exporter ressources CSV");
     exportResources.addActionListener(e -> exportResourcesCsv());
     JMenuItem exportInterventionPdf = new JMenuItem("Exporter intervention (PDF)");
@@ -216,6 +224,7 @@ public class MainFrame extends JFrame {
     exportUnav.addActionListener(e -> exportUnavailabilitiesCsv());
     file.add(exportCsv);
     file.add(exportCsvRest);
+    file.add(exportGeneral);
     file.add(exportResources);
     file.add(exportInterventionPdf);
     file.add(exportClients);

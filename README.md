@@ -2,6 +2,29 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 9 — Exports CSV généralisés (Clients, Ressources, Interventions) + UI d’export
+
+### Ce que cette étape apporte
+**Backend**
+- Nouveaux endpoints **CSV** (UTF‑8, `;`, filtrés par **X-Agency-Id**) :
+  - `GET /api/v1/clients.csv`
+  - `GET /api/v1/resources.csv`
+  - `GET /api/v1/interventions.csv?from=ISO&to=ISO`
+
+**Client Swing**
+- Nouveau menu **Fichier → Exporter…** ouvrant un **ExportDialog** :
+  - Choix du type (**Clients** / **Ressources** / **Interventions**).
+  - Pour **Interventions**, sélection d’un **intervalle de dates**.
+  - Télécharge le CSV en REST et l’**ouvre** automatiquement.
+  - En **Mock**, un message explique que l’export disque est désactivé (conformément aux invariants).
+
+**Mock**
+- Pas d’écriture fichier : levée `UnsupportedOperation` identique à l’étape 5.
+
+### Utilisation
+1) Lancer le backend en `dev` ou la stack Docker.
+2) Côté client en REST, **Fichier → Exporter…**, choisir un type, valider : un `.csv` s’ouvre.
+
 ## Étape 8 — Planning interactif (drag, move, resize, hover) + détection visuelle des conflits
 
 ### Livrables
