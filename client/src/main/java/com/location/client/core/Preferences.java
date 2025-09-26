@@ -124,6 +124,14 @@ public class Preferences {
     props.setProperty("filterQuery", value == null ? "" : value);
   }
 
+  public String getFilterTags() {
+    return props.getProperty("filterTags", "");
+  }
+
+  public void setFilterTags(String value) {
+    props.setProperty("filterTags", value == null ? "" : value);
+  }
+
   public String getDayIso() {
     return props.getProperty("dayIso");
   }

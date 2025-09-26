@@ -14,8 +14,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import javax.swing.*;
 
@@ -151,6 +153,8 @@ public class MainFrame extends JFrame {
     exportCsv.addActionListener(e -> exportCsv());
     JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
     exportCsvRest.addActionListener(e -> exportCsvRest());
+    JMenuItem exportResources = new JMenuItem("Exporter ressources CSV");
+    exportResources.addActionListener(e -> exportResourcesCsv());
     JMenuItem exportPdf = new JMenuItem("Exporter PDF (stub)");
     exportPdf.addActionListener(e -> exportPdfStub());
     JMenuItem emailPdf =
@@ -164,6 +168,7 @@ public class MainFrame extends JFrame {
     emailPdf.setAccelerator(KeyStroke.getKeyStroke("control M"));
     file.add(exportCsv);
     file.add(exportCsvRest);
+    file.add(exportResources);
     file.add(exportPdf);
     file.add(emailPdf);
 
@@ -178,6 +183,8 @@ public class MainFrame extends JFrame {
     create.addActionListener(e -> createInterventionDialog());
     JMenuItem newUnav = new JMenuItem("Nouvelle indisponibilité");
     newUnav.addActionListener(e -> createUnavailabilityDialog());
+    JMenuItem newRecurring = new JMenuItem("Nouvelle indisponibilité récurrente");
+    newRecurring.addActionListener(e -> createRecurringUnavailabilityDialog());
     JMenuItem deleteIntervention =
         new JMenuItem(
             new AbstractAction("Supprimer l'intervention sélectionnée (Suppr)") {
@@ -189,6 +196,7 @@ public class MainFrame extends JFrame {
     data.add(create);
     data.add(reset);
     data.add(newUnav);
+    data.add(newRecurring);
     data.add(deleteIntervention);
 
     JMenu settings = new JMenu("Paramètres");
@@ -253,6 +261,17 @@ public class MainFrame extends JFrame {
       Desktop.getDesktop().open(tmp.toFile());
     } catch (Exception ex) {
       error("Export CSV REST → " + ex.getMessage());
+    }
+  }
+
+  private void exportResourcesCsv() {
+    try {
+      Path tmp = Files.createTempFile("resources-", ".csv");
+      dsp.downloadResourcesCsv(topBar.getTags(), tmp);
+      toast("Ressources exportées: " + tmp);
+      Desktop.getDesktop().open(tmp.toFile());
+    } catch (Exception ex) {
+      error("Export ressources → " + ex.getMessage());
     }
   }
 
@@ -427,8 +446,58 @@ public class MainFrame extends JFrame {
                 resource.id(),
                 tfReason.getText(),
                 Instant.parse(tfStart.getText()),
-                Instant.parse(tfEnd.getText())));
+                Instant.parse(tfEnd.getText()),
+                false));
         toast("Indisponibilité créée");
+        refreshData();
+      } catch (Exception ex) {
+        error(ex.getMessage());
+      }
+    }
+  }
+
+  private void createRecurringUnavailabilityDialog() {
+    List<Models.Resource> resources = planning.getResources();
+    if (resources.isEmpty()) {
+      toast("Aucune ressource");
+      return;
+    }
+    JComboBox<Models.Resource> cbR = new JComboBox<>(resources.toArray(new Models.Resource[0]));
+    JComboBox<DayOfWeek> cbDay = new JComboBox<>(DayOfWeek.values());
+    JTextField tfReason = new JTextField("Maintenance hebdo");
+    JTextField tfStart = new JTextField("08:00");
+    JTextField tfEnd = new JTextField("10:00");
+    JPanel panel = new JPanel(new GridLayout(0, 1, 6, 6));
+    panel.add(new JLabel("Ressource:"));
+    panel.add(cbR);
+    panel.add(new JLabel("Jour:"));
+    panel.add(cbDay);
+    panel.add(new JLabel("Raison:"));
+    panel.add(tfReason);
+    panel.add(new JLabel("Début (HH:mm):"));
+    panel.add(tfStart);
+    panel.add(new JLabel("Fin (HH:mm):"));
+    panel.add(tfEnd);
+    int ok =
+        JOptionPane.showConfirmDialog(
+            this, panel, "Créer une indisponibilité récurrente", JOptionPane.OK_CANCEL_OPTION);
+    if (ok == JOptionPane.OK_OPTION) {
+      Models.Resource resource = (Models.Resource) cbR.getSelectedItem();
+      DayOfWeek day = (DayOfWeek) cbDay.getSelectedItem();
+      if (resource == null || day == null) {
+        error("Sélection invalide");
+        return;
+      }
+      try {
+        dsp.createRecurringUnavailability(
+            new Models.RecurringUnavailability(
+                null,
+                resource.id(),
+                day,
+                LocalTime.parse(tfStart.getText()),
+                LocalTime.parse(tfEnd.getText()),
+                tfReason.getText()));
+        toast("Indisponibilité récurrente créée");
         refreshData();
       } catch (Exception ex) {
         error(ex.getMessage());

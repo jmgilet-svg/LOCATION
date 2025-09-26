@@ -110,10 +110,12 @@ public class RestDataSource implements DataSourceProvider {
         for (JsonNode resource : node) {
           String id = resource.path("id").asText();
           String name = resource.path("name").asText();
-          String license = resource.path("licensePlate").asText();
+          String license = resource.path("licensePlate").isMissingNode() ? null : resource.path("licensePlate").asText(null);
           Integer color = resource.path("colorRgb").isInt() ? resource.path("colorRgb").asInt() : null;
           String agencyId = resource.path("agency").path("id").asText();
-          result.add(new Models.Resource(id, name, license, color, agencyId));
+          String tags = resource.path("tags").asText(null);
+          Integer capacity = resource.path("capacityTons").isInt() ? resource.path("capacityTons").asInt() : null;
+          result.add(new Models.Resource(id, name, license, color, agencyId, tags, capacity));
         }
       }
       return result;
@@ -255,7 +257,8 @@ public class RestDataSource implements DataSourceProvider {
           String reason = unav.path("reason").asText();
           java.time.Instant start = java.time.Instant.parse(unav.path("start").asText());
           java.time.Instant end = java.time.Instant.parse(unav.path("end").asText());
-          result.add(new Models.Unavailability(id, rid, reason, start, end));
+          boolean recurring = unav.path("recurring").asBoolean(false);
+          result.add(new Models.Unavailability(id, rid, reason, start, end, recurring));
         }
       }
       return result;
@@ -280,7 +283,99 @@ public class RestDataSource implements DataSourceProvider {
       JsonNode node = executeForJson(post);
       String id = node.path("id").asText();
       return new Models.Unavailability(
-          id, unavailability.resourceId(), unavailability.reason(), unavailability.start(), unavailability.end());
+          id,
+          unavailability.resourceId(),
+          unavailability.reason(),
+          unavailability.start(),
+          unavailability.end(),
+          false);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public List<Models.RecurringUnavailability> listRecurringUnavailabilities(String resourceId) {
+    try {
+      ensureLogin();
+      String url = baseUrl + "/api/v1/recurring-unavailabilities";
+      if (resourceId != null && !resourceId.isBlank()) {
+        url += "?resourceId=" + encode(resourceId);
+      }
+      JsonNode node = executeForJson(new HttpGet(url));
+      List<Models.RecurringUnavailability> result = new ArrayList<>();
+      if (node.isArray()) {
+        for (JsonNode ru : node) {
+          result.add(
+              new Models.RecurringUnavailability(
+                  ru.path("id").asText(),
+                  ru.path("resourceId").asText(),
+                  java.time.DayOfWeek.valueOf(ru.path("dayOfWeek").asText()),
+                  java.time.LocalTime.parse(ru.path("start").asText()),
+                  java.time.LocalTime.parse(ru.path("end").asText()),
+                  ru.path("reason").asText()));
+        }
+      }
+      return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.RecurringUnavailability createRecurringUnavailability(
+      Models.RecurringUnavailability recurringUnavailability) {
+    try {
+      ensureLogin();
+      HttpPost post = new HttpPost(baseUrl + "/api/v1/recurring-unavailabilities");
+      ObjectNode payload = om.createObjectNode();
+      payload.put("resourceId", recurringUnavailability.resourceId());
+      payload.put("dayOfWeek", recurringUnavailability.dayOfWeek().name());
+      payload.put("start", recurringUnavailability.start().toString());
+      payload.put("end", recurringUnavailability.end().toString());
+      payload.put("reason", recurringUnavailability.reason());
+      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(post);
+      return new Models.RecurringUnavailability(
+          node.path("id").asText(),
+          node.path("resourceId").asText(),
+          java.time.DayOfWeek.valueOf(node.path("dayOfWeek").asText()),
+          java.time.LocalTime.parse(node.path("start").asText()),
+          java.time.LocalTime.parse(node.path("end").asText()),
+          node.path("reason").asText());
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Path downloadResourcesCsv(String tags, Path target) {
+    try {
+      ensureLogin();
+      String url = baseUrl + "/api/v1/resources/csv";
+      if (tags != null && !tags.isBlank()) {
+        url += "?tags=" + encode(tags);
+      }
+      HttpGet get = new HttpGet(url);
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

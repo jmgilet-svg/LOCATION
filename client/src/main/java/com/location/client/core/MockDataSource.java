@@ -1,10 +1,18 @@
 package com.location.client.core;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 public class MockDataSource implements DataSourceProvider {
@@ -14,6 +22,7 @@ public class MockDataSource implements DataSourceProvider {
   private final List<Models.Resource> resources = new ArrayList<>();
   private final List<Models.Intervention> interventions = new ArrayList<>();
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
+  private final List<Models.RecurringUnavailability> recurring = new ArrayList<>();
 
   public MockDataSource() {
     resetDemoData();
@@ -31,22 +40,47 @@ public class MockDataSource implements DataSourceProvider {
     resources.clear();
     interventions.clear();
     unavailabilities.clear();
-    var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence 1");
-    var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence 2");
+    recurring.clear();
+
+    var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
+    var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence Sud");
     agencies.add(a1);
     agencies.add(a2);
-    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "facture@alpha.tld"));
-    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "billing@beta.tld"));
-    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Gamma", "compta@gamma.tld"));
+
+    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
+    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
+
     resources.add(
-        new Models.Resource(UUID.randomUUID().toString(), "Camion X", "AB-123-CD", 0xFF4444, a1.id()));
+        new Models.Resource(
+            UUID.randomUUID().toString(),
+            "Grue X",
+            "AB-123-CD",
+            0xFF4444,
+            a1.id(),
+            "grue,90t",
+            90));
     resources.add(
-        new Models.Resource(UUID.randomUUID().toString(), "Grue Y", "EF-456-GH", 0x44FF44, a1.id()));
+        new Models.Resource(
+            UUID.randomUUID().toString(),
+            "Camion Y",
+            "EF-456-GH",
+            0x44AA44,
+            a1.id(),
+            "camion,benne",
+            18));
     resources.add(
-        new Models.Resource(UUID.randomUUID().toString(), "Remorque Z", "IJ-789-KL", 0x4444FF, a2.id()));
+        new Models.Resource(
+            UUID.randomUUID().toString(),
+            "Remorque Z",
+            "IJ-789-KL",
+            0x4444FF,
+            a2.id(),
+            "remorque,plateau",
+            10));
 
     ZonedDateTime base =
         ZonedDateTime.now(ZoneId.systemDefault()).withHour(9).withMinute(0).withSecond(0).withNano(0);
+
     addIntervention(
         a1.id(),
         resources.get(0).id(),
@@ -64,14 +98,30 @@ public class MockDataSource implements DataSourceProvider {
     addIntervention(
         a2.id(),
         resources.get(2).id(),
-        clients.get(2).id(),
+        clients.get(1).id(),
         "Transport matériel",
         base.plusDays(2).toInstant(),
         base.plusDays(2).plusHours(1).toInstant());
+
     addUnavailability(
-        resources.get(0).id(), "Maintenance", base.plusDays(1).plusHours(6).toInstant(), base.plusDays(1).plusHours(8).toInstant());
+        resources.get(0).id(),
+        "Maintenance",
+        base.plusDays(1).plusHours(6).toInstant(),
+        base.plusDays(1).plusHours(8).toInstant());
     addUnavailability(
-        resources.get(1).id(), "Panne hydraulique", base.plusDays(1).minusHours(2).toInstant(), base.plusDays(1).minusHours(1).toInstant());
+        resources.get(1).id(),
+        "Panne hydraulique",
+        base.plusDays(1).minusHours(2).toInstant(),
+        base.plusDays(1).minusHours(1).toInstant());
+
+    recurring.add(
+        new Models.RecurringUnavailability(
+            UUID.randomUUID().toString(),
+            resources.get(0).id(),
+            DayOfWeek.MONDAY,
+            LocalTime.of(8, 0),
+            LocalTime.of(10, 0),
+            "Routine hebdo"));
   }
 
   @Override
@@ -116,12 +166,13 @@ public class MockDataSource implements DataSourceProvider {
       throw new IllegalStateException("Conflit d'affectation (MOCK)");
     }
     boolean unavailable =
-        unavailabilities.stream()
+        listUnavailabilities(
+                intervention.start().atOffset(ZoneOffset.UTC),
+                intervention.end().atOffset(ZoneOffset.UTC),
+                intervention.resourceId())
+            .stream()
             .anyMatch(
-                u ->
-                    u.resourceId().equals(intervention.resourceId())
-                        && u.end().isAfter(intervention.start())
-                        && u.start().isBefore(intervention.end()));
+                u -> u.end().isAfter(intervention.start()) && u.start().isBefore(intervention.end()));
     if (unavailable) {
       throw new IllegalStateException("Ressource indisponible (MOCK)");
     }
@@ -152,12 +203,13 @@ public class MockDataSource implements DataSourceProvider {
       throw new IllegalStateException("Conflit (MOCK) avec une autre intervention");
     }
     boolean unavailable =
-        unavailabilities.stream()
+        listUnavailabilities(
+                intervention.start().atOffset(ZoneOffset.UTC),
+                intervention.end().atOffset(ZoneOffset.UTC),
+                intervention.resourceId())
+            .stream()
             .anyMatch(
-                u ->
-                    u.resourceId().equals(intervention.resourceId())
-                        && u.end().isAfter(intervention.start())
-                        && u.start().isBefore(intervention.end()));
+                u -> u.end().isAfter(intervention.start()) && u.start().isBefore(intervention.end()));
     if (unavailable) {
       throw new IllegalStateException("Conflit (MOCK) indisponibilité");
     }
@@ -180,19 +232,52 @@ public class MockDataSource implements DataSourceProvider {
       java.time.OffsetDateTime from, java.time.OffsetDateTime to, String resourceId) {
     Instant fromInstant = from != null ? from.toInstant() : null;
     Instant toInstant = to != null ? to.toInstant() : null;
-    return unavailabilities.stream()
-        .filter(u -> resourceId == null || resourceId.equals(u.resourceId()))
-        .filter(
-            u ->
-                (fromInstant == null || u.end().isAfter(fromInstant))
-                    && (toInstant == null || u.start().isBefore(toInstant)))
-        .toList();
+    List<Models.Unavailability> result = new ArrayList<>();
+    for (Models.Unavailability u : unavailabilities) {
+      if ((resourceId == null || resourceId.equals(u.resourceId()))
+          && overlaps(u.start(), u.end(), fromInstant, toInstant)) {
+        result.add(u);
+      }
+    }
+    if (fromInstant != null && toInstant != null) {
+      LocalDate day = fromInstant.atZone(ZoneOffset.UTC).toLocalDate();
+      LocalDate end = toInstant.atZone(ZoneOffset.UTC).toLocalDate();
+      while (!day.isAfter(end)) {
+        for (Models.RecurringUnavailability ru : recurring) {
+          if (resourceId != null && !resourceId.equals(ru.resourceId())) {
+            continue;
+          }
+          if (ru.dayOfWeek() == day.getDayOfWeek()) {
+            Instant start =
+                day.atTime(ru.start()).atOffset(ZoneOffset.UTC).toInstant();
+            Instant endInstant =
+                day.atTime(ru.end()).atOffset(ZoneOffset.UTC).toInstant();
+            if (overlaps(start, endInstant, fromInstant, toInstant)) {
+              result.add(
+                  new Models.Unavailability(
+                      "ru:" + ru.id() + ":" + day,
+                      ru.resourceId(),
+                      ru.reason(),
+                      start,
+                      endInstant,
+                      true));
+            }
+          }
+        }
+        day = day.plusDays(1);
+      }
+    }
+    return result;
   }
 
   @Override
   public Models.Unavailability createUnavailability(Models.Unavailability unavailability) {
     boolean overlapUnavailability =
-        unavailabilities.stream()
+        listUnavailabilities(
+                unavailability.start().atOffset(ZoneOffset.UTC),
+                unavailability.end().atOffset(ZoneOffset.UTC),
+                unavailability.resourceId())
+            .stream()
             .anyMatch(
                 u ->
                     u.resourceId().equals(unavailability.resourceId())
@@ -217,9 +302,85 @@ public class MockDataSource implements DataSourceProvider {
             unavailability.resourceId(),
             unavailability.reason(),
             unavailability.start(),
-            unavailability.end());
+            unavailability.end(),
+            false);
     unavailabilities.add(created);
     return created;
+  }
+
+  @Override
+  public List<Models.RecurringUnavailability> listRecurringUnavailabilities(String resourceId) {
+    return recurring.stream()
+        .filter(r -> resourceId == null || resourceId.equals(r.resourceId()))
+        .toList();
+  }
+
+  @Override
+  public Models.RecurringUnavailability createRecurringUnavailability(
+      Models.RecurringUnavailability recurringUnavailability) {
+    if (!recurringUnavailability.start().isBefore(recurringUnavailability.end())) {
+      throw new IllegalArgumentException("Heure début < heure fin (MOCK)");
+    }
+    Models.RecurringUnavailability created =
+        new Models.RecurringUnavailability(
+            UUID.randomUUID().toString(),
+            recurringUnavailability.resourceId(),
+            recurringUnavailability.dayOfWeek(),
+            recurringUnavailability.start(),
+            recurringUnavailability.end(),
+            recurringUnavailability.reason());
+    recurring.add(created);
+    return created;
+  }
+
+  @Override
+  public Path downloadResourcesCsv(String tags, Path target) {
+    try {
+      List<Models.Resource> data = new ArrayList<>(resources);
+      if (tags != null && !tags.isBlank()) {
+        Set<String> requested =
+            java.util.Arrays.stream(tags.toLowerCase().split("\\s*,\\s*"))
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toSet());
+        if (!requested.isEmpty()) {
+          data =
+              data.stream()
+                  .filter(
+                      r ->
+                          r.tags() != null
+                              && requested.stream()
+                                  .allMatch(t -> r.tags().toLowerCase().contains(t)))
+                  .toList();
+        }
+      }
+      StringBuilder sb =
+          new StringBuilder("id;name;licensePlate;capacityTons;tags;agencyId\n");
+      for (Models.Resource r : data) {
+        sb.append(r.id())
+            .append(';')
+            .append(r.name())
+            .append(';')
+            .append(r.licensePlate() == null ? "" : r.licensePlate())
+            .append(';')
+            .append(r.capacityTons() == null ? "" : r.capacityTons())
+            .append(';')
+            .append(r.tags() == null ? "" : r.tags())
+            .append(';')
+            .append(r.agencyId())
+            .append('\n');
+      }
+      Files.writeString(target, sb.toString());
+      return target;
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  private static boolean overlaps(Instant start, Instant end, Instant from, Instant to) {
+    if (from == null || to == null) {
+      return true;
+    }
+    return end.isAfter(from) && start.isBefore(to);
   }
 
   private void addIntervention(
@@ -230,9 +391,12 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   private void addUnavailability(String resourceId, String reason, Instant start, Instant end) {
-    unavailabilities.add(new Models.Unavailability(UUID.randomUUID().toString(), resourceId, reason, start, end));
+    unavailabilities.add(
+        new Models.Unavailability(
+            UUID.randomUUID().toString(), resourceId, reason, start, end, false));
   }
 
   @Override
   public void close() {}
 }
+
