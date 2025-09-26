@@ -4,6 +4,7 @@ import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
@@ -170,6 +171,13 @@ public class DocumentsFrame extends JFrame {
       }
     });
 
+    toolbar.add(new AbstractAction("Export CSV") {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        exportCsv();
+      }
+    });
+
     return toolbar;
   }
 
@@ -326,6 +334,29 @@ public class DocumentsFrame extends JFrame {
       JOptionPane.showMessageDialog(this, "Email envoyé (ou simulé en mode Mock).");
     } catch (Exception ex) {
       JOptionPane.showMessageDialog(this, "Échec de l'envoi : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private void exportCsv() {
+    if (!(dataSource instanceof com.location.client.core.RestDataSource)) {
+      JOptionPane.showMessageDialog(this, "Export CSV disponible uniquement en mode REST.");
+      return;
+    }
+    String type = (String) typeFilter.getSelectedItem();
+    Models.Client client = (Models.Client) clientFilter.getSelectedItem();
+    String clientId = client == null ? null : client.id();
+    try {
+      java.nio.file.Path tmp = Files.createTempFile("docs-", ".csv");
+      dataSource.downloadDocsCsv(type, clientId, tmp);
+      if (Desktop.isDesktopSupported()) {
+        Desktop.getDesktop().open(tmp.toFile());
+      } else {
+        JOptionPane.showMessageDialog(this, "CSV exporté : " + tmp.toAbsolutePath());
+      }
+    } catch (UnsupportedOperationException ex) {
+      JOptionPane.showMessageDialog(this, ex.getMessage(), "Information", JOptionPane.INFORMATION_MESSAGE);
+    } catch (Exception ex) {
+      JOptionPane.showMessageDialog(this, "Export CSV impossible : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
     }
   }
 

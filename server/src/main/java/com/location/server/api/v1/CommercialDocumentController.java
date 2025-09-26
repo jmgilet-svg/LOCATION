@@ -8,6 +8,7 @@ import com.location.server.repo.CommercialDocumentRepository;
 import com.location.server.service.CommercialDocumentPdfService;
 import com.location.server.service.CommercialDocumentService;
 import com.location.server.service.MailGateway;
+import com.location.server.service.TemplateService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -36,16 +37,19 @@ public class CommercialDocumentController {
   private final CommercialDocumentService documentService;
   private final CommercialDocumentPdfService pdfService;
   private final MailGateway mailGateway;
+  private final TemplateService templateService;
 
   public CommercialDocumentController(
       CommercialDocumentRepository documentRepository,
       CommercialDocumentService documentService,
       CommercialDocumentPdfService pdfService,
-      MailGateway mailGateway) {
+      MailGateway mailGateway,
+      TemplateService templateService) {
     this.documentRepository = documentRepository;
     this.documentService = documentService;
     this.pdfService = pdfService;
     this.mailGateway = mailGateway;
+    this.templateService = templateService;
   }
 
   @GetMapping
@@ -62,6 +66,43 @@ public class CommercialDocumentController {
     return documentRepository.search(agencyId, type, clientId, from, to).stream()
         .map(CommercialDocumentController::toDto)
         .collect(Collectors.toList());
+  }
+
+  @GetMapping(value = ".csv", produces = "text/csv; charset=UTF-8")
+  public ResponseEntity<String> exportCsv(
+      @RequestParam(required = false) DocType type,
+      @RequestParam(required = false) String clientId,
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to) {
+    String agencyId = AgencyContext.require();
+    List<CommercialDocument> documents = documentRepository.search(agencyId, type, clientId, from, to);
+    StringBuilder csv = new StringBuilder("type;reference;title;client;date;ht;tva;ttc\n");
+    for (CommercialDocument document : documents) {
+      csv.append(document.getType())
+          .append(';')
+          .append(sanitize(document.getReference()))
+          .append(';')
+          .append(sanitize(document.getTitle()))
+          .append(';')
+          .append(sanitize(document.getClient().getName()))
+          .append(';')
+          .append(document.getDate() == null ? "" : document.getDate().toLocalDate())
+          .append(';')
+          .append(document.getTotalHt().toPlainString())
+          .append(';')
+          .append(document.getTotalVat().toPlainString())
+          .append(';')
+          .append(document.getTotalTtc().toPlainString())
+          .append('\n');
+    }
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"documents.csv\"")
+        .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+        .body(csv.toString());
   }
 
   @PostMapping
@@ -117,14 +158,28 @@ public class CommercialDocumentController {
   public ResponseEntity<Void> email(@PathVariable String id, @Valid @RequestBody EmailRequest request) {
     CommercialDocument document = documentRepository.findById(id).orElseThrow();
     byte[] pdf = pdfService.build(document);
-    String subject =
-        request.subject == null || request.subject.isBlank()
-            ? titleFor(document)
-            : request.subject;
-    String body =
-        request.message == null || request.message.isBlank()
-            ? "Bonjour,\nVeuillez trouver le document en pièce jointe."
-            : request.message;
+    String subject = request.subject;
+    String body = request.message;
+    if ((subject == null || subject.isBlank()) || (body == null || body.isBlank())) {
+      var optionalTemplate =
+          templateService.findDocumentTemplate(document.getAgency().getId(), document.getType());
+      if (optionalTemplate.isPresent()) {
+        var template = optionalTemplate.get();
+        var bindings = templateService.documentBindings(document);
+        if (subject == null || subject.isBlank()) {
+          subject = templateService.merge(template.getSubject(), bindings);
+        }
+        if (body == null || body.isBlank()) {
+          body = templateService.merge(template.getBody(), bindings);
+        }
+      }
+    }
+    if (subject == null || subject.isBlank()) {
+      subject = titleFor(document);
+    }
+    if (body == null || body.isBlank()) {
+      body = "Bonjour,\nVeuillez trouver le document en pièce jointe.";
+    }
     mailGateway.send(new MailGateway.Mail(request.to, subject, body, pdf, filenameFor(document)));
     return ResponseEntity.accepted().build();
   }
@@ -169,6 +224,13 @@ public class CommercialDocumentController {
 
   private static String filenameFor(CommercialDocument document) {
     return document.getType().name().toLowerCase() + "-" + document.getId() + ".pdf";
+  }
+
+  private static String sanitize(String value) {
+    if (value == null) {
+      return "";
+    }
+    return value.replace(';', ',').replace('\n', ' ').replace('\r', ' ');
   }
 
   public record DocLineDto(String designation, double quantity, double unitPrice, double vatRate) {}

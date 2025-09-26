@@ -295,9 +295,18 @@ public class MainFrame extends JFrame {
     cfg.addActionListener(e -> showBackendConfig());
     JMenuItem tmpl = new JMenuItem("Modèle email (Agence)");
     tmpl.addActionListener(e -> editAgencyTemplate());
+    JMenuItem docTmpl =
+        new JMenuItem(
+            new AbstractAction("Modèles email documents") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new EmailTemplatesFrame(dsp).setVisible(true);
+              }
+            });
     settings.add(switchSrc);
     settings.add(cfg);
     settings.add(tmpl);
+    settings.add(docTmpl);
 
     JMenu help = new JMenu("Aide");
     JMenuItem about = new JMenuItem("À propos & fonctionnalités serveur");

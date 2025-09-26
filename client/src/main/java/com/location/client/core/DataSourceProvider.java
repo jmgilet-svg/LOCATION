@@ -65,4 +65,10 @@ public interface DataSourceProvider extends AutoCloseable {
 
   void emailDoc(String id, String to, String subject, String message);
 
+  java.nio.file.Path downloadDocsCsv(String type, String clientId, java.nio.file.Path target);
+
+  Models.EmailTemplate getEmailTemplate(String docType);
+
+  Models.EmailTemplate saveEmailTemplate(String docType, String subject, String body);
+
 }

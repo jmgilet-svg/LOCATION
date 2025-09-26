@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class MockDataSource implements DataSourceProvider {
@@ -28,6 +29,9 @@ public class MockDataSource implements DataSourceProvider {
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
   private final List<Models.RecurringUnavailability> recurring = new ArrayList<>();
   private final Map<String, Models.EmailTemplate> agencyTemplates = new HashMap<>();
+  private final Map<String, Map<String, Integer>> docSequences = new HashMap<>();
+  private final Map<String, Map<String, Models.EmailTemplate>> docTemplates = new HashMap<>();
+  private static final Pattern DOC_REF_PATTERN = Pattern.compile("(DV|BC|BL|FA)-(\\d{4})-(\\d{4})");
   private final List<Models.Doc> docs = new ArrayList<>();
 
   public MockDataSource() {
@@ -63,6 +67,8 @@ public class MockDataSource implements DataSourceProvider {
     unavailabilities.clear();
     recurring.clear();
     agencyTemplates.clear();
+    docSequences.clear();
+    docTemplates.clear();
     docs.clear();
 
     var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
@@ -80,6 +86,21 @@ public class MockDataSource implements DataSourceProvider {
         new Models.EmailTemplate(
             "Intervention {{interventionTitle}}",
             "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
+
+    docTemplates
+        .computeIfAbsent(a1.id(), k -> new HashMap<>())
+        .put(
+            "QUOTE",
+            new Models.EmailTemplate(
+                "Devis {{docRef}}",
+                "Bonjour {{clientName}},\nVeuillez trouver le devis {{docRef}} concernant {{docTitle}}."));
+    docTemplates
+        .computeIfAbsent(a1.id(), k -> new HashMap<>())
+        .put(
+            "INVOICE",
+            new Models.EmailTemplate(
+                "Facture {{docRef}}",
+                "Bonjour {{clientName}},\nVeuillez trouver votre facture {{docRef}} (montant TTC : {{totalTtc}} €)."));
 
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
@@ -161,26 +182,30 @@ public class MockDataSource implements DataSourceProvider {
             "Routine hebdo"));
 
     List<Models.DocLine> quoteLines = List.of(new Models.DocLine("Heures grue", 2.0, 120.0, 20.0));
+    java.time.OffsetDateTime quoteDate = java.time.OffsetDateTime.now().minusDays(5);
     docs.add(
         buildDoc(
             UUID.randomUUID().toString(),
             "QUOTE",
             "DRAFT",
-            "DV-001",
+            nextReference(a1.id(), "QUOTE", quoteDate),
             "Levage chantier",
             a1.id(),
             clients.get(0).id(),
+            quoteDate,
             quoteLines));
     List<Models.DocLine> invoiceLines = List.of(new Models.DocLine("Transport", 1.0, 80.0, 20.0));
+    java.time.OffsetDateTime invoiceDate = java.time.OffsetDateTime.now().minusDays(2);
     docs.add(
         buildDoc(
             UUID.randomUUID().toString(),
             "INVOICE",
             "ISSUED",
-            "FA-2025-0001",
+            nextReference(a1.id(), "INVOICE", invoiceDate),
             "Transport X",
             a1.id(),
             clients.get(1).id(),
+            invoiceDate,
             invoiceLines));
   }
 
@@ -509,16 +534,18 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public Models.Doc createDoc(String type, String agencyId, String clientId, String title) {
+    java.time.OffsetDateTime date = java.time.OffsetDateTime.now();
+    String reference = "QUOTE".equalsIgnoreCase(type) ? nextReference(agencyId, type, date) : null;
     Models.Doc created =
         new Models.Doc(
             java.util.UUID.randomUUID().toString(),
             type,
             "DRAFT",
-            null,
+            reference,
             title,
             agencyId,
             clientId,
-            java.time.OffsetDateTime.now(),
+            date,
             0,
             0,
             0,
@@ -557,19 +584,42 @@ public class MockDataSource implements DataSourceProvider {
             .findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Document introuvable"));
     String status = "INVOICE".equalsIgnoreCase(toType) ? "ISSUED" : "DRAFT";
+    java.time.OffsetDateTime date = java.time.OffsetDateTime.now();
     Models.Doc copy =
         buildDoc(
             java.util.UUID.randomUUID().toString(),
             toType,
             status,
-            null,
+            nextReference(source.agencyId(), toType, date),
             source.title(),
             source.agencyId(),
             source.clientId(),
-            java.time.OffsetDateTime.now(),
+            date,
             source.lines());
     docs.add(copy);
     return copy;
+  }
+
+  @Override
+  public java.nio.file.Path downloadDocsCsv(String type, String clientId, java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export CSV disponible uniquement en mode REST (Mock n'écrit pas de fichier).");
+  }
+
+  @Override
+  public Models.EmailTemplate getEmailTemplate(String docType) {
+    var templates = docTemplates.getOrDefault(currentAgencyId, java.util.Map.of());
+    return templates.getOrDefault(docType, new Models.EmailTemplate("", ""));
+  }
+
+  @Override
+  public Models.EmailTemplate saveEmailTemplate(String docType, String subject, String body) {
+    if (currentAgencyId == null || currentAgencyId.isBlank()) {
+      throw new IllegalStateException("Agence courante non définie (Mock)");
+    }
+    Models.EmailTemplate template = new Models.EmailTemplate(subject, body);
+    docTemplates.computeIfAbsent(currentAgencyId, k -> new HashMap<>()).put(docType, template);
+    return template;
   }
 
   @Override
@@ -593,26 +643,64 @@ public class MockDataSource implements DataSourceProvider {
       String clientId,
       java.time.OffsetDateTime date,
       java.util.List<Models.DocLine> lines) {
-    double totalHt = 0;
-    double totalVat = 0;
-    for (Models.DocLine line : lines) {
-      double lineHt = line.quantity() * line.unitPrice();
-      totalHt += lineHt;
-      totalVat += lineHt * (line.vatRate() / 100.0);
+      double totalHt = 0;
+      double totalVat = 0;
+      for (Models.DocLine line : lines) {
+        double lineHt = line.quantity() * line.unitPrice();
+        totalHt += lineHt;
+        totalVat += lineHt * (line.vatRate() / 100.0);
+      }
+    Models.Doc doc =
+        new Models.Doc(
+            id,
+            type,
+            status,
+            reference,
+            title,
+            agencyId,
+            clientId,
+            date != null ? date : java.time.OffsetDateTime.now(),
+            round2(totalHt),
+            round2(totalVat),
+            round2(totalHt + totalVat),
+            java.util.List.copyOf(lines));
+    recordReference(agencyId, type, reference, doc.date());
+    return doc;
+  }
+
+  private String nextReference(String agencyId, String type, java.time.OffsetDateTime date) {
+    String resolvedAgency = agencyId != null ? agencyId : currentAgencyId;
+    if (resolvedAgency == null || resolvedAgency.isBlank()) {
+      throw new IllegalStateException("Agence non définie pour la numérotation (Mock)");
     }
-    return new Models.Doc(
-        id,
-        type,
-        status,
-        reference,
-        title,
-        agencyId,
-        clientId,
-        date != null ? date : java.time.OffsetDateTime.now(),
-        round2(totalHt),
-        round2(totalVat),
-        round2(totalHt + totalVat),
-        java.util.List.copyOf(lines));
+    int year = (date != null ? date.getYear() : java.time.OffsetDateTime.now().getYear());
+    Map<String, Integer> perType = docSequences.computeIfAbsent(resolvedAgency, k -> new HashMap<>());
+    String key = type.toUpperCase() + "-" + year;
+    int next = perType.getOrDefault(key, 0) + 1;
+    perType.put(key, next);
+    String prefix = switch (type.toUpperCase()) {
+      case "QUOTE" -> "DV";
+      case "ORDER" -> "BC";
+      case "DELIVERY" -> "BL";
+      default -> "FA";
+    };
+    return String.format("%s-%d-%04d", prefix, year, next);
+  }
+
+  private void recordReference(
+      String agencyId, String type, String reference, java.time.OffsetDateTime date) {
+    if (agencyId == null || reference == null) {
+      return;
+    }
+    var matcher = DOC_REF_PATTERN.matcher(reference);
+    if (!matcher.matches()) {
+      return;
+    }
+    int year = Integer.parseInt(matcher.group(2));
+    int number = Integer.parseInt(matcher.group(3));
+    Map<String, Integer> perType = docSequences.computeIfAbsent(agencyId, k -> new HashMap<>());
+    String key = type.toUpperCase() + "-" + year;
+    perType.merge(key, number, Math::max);
   }
 
   private void replaceDoc(Models.Doc updated) {
