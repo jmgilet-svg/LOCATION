@@ -2,6 +2,34 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 6 — Auth côté client (auto-renouvellement) + Dialog de connexion (full Front)
+
+### Pourquoi maintenant ?
+Pour stabiliser l’usage **Backend sécurisé JWT** côté client : si le jeton expire, le client
+**se reconnecte automatiquement** en réutilisant les identifiants, puis **rejoue** la requête.
+On ajoute aussi une **fenêtre de connexion** pour saisir/modifier les identifiants à chaud.
+
+> Remarque : le backend conserve `/auth/login` tel qu’existant. Cette étape se concentre
+> sur la **robustesse côté client** (auto re-login + UI) et ne modifie pas la sécurité serveur.
+
+### Ce que ça livre
+- **Client Swing**
+  - `LoginDialog` : saisie **username/password** et mémorisation en mémoire du process.
+  - `RestDataSource` :
+    - Stocke identifiants + **token**.
+    - Sur **401 Unauthorized**, effectue un **re-login** automatique, puis **retry** (1 fois).
+    - Méthode `setCredentials(user, pass)` exposée, et menu **Paramètres → Connexion…**.
+  - Badges/menus existants inchangés.
+
+### Variables d’environnement (fallback par défaut)
+- `LOCATION_USERNAME` (par défaut: `demo`)
+- `LOCATION_PASSWORD` (par défaut: `demo`)
+
+### Utilisation
+1) Lancer l’app en **REST**.
+2) Menu **Paramètres → Connexion…** : saisir `username/password` si besoin.
+3) En cas d’expiration, le client se reconnecte et **rejoue** la requête automatiquement.
+
 ## Étape 5 — Numérotation, Modèles d’email par agence, Export CSV (full Back/Front/Mock)
 
 ### Nouveautés clés

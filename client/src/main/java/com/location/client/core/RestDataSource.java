@@ -13,6 +13,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.apache.hc.client5.http.classic.methods.HttpDelete;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
@@ -33,13 +34,18 @@ public class RestDataSource implements DataSourceProvider {
   private final ObjectMapper om = new ObjectMapper();
   private final AtomicReference<String> bearer = new AtomicReference<>();
 
+  private static final String DEFAULT_USERNAME =
+      System.getenv().getOrDefault("LOCATION_USERNAME", "demo");
+  private static final String DEFAULT_PASSWORD =
+      System.getenv().getOrDefault("LOCATION_PASSWORD", "demo");
+
   private String baseUrl;
-  private String username;
-  private String password;
+  private volatile String username = DEFAULT_USERNAME;
+  private volatile String password = DEFAULT_PASSWORD;
   private volatile String currentAgencyId = DEFAULT_AGENCY_ID;
 
   public RestDataSource(String baseUrl) {
-    this(baseUrl, System.getenv().getOrDefault("LOCATION_DEMO_USER", "demo"), System.getenv().getOrDefault("LOCATION_DEMO_PASSWORD", "demo"));
+    this(baseUrl, DEFAULT_USERNAME, DEFAULT_PASSWORD);
   }
 
   public RestDataSource(String baseUrl, String username, String password) {
@@ -48,9 +54,13 @@ public class RestDataSource implements DataSourceProvider {
 
   public synchronized void configure(String baseUrl, String username, String password) {
     this.baseUrl = normalize(baseUrl);
-    this.username = username != null && !username.isBlank() ? username : "demo";
-    this.password = password != null ? password : "demo";
+    this.username = username != null ? username : DEFAULT_USERNAME;
+    this.password = password != null ? password : DEFAULT_PASSWORD;
     bearer.set(null);
+  }
+
+  public synchronized void setCredentials(String username, String password) {
+    configure(this.baseUrl, username, password);
   }
 
   private String normalize(String url) {
@@ -74,7 +84,7 @@ public class RestDataSource implements DataSourceProvider {
   public List<Models.Agency> listAgencies() {
     try {
       ensureLogin();
-      JsonNode node = executeForJson(new HttpGet(baseUrl + "/api/v1/agencies"));
+      JsonNode node = executeForJson(() -> new HttpGet(baseUrl + "/api/v1/agencies"));
       List<Models.Agency> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode agency : node) {
@@ -91,7 +101,7 @@ public class RestDataSource implements DataSourceProvider {
   public List<Models.Client> listClients() {
     try {
       ensureLogin();
-      JsonNode node = executeForJson(new HttpGet(baseUrl + "/api/v1/clients"));
+      JsonNode node = executeForJson(() -> new HttpGet(baseUrl + "/api/v1/clients"));
       List<Models.Client> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode client : node) {
@@ -118,7 +128,7 @@ public class RestDataSource implements DataSourceProvider {
   public List<Models.Resource> listResources() {
     try {
       ensureLogin();
-      JsonNode node = executeForJson(new HttpGet(baseUrl + "/api/v1/resources"));
+      JsonNode node = executeForJson(() -> new HttpGet(baseUrl + "/api/v1/resources"));
       List<Models.Resource> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode resource : node) {
@@ -156,7 +166,7 @@ public class RestDataSource implements DataSourceProvider {
       if (!params.isEmpty()) {
         url.append('?').append(String.join("&", params));
       }
-      JsonNode node = executeForJson(new HttpGet(url.toString()));
+      JsonNode node = executeForJson(() -> new HttpGet(url.toString()));
       List<Models.Intervention> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode intervention : node) {
@@ -182,21 +192,27 @@ public class RestDataSource implements DataSourceProvider {
   public Models.Intervention createIntervention(Models.Intervention intervention) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/interventions");
-      ObjectNode payload = om.createObjectNode();
-      payload.put("agencyId", intervention.agencyId());
-      payload.put("resourceId", intervention.resourceId());
-      payload.put("clientId", intervention.clientId());
-      payload.put("title", intervention.title());
-      payload.put("start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
-      payload.put("end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
-      if (intervention.notes() != null) {
-        payload.put("notes", intervention.notes());
-      } else {
-        payload.putNull("notes");
-      }
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(post);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/interventions");
+                ObjectNode payload = om.createObjectNode();
+                payload.put("agencyId", intervention.agencyId());
+                payload.put("resourceId", intervention.resourceId());
+                payload.put("clientId", intervention.clientId());
+                payload.put("title", intervention.title());
+                payload.put(
+                    "start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
+                payload.put(
+                    "end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
+                if (intervention.notes() != null) {
+                  payload.put("notes", intervention.notes());
+                } else {
+                  payload.putNull("notes");
+                }
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
       String id = node.path("id").asText();
       JsonNode notesNode = node.path("notes");
       String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
@@ -218,21 +234,29 @@ public class RestDataSource implements DataSourceProvider {
   public Models.Intervention updateIntervention(Models.Intervention intervention) {
     try {
       ensureLogin();
-      HttpPut put = new HttpPut(baseUrl + "/api/v1/interventions/" + encodeSegment(intervention.id()));
-      ObjectNode payload = om.createObjectNode();
-      payload.put("agencyId", intervention.agencyId());
-      payload.put("resourceId", intervention.resourceId());
-      payload.put("clientId", intervention.clientId());
-      payload.put("title", intervention.title());
-      payload.put("start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
-      payload.put("end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
-      if (intervention.notes() != null) {
-        payload.put("notes", intervention.notes());
-      } else {
-        payload.putNull("notes");
-      }
-      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(put);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPut put =
+                    new HttpPut(
+                        baseUrl + "/api/v1/interventions/" + encodeSegment(intervention.id()));
+                ObjectNode payload = om.createObjectNode();
+                payload.put("agencyId", intervention.agencyId());
+                payload.put("resourceId", intervention.resourceId());
+                payload.put("clientId", intervention.clientId());
+                payload.put("title", intervention.title());
+                payload.put(
+                    "start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
+                payload.put(
+                    "end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
+                if (intervention.notes() != null) {
+                  payload.put("notes", intervention.notes());
+                } else {
+                  payload.putNull("notes");
+                }
+                put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return put;
+              });
       return new Models.Intervention(
           node.path("id").asText(),
           node.path("agencyId").asText(),
@@ -253,10 +277,8 @@ public class RestDataSource implements DataSourceProvider {
   public void deleteIntervention(String id) {
     try {
       ensureLogin();
-      HttpDelete delete = new HttpDelete(baseUrl + "/api/v1/interventions/" + encodeSegment(id));
-      applyHeaders(delete);
-      http.execute(
-          delete,
+      execute(
+          () -> new HttpDelete(baseUrl + "/api/v1/interventions/" + encodeSegment(id)),
           res -> {
             int code = res.getCode();
             if (code != 204) {
@@ -288,7 +310,7 @@ public class RestDataSource implements DataSourceProvider {
       if (!params.isEmpty()) {
         url.append('?').append(String.join("&", params));
       }
-      JsonNode node = executeForJson(new HttpGet(url.toString()));
+      JsonNode node = executeForJson(() -> new HttpGet(url.toString()));
       List<Models.Unavailability> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode unav : node) {
@@ -311,16 +333,22 @@ public class RestDataSource implements DataSourceProvider {
   public Models.Unavailability createUnavailability(Models.Unavailability unavailability) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/unavailabilities");
-      ObjectNode payload = om.createObjectNode();
-      payload.put("resourceId", unavailability.resourceId());
-      payload.put(
-          "start", OffsetDateTime.ofInstant(unavailability.start(), ZoneOffset.UTC).toString());
-      payload.put(
-          "end", OffsetDateTime.ofInstant(unavailability.end(), ZoneOffset.UTC).toString());
-      payload.put("reason", unavailability.reason());
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(post);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/unavailabilities");
+                ObjectNode payload = om.createObjectNode();
+                payload.put("resourceId", unavailability.resourceId());
+                payload.put(
+                    "start",
+                    OffsetDateTime.ofInstant(unavailability.start(), ZoneOffset.UTC).toString());
+                payload.put(
+                    "end",
+                    OffsetDateTime.ofInstant(unavailability.end(), ZoneOffset.UTC).toString());
+                payload.put("reason", unavailability.reason());
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
       String id = node.path("id").asText();
       return new Models.Unavailability(
           id,
@@ -342,7 +370,7 @@ public class RestDataSource implements DataSourceProvider {
       if (resourceId != null && !resourceId.isBlank()) {
         url += "?resourceId=" + encode(resourceId);
       }
-      JsonNode node = executeForJson(new HttpGet(url));
+      JsonNode node = executeForJson(() -> new HttpGet(url));
       List<Models.RecurringUnavailability> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode ru : node) {
@@ -367,15 +395,19 @@ public class RestDataSource implements DataSourceProvider {
       Models.RecurringUnavailability recurringUnavailability) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/recurring-unavailabilities");
-      ObjectNode payload = om.createObjectNode();
-      payload.put("resourceId", recurringUnavailability.resourceId());
-      payload.put("dayOfWeek", recurringUnavailability.dayOfWeek().name());
-      payload.put("start", recurringUnavailability.start().toString());
-      payload.put("end", recurringUnavailability.end().toString());
-      payload.put("reason", recurringUnavailability.reason());
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(post);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/recurring-unavailabilities");
+                ObjectNode payload = om.createObjectNode();
+                payload.put("resourceId", recurringUnavailability.resourceId());
+                payload.put("dayOfWeek", recurringUnavailability.dayOfWeek().name());
+                payload.put("start", recurringUnavailability.start().toString());
+                payload.put("end", recurringUnavailability.end().toString());
+                payload.put("reason", recurringUnavailability.reason());
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
       return new Models.RecurringUnavailability(
           node.path("id").asText(),
           node.path("resourceId").asText(),
@@ -396,10 +428,8 @@ public class RestDataSource implements DataSourceProvider {
       if (tags != null && !tags.isBlank()) {
         url += "?tags=" + encode(tags);
       }
-      HttpGet get = new HttpGet(url);
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(url),
           res -> {
             int sc = res.getCode();
             HttpEntity entity = res.getEntity();
@@ -423,10 +453,8 @@ public class RestDataSource implements DataSourceProvider {
   public Path downloadClientsCsv(Path target) {
     try {
       ensureLogin();
-      HttpGet get = new HttpGet(baseUrl + "/api/v1/clients/csv");
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(baseUrl + "/api/v1/clients/csv"),
           res -> {
             int sc = res.getCode();
             HttpEntity entity = res.getEntity();
@@ -465,10 +493,8 @@ public class RestDataSource implements DataSourceProvider {
       if (!params.isEmpty()) {
         url.append('?').append(String.join("&", params));
       }
-      HttpGet get = new HttpGet(url.toString());
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(url.toString()),
           res -> {
             int sc = res.getCode();
             HttpEntity entity = res.getEntity();
@@ -492,10 +518,10 @@ public class RestDataSource implements DataSourceProvider {
   public Path downloadInterventionPdf(String interventionId, Path target) {
     try {
       ensureLogin();
-      HttpGet get = new HttpGet(baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/pdf");
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () ->
+              new HttpGet(
+                  baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/pdf"),
           response -> {
             int sc = response.getCode();
             HttpEntity entity = response.getEntity();
@@ -522,20 +548,25 @@ public class RestDataSource implements DataSourceProvider {
       if (to == null || to.isBlank()) {
         throw new IllegalArgumentException("Destinataire requis");
       }
-      HttpPost post =
-          new HttpPost(baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/email");
-      applyHeaders(post);
-      ObjectNode payload = om.createObjectNode();
-      payload.put("to", to);
-      if (subject != null) {
-        payload.put("subject", subject);
-      }
-      if (message != null) {
-        payload.put("message", message);
-      }
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      http.execute(
-          post,
+      execute(
+          () -> {
+            HttpPost post =
+                new HttpPost(
+                    baseUrl
+                        + "/api/v1/interventions/"
+                        + encodeSegment(interventionId)
+                        + "/email");
+            ObjectNode payload = om.createObjectNode();
+            payload.put("to", to);
+            if (subject != null) {
+              payload.put("subject", subject);
+            }
+            if (message != null) {
+              payload.put("message", message);
+            }
+            post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+            return post;
+          },
           res -> {
             int code = res.getCode();
             HttpEntity entity = res.getEntity();
@@ -557,10 +588,8 @@ public class RestDataSource implements DataSourceProvider {
   public java.util.Map<String, Boolean> getServerFeatures() {
     try {
       ensureLogin();
-      HttpGet get = new HttpGet(baseUrl + "/api/v1/system/features");
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(baseUrl + "/api/v1/system/features"),
           res -> {
             int sc = res.getCode();
             HttpEntity entity = res.getEntity();
@@ -600,7 +629,7 @@ public class RestDataSource implements DataSourceProvider {
       if (!params.isEmpty()) {
         url.append('?').append(String.join("&", params));
       }
-      JsonNode response = executeForJson(new HttpGet(url.toString()));
+      JsonNode response = executeForJson(() -> new HttpGet(url.toString()));
       java.util.List<Models.Doc> docs = new java.util.ArrayList<>();
       if (response.isArray()) {
         for (JsonNode node : response) {
@@ -617,14 +646,18 @@ public class RestDataSource implements DataSourceProvider {
   public Models.Doc createDoc(String type, String agencyId, String clientId, String title) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/docs");
-      ObjectNode payload = om.createObjectNode();
-      payload.put("type", type);
-      payload.put("agencyId", agencyId);
-      payload.put("clientId", clientId);
-      payload.put("title", title);
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(post);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/docs");
+                ObjectNode payload = om.createObjectNode();
+                payload.put("type", type);
+                payload.put("agencyId", agencyId);
+                payload.put("clientId", clientId);
+                payload.put("title", title);
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
       return docFrom(node);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -635,24 +668,29 @@ public class RestDataSource implements DataSourceProvider {
   public Models.Doc updateDoc(Models.Doc document) {
     try {
       ensureLogin();
-      HttpPut put = new HttpPut(baseUrl + "/api/v1/docs/" + encodeSegment(document.id()));
-      ObjectNode payload = om.createObjectNode();
-      if (document.reference() == null || document.reference().isBlank()) {
-        payload.putNull("reference");
-      } else {
-        payload.put("reference", document.reference());
-      }
-      payload.put("title", document.title());
-      ArrayNode lines = payload.putArray("lines");
-      for (Models.DocLine line : document.lines()) {
-        ObjectNode node = lines.addObject();
-        node.put("designation", line.designation());
-        node.put("quantity", line.quantity());
-        node.put("unitPrice", line.unitPrice());
-        node.put("vatRate", line.vatRate());
-      }
-      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(put);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPut put =
+                    new HttpPut(baseUrl + "/api/v1/docs/" + encodeSegment(document.id()));
+                ObjectNode payload = om.createObjectNode();
+                if (document.reference() == null || document.reference().isBlank()) {
+                  payload.putNull("reference");
+                } else {
+                  payload.put("reference", document.reference());
+                }
+                payload.put("title", document.title());
+                ArrayNode lines = payload.putArray("lines");
+                for (Models.DocLine line : document.lines()) {
+                  ObjectNode node = lines.addObject();
+                  node.put("designation", line.designation());
+                  node.put("quantity", line.quantity());
+                  node.put("unitPrice", line.unitPrice());
+                  node.put("vatRate", line.vatRate());
+                }
+                put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return put;
+              });
       return docFrom(node);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -663,9 +701,12 @@ public class RestDataSource implements DataSourceProvider {
   public void deleteDoc(String id) {
     try {
       ensureLogin();
-      HttpDelete delete = new HttpDelete(baseUrl + "/api/v1/docs/" + encodeSegment(id));
-      applyHeaders(delete);
-      http.execute(delete, res -> null);
+      execute(
+          () -> new HttpDelete(baseUrl + "/api/v1/docs/" + encodeSegment(id)),
+          res -> {
+            EntityUtils.consumeQuietly(res.getEntity());
+            return null;
+          });
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -675,9 +716,11 @@ public class RestDataSource implements DataSourceProvider {
   public Models.Doc transitionDoc(String id, String toType) {
     try {
       ensureLogin();
-      HttpPost post =
-          new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/transition?to=" + encode(toType));
-      JsonNode node = executeForJson(post);
+      JsonNode node =
+          executeForJson(
+              () ->
+                  new HttpPost(
+                      baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/transition?to=" + encode(toType)));
       return docFrom(node);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -688,10 +731,8 @@ public class RestDataSource implements DataSourceProvider {
   public java.nio.file.Path downloadDocPdf(String id, java.nio.file.Path target) {
     try {
       ensureLogin();
-      HttpGet get = new HttpGet(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/pdf");
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/pdf"),
           res -> {
             if (res.getCode() != 200) {
               throw new IOException("PDF HTTP " + res.getCode());
@@ -709,27 +750,29 @@ public class RestDataSource implements DataSourceProvider {
   public void emailDoc(String id, String to, String subject, String message) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/email");
-      applyHeaders(post);
-      ObjectNode payload = om.createObjectNode();
-      payload.put("to", to);
-      if (subject == null || subject.isBlank()) {
-        payload.putNull("subject");
-      } else {
-        payload.put("subject", subject);
-      }
-      if (message == null || message.isBlank()) {
-        payload.putNull("message");
-      } else {
-        payload.put("message", message);
-      }
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      http.execute(
-          post,
+      execute(
+          () -> {
+            HttpPost post = new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/email");
+            ObjectNode payload = om.createObjectNode();
+            payload.put("to", to);
+            if (subject == null || subject.isBlank()) {
+              payload.putNull("subject");
+            } else {
+              payload.put("subject", subject);
+            }
+            if (message == null || message.isBlank()) {
+              payload.putNull("message");
+            } else {
+              payload.put("message", message);
+            }
+            post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+            return post;
+          },
           res -> {
             if (res.getCode() != 202) {
               throw new IOException("Email HTTP " + res.getCode());
             }
+            EntityUtils.consumeQuietly(res.getEntity());
             return null;
           });
     } catch (IOException e) {
@@ -752,15 +795,13 @@ public class RestDataSource implements DataSourceProvider {
       if (!params.isEmpty()) {
         url.append('?').append(String.join("&", params));
       }
-      HttpGet get = new HttpGet(url.toString());
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(url.toString()),
           res -> {
             if (res.getCode() != 200) {
               throw new IOException("CSV HTTP " + res.getCode());
             }
-            byte[] bytes = org.apache.hc.core5.http.io.entity.EntityUtils.toByteArray(res.getEntity());
+            byte[] bytes = EntityUtils.toByteArray(res.getEntity());
             java.nio.file.Files.write(target, bytes);
             return target;
           });
@@ -773,8 +814,8 @@ public class RestDataSource implements DataSourceProvider {
   public Models.EmailTemplate getEmailTemplate(String docType) {
     try {
       ensureLogin();
-      HttpGet get = new HttpGet(baseUrl + "/api/v1/templates/" + encodeSegment(docType));
-      JsonNode node = executeForJson(get);
+      JsonNode node =
+          executeForJson(() -> new HttpGet(baseUrl + "/api/v1/templates/" + encodeSegment(docType)));
       if (node.isNull() || node.isMissingNode()) {
         return new Models.EmailTemplate("", "");
       }
@@ -788,13 +829,17 @@ public class RestDataSource implements DataSourceProvider {
   public Models.EmailTemplate saveEmailTemplate(String docType, String subject, String body) {
     try {
       ensureLogin();
-      HttpPut put = new HttpPut(baseUrl + "/api/v1/templates/" + encodeSegment(docType));
-      applyHeaders(put);
-      var payload = om.createObjectNode();
-      payload.put("subject", subject);
-      payload.put("body", body);
-      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(put);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPut put =
+                    new HttpPut(baseUrl + "/api/v1/templates/" + encodeSegment(docType));
+                var payload = om.createObjectNode();
+                payload.put("subject", subject);
+                payload.put("body", body);
+                put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return put;
+              });
       return new Models.EmailTemplate(node.path("subject").asText(""), node.path("body").asText(""));
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -830,10 +875,8 @@ public class RestDataSource implements DataSourceProvider {
       if (!params.isEmpty()) {
         url.append('?').append(String.join("&", params));
       }
-      HttpGet get = new HttpGet(url.toString());
-      applyHeaders(get);
-      return http.execute(
-          get,
+      return execute(
+          () -> new HttpGet(url.toString()),
           response -> {
             int sc = response.getCode();
             HttpEntity entity = response.getEntity();
@@ -865,35 +908,109 @@ public class RestDataSource implements DataSourceProvider {
 
   private void ensureLogin() {
     if (bearer.get() != null) return;
-    try {
-      String url = baseUrl + "/auth/login";
-      HttpPost post = new HttpPost(url);
-      ObjectNode payload = om.createObjectNode();
-      payload.put("username", username);
-      payload.put("password", password);
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(post);
-      String token = node.path("token").asText(null);
-      if (token == null) throw new IllegalStateException("Token manquant dans /auth/login");
-      bearer.set(token);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    synchronized (bearer) {
+      if (bearer.get() != null) return;
+      try {
+        HttpPost post = new HttpPost(baseUrl + "/auth/login");
+        ObjectNode payload = om.createObjectNode();
+        payload.put("username", username);
+        payload.put("password", password);
+        post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+        JsonNode node =
+            http.execute(
+                post,
+                res -> {
+                  int sc = res.getCode();
+                  HttpEntity entity = res.getEntity();
+                  String body =
+                      entity == null
+                          ? ""
+                          : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+                  if (sc >= 200 && sc < 300) {
+                    if (body.isEmpty()) return om.nullNode();
+                    return om.readTree(body);
+                  }
+                  throw new IOException("HTTP " + sc + " → " + body);
+                });
+        String token = node.path("token").asText(null);
+        if (token == null) {
+          throw new IllegalStateException("Token manquant dans /auth/login");
+        }
+        bearer.set(token);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 
-  private JsonNode executeForJson(HttpUriRequestBase req) throws IOException {
-    applyHeaders(req);
-    return http.execute(req, res -> {
-      int sc = res.getCode();
-      HttpEntity entity = res.getEntity();
-      String body = entity == null ? "" : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-      if (sc >= 200 && sc < 300) {
-        if (body.isEmpty()) return om.nullNode();
-        return om.readTree(body);
-      }
-      throw new IOException("HTTP " + sc + " → " + body);
-    });
+  private JsonNode executeForJson(Supplier<HttpUriRequestBase> supplier) throws IOException {
+    return execute(
+        supplier,
+        res -> {
+          int sc = res.getCode();
+          HttpEntity entity = res.getEntity();
+          String body =
+              entity == null
+                  ? ""
+                  : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+          if (sc >= 200 && sc < 300) {
+            if (body.isEmpty()) return om.nullNode();
+            return om.readTree(body);
+          }
+          throw new IOException("HTTP " + sc + " → " + body);
+        });
   }
+
+  private <T> T execute(Supplier<HttpUriRequestBase> supplier, ResponseHandler<T> handler)
+      throws IOException {
+    return withAutoRetry(
+        () -> {
+          HttpUriRequestBase request = supplier.get();
+          applyHeaders(request);
+          return http.execute(
+              request,
+              response -> {
+                if (response.getCode() == 401) {
+                  EntityUtils.consumeQuietly(response.getEntity());
+                  throw new UnauthorizedException();
+                }
+                return handler.handle(response);
+              });
+        });
+  }
+
+  private <T> T withAutoRetry(IoSupplier<T> call) throws IOException {
+    UnauthorizedException unauthorized = null;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      ensureLogin();
+      try {
+        return call.get();
+      } catch (IOException e) {
+        if (e instanceof UnauthorizedException uex) {
+          bearer.set(null);
+          unauthorized = uex;
+        } else {
+          throw e;
+        }
+      }
+    }
+    if (unauthorized != null) {
+      throw unauthorized;
+    }
+    throw new IOException("Unauthorized");
+  }
+
+  @FunctionalInterface
+  private interface IoSupplier<T> {
+    T get() throws IOException;
+  }
+
+  @FunctionalInterface
+  private interface ResponseHandler<T> {
+    T handle(org.apache.hc.core5.http.ClassicHttpResponse response) throws IOException;
+  }
+
+  private static final class UnauthorizedException extends IOException {}
 
   private Models.Doc docFrom(JsonNode node) {
     java.util.List<Models.DocLine> lines = new java.util.ArrayList<>();

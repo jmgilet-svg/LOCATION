@@ -295,6 +295,14 @@ public class MainFrame extends JFrame {
     cfg.addActionListener(e -> showBackendConfig());
     JMenuItem tmpl = new JMenuItem("Modèle email (Agence)");
     tmpl.addActionListener(e -> editAgencyTemplate());
+    JMenuItem loginItem =
+        new JMenuItem(
+            new AbstractAction("Connexion…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                LoginDialog.open(MainFrame.this, dsp);
+              }
+            });
     JMenuItem docTmpl =
         new JMenuItem(
             new AbstractAction("Modèles email documents") {
@@ -305,6 +313,7 @@ public class MainFrame extends JFrame {
             });
     settings.add(switchSrc);
     settings.add(cfg);
+    settings.add(loginItem);
     settings.add(tmpl);
     settings.add(docTmpl);
 
