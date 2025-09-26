@@ -582,6 +582,154 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public java.util.List<Models.Doc> listDocs(String type, String clientId) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v1/docs");
+      java.util.List<String> params = new java.util.ArrayList<>();
+      if (type != null && !type.isBlank()) {
+        params.add("type=" + encode(type));
+      }
+      if (clientId != null && !clientId.isBlank()) {
+        params.add("clientId=" + encode(clientId));
+      }
+      if (!params.isEmpty()) {
+        url.append('?').append(String.join("&", params));
+      }
+      JsonNode response = executeForJson(new HttpGet(url.toString()));
+      java.util.List<Models.Doc> docs = new java.util.ArrayList<>();
+      if (response.isArray()) {
+        for (JsonNode node : response) {
+          docs.add(docFrom(node));
+        }
+      }
+      return docs;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Doc createDoc(String type, String agencyId, String clientId, String title) {
+    try {
+      ensureLogin();
+      HttpPost post = new HttpPost(baseUrl + "/api/v1/docs");
+      ObjectNode payload = om.createObjectNode();
+      payload.put("type", type);
+      payload.put("agencyId", agencyId);
+      payload.put("clientId", clientId);
+      payload.put("title", title);
+      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(post);
+      return docFrom(node);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Doc updateDoc(Models.Doc document) {
+    try {
+      ensureLogin();
+      HttpPut put = new HttpPut(baseUrl + "/api/v1/docs/" + encodeSegment(document.id()));
+      ObjectNode payload = om.createObjectNode();
+      if (document.reference() == null || document.reference().isBlank()) {
+        payload.putNull("reference");
+      } else {
+        payload.put("reference", document.reference());
+      }
+      payload.put("title", document.title());
+      ArrayNode lines = payload.putArray("lines");
+      for (Models.DocLine line : document.lines()) {
+        ObjectNode node = lines.addObject();
+        node.put("designation", line.designation());
+        node.put("quantity", line.quantity());
+        node.put("unitPrice", line.unitPrice());
+        node.put("vatRate", line.vatRate());
+      }
+      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(put);
+      return docFrom(node);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteDoc(String id) {
+    try {
+      ensureLogin();
+      http.execute(new HttpDelete(baseUrl + "/api/v1/docs/" + encodeSegment(id)), res -> null);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Doc transitionDoc(String id, String toType) {
+    try {
+      ensureLogin();
+      HttpPost post =
+          new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/transition?to=" + encode(toType));
+      JsonNode node = executeForJson(post);
+      return docFrom(node);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public java.nio.file.Path downloadDocPdf(String id, java.nio.file.Path target) {
+    try {
+      ensureLogin();
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/pdf");
+      return http.execute(
+          get,
+          res -> {
+            if (res.getCode() != 200) {
+              throw new IOException("PDF HTTP " + res.getCode());
+            }
+            byte[] bytes = EntityUtils.toByteArray(res.getEntity());
+            java.nio.file.Files.write(target, bytes);
+            return target;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void emailDoc(String id, String to, String subject, String message) {
+    try {
+      ensureLogin();
+      HttpPost post = new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/email");
+      ObjectNode payload = om.createObjectNode();
+      payload.put("to", to);
+      if (subject == null || subject.isBlank()) {
+        payload.putNull("subject");
+      } else {
+        payload.put("subject", subject);
+      }
+      if (message == null || message.isBlank()) {
+        payload.putNull("message");
+      } else {
+        payload.put("message", message);
+      }
+      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      http.execute(
+          post,
+          res -> {
+            if (res.getCode() != 202) {
+              throw new IOException("Email HTTP " + res.getCode());
+            }
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public Path downloadCsvInterventions(
       OffsetDateTime from,
       OffsetDateTime to,
@@ -666,6 +814,38 @@ public class RestDataSource implements DataSourceProvider {
       }
       throw new IOException("HTTP " + sc + " → " + body);
     });
+  }
+
+  private Models.Doc docFrom(JsonNode node) {
+    java.util.List<Models.DocLine> lines = new java.util.ArrayList<>();
+    JsonNode arr = node.path("lines");
+    if (arr.isArray()) {
+      for (JsonNode line : arr) {
+        lines.add(
+            new Models.DocLine(
+                line.path("designation").asText(),
+                line.path("quantity").asDouble(),
+                line.path("unitPrice").asDouble(),
+                line.path("vatRate").asDouble()));
+      }
+    }
+    String reference = node.path("reference").isMissingNode() || node.path("reference").isNull()
+        ? null
+        : node.path("reference").asText();
+    java.time.OffsetDateTime date = java.time.OffsetDateTime.parse(node.path("date").asText());
+    return new Models.Doc(
+        node.path("id").asText(),
+        node.path("type").asText(),
+        node.path("status").asText(),
+        reference,
+        node.path("title").asText(),
+        node.path("agencyId").asText(),
+        node.path("clientId").asText(),
+        date,
+        node.path("totalHt").asDouble(),
+        node.path("totalVat").asDouble(),
+        node.path("totalTtc").asDouble(),
+        java.util.List.copyOf(lines));
   }
 
   private static String encodeSegment(String value) {

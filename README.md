@@ -2,6 +2,41 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 2 — Cycle Devis → Commande → BL → Facture (Full, Back + Front + Mock)
+
+### Objectif
+Livrer un **cycle documentaire complet** avec **documents commerciaux** (Devis/Commande/BL/Facture) + **lignes**,
+**PDF** (OpenPDF) et **envoi email**, côté **Backend**, **Client Swing** et **Mock**.
+
+### Backend
+- **Modèle unique** `CommercialDocument` avec `DocType {QUOTE, ORDER, DELIVERY, INVOICE}` et `DocStatus` (DRAFT, SENT, ACCEPTED, CANCELLED, ISSUED, PAID).
+- **Lignes** `CommercialDocumentLine` (designation, qty, unitPrice, vatRate).
+- **Calculs** : HT/TVA/TTC recalculés service-side.
+- **Migrations**: `V8__commercial_documents.sql`.
+- **Endpoints** `/api/v1/docs` :
+  - `GET /docs` (filtre type, clientId, from/to, q), `POST /docs`, `GET /docs/{id}`, `PUT /docs/{id}` (maj lignes & méta), `DELETE /docs/{id}`.
+  - `POST /docs/{id}/transition?to=ORDER|DELIVERY|INVOICE` : duplique et convertit (ex: devis→commande).
+  - `GET  /docs/{id}/pdf` → `application/pdf` (gabarit simple, logo en option non inclus pour l’instant).
+  - `POST /docs/{id}/email` (envoi PDF du doc au client).
+- **Tests WebMvc** de base : création, pdf, transition.
+
+### Client Swing
+- Nouveau menu **Documents** :
+  - **Liste** filtrable par type (Devis/Commande/BL/Facture) et par client.
+  - **Édition rapide** (titre, ref, lignes) — minimal mais fonctionnel.
+  - Actions : **Créer**, **Dupliquer/Convertir**, **Exporter PDF**, **Envoyer email**.
+
+### Mock
+- Jeu de données démos (2 devis, 1 facture).
+- Implémentation des opérations (CRUD, transition, export simulé indisponible en fichier — cf. règle Mock : pas d’écriture disque).
+
+### Démarrage rapide
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+```
+
 ## Étape 1 — Planning “pro” (drag, resize, hover, zoom jour/semaine, filtres)
 
 ### Ce que ça livre (résumé)

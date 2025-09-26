@@ -47,4 +47,18 @@ public interface DataSourceProvider extends AutoCloseable {
 
   java.util.Map<String, Boolean> getServerFeatures();
 
+  java.util.List<Models.Doc> listDocs(String type, String clientId);
+
+  Models.Doc createDoc(String type, String agencyId, String clientId, String title);
+
+  Models.Doc updateDoc(Models.Doc document);
+
+  void deleteDoc(String id);
+
+  Models.Doc transitionDoc(String id, String toType);
+
+  java.nio.file.Path downloadDocPdf(String id, java.nio.file.Path target);
+
+  void emailDoc(String id, String to, String subject, String message);
+
 }
