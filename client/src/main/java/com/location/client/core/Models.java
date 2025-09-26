@@ -53,6 +53,7 @@ public final class Models {
       String reason) {}
 
   public record EmailTemplate(String subject, String body) {}
+  public record DocTemplate(String html) {}
 
   public record DocLine(String designation, double quantity, double unitPrice, double vatRate) {}
 

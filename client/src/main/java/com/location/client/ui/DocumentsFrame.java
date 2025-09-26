@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -168,6 +169,13 @@ public class DocumentsFrame extends JFrame {
       @Override
       public void actionPerformed(ActionEvent e) {
         emailDocument();
+      }
+    });
+
+    toolbar.add(new AbstractAction("Email groupé") {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        emailBatch();
       }
     });
 
@@ -334,6 +342,47 @@ public class DocumentsFrame extends JFrame {
       JOptionPane.showMessageDialog(this, "Email envoyé (ou simulé en mode Mock).");
     } catch (Exception ex) {
       JOptionPane.showMessageDialog(this, "Échec de l'envoi : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private void emailBatch() {
+    String idsInput =
+        JOptionPane.showInputDialog(
+            this, "IDs de documents (séparés par des virgules)", "", JOptionPane.QUESTION_MESSAGE);
+    if (idsInput == null || idsInput.isBlank()) {
+      return;
+    }
+    String to =
+        JOptionPane.showInputDialog(
+            this, "Destinataire (email)", "", JOptionPane.QUESTION_MESSAGE);
+    if (to == null || to.isBlank()) {
+      return;
+    }
+    String subject =
+        JOptionPane.showInputDialog(
+            this, "Sujet (laisser vide pour modèle)", "", JOptionPane.QUESTION_MESSAGE);
+    String message =
+        JOptionPane.showInputDialog(
+            this, "Message (laisser vide pour modèle)", "", JOptionPane.QUESTION_MESSAGE);
+
+    List<String> ids =
+        Arrays.stream(idsInput.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
+    if (ids.isEmpty()) {
+      return;
+    }
+    try {
+      dataSource.emailDocsBatch(
+          ids,
+          to.trim(),
+          subject == null ? "" : subject,
+          message == null ? "" : message);
+      JOptionPane.showMessageDialog(this, "Emails envoyés : " + ids.size());
+    } catch (Exception ex) {
+      JOptionPane.showMessageDialog(
+          this, "Échec de l'envoi groupé : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
     }
   }
 

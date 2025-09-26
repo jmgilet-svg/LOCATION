@@ -2,7 +2,7 @@ package com.location.server.api.v1;
 
 import com.location.server.api.AgencyContext;
 import com.location.server.domain.CommercialDocument;
-import com.location.server.domain.EmailTemplate;
+import com.location.server.domain.DocumentTemplate;
 import com.location.server.service.TemplateService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -15,12 +15,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/templates")
-public class EmailTemplateController {
+@RequestMapping("/api/v1/templates/doc")
+public class DocumentTemplateController {
 
   private final TemplateService templateService;
 
-  public EmailTemplateController(TemplateService templateService) {
+  public DocumentTemplateController(TemplateService templateService) {
     this.templateService = templateService;
   }
 
@@ -28,7 +28,7 @@ public class EmailTemplateController {
   public ResponseEntity<TemplateDto> get(@PathVariable CommercialDocument.DocType docType) {
     String agencyId = AgencyContext.require();
     return templateService
-        .findDocumentEmailTemplate(agencyId, docType)
+        .findDocumentTemplate(agencyId, docType)
         .map(template -> ResponseEntity.ok(toDto(template)))
         .orElse(ResponseEntity.noContent().build());
   }
@@ -37,22 +37,15 @@ public class EmailTemplateController {
   public TemplateDto put(
       @PathVariable CommercialDocument.DocType docType, @Valid @RequestBody SaveRequest request) {
     String agencyId = AgencyContext.require();
-    EmailTemplate template =
-        templateService.saveDocumentEmailTemplate(
-            agencyId, docType, request.subject(), request.body());
+    DocumentTemplate template = templateService.saveDocumentTemplate(agencyId, docType, request.html());
     return toDto(template);
   }
 
-  private static TemplateDto toDto(EmailTemplate template) {
-    return new TemplateDto(
-        template.getAgency().getId(),
-        template.getDocumentType(),
-        template.getSubject(),
-        template.getBody());
+  private static TemplateDto toDto(DocumentTemplate template) {
+    return new TemplateDto(template.getAgency().getId(), template.getDocumentType(), template.getHtml());
   }
 
-  public record TemplateDto(
-      String agencyId, CommercialDocument.DocType docType, String subject, String body) {}
+  public record TemplateDto(String agencyId, CommercialDocument.DocType docType, String html) {}
 
-  public record SaveRequest(@NotBlank String subject, @NotBlank String body) {}
+  public record SaveRequest(@NotBlank String html) {}
 }

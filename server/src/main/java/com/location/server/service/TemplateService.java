@@ -2,9 +2,11 @@ package com.location.server.service;
 
 import com.location.server.domain.Agency;
 import com.location.server.domain.CommercialDocument;
+import com.location.server.domain.DocumentTemplate;
 import com.location.server.domain.EmailTemplate;
 import com.location.server.domain.Intervention;
 import com.location.server.repo.AgencyRepository;
+import com.location.server.repo.DocumentTemplateRepository;
 import com.location.server.repo.EmailTemplateRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.time.format.DateTimeFormatter;
@@ -21,11 +23,15 @@ public class TemplateService {
 
   private final EmailTemplateRepository emailTemplateRepository;
   private final AgencyRepository agencyRepository;
+  private final DocumentTemplateRepository documentTemplateRepository;
 
   public TemplateService(
-      EmailTemplateRepository emailTemplateRepository, AgencyRepository agencyRepository) {
+      EmailTemplateRepository emailTemplateRepository,
+      AgencyRepository agencyRepository,
+      DocumentTemplateRepository documentTemplateRepository) {
     this.emailTemplateRepository = emailTemplateRepository;
     this.agencyRepository = agencyRepository;
+    this.documentTemplateRepository = documentTemplateRepository;
   }
 
   public String renderSubject(String template, Intervention intervention) {
@@ -36,13 +42,13 @@ public class TemplateService {
     return render(template, intervention);
   }
 
-  public Optional<EmailTemplate> findDocumentTemplate(
+  public Optional<EmailTemplate> findDocumentEmailTemplate(
       String agencyId, CommercialDocument.DocType docType) {
     return emailTemplateRepository.findByAgencyIdAndDocumentType(agencyId, docType);
   }
 
   @Transactional
-  public EmailTemplate saveDocumentTemplate(
+  public EmailTemplate saveDocumentEmailTemplate(
       String agencyId, CommercialDocument.DocType docType, String subject, String body) {
     Agency agency =
         agencyRepository
@@ -55,6 +61,26 @@ public class TemplateService {
     template.setSubject(subject);
     template.setBody(body);
     return emailTemplateRepository.save(template);
+  }
+
+  public Optional<DocumentTemplate> findDocumentTemplate(
+      String agencyId, CommercialDocument.DocType docType) {
+    return documentTemplateRepository.findByAgencyIdAndDocumentType(agencyId, docType);
+  }
+
+  @Transactional
+  public DocumentTemplate saveDocumentTemplate(
+      String agencyId, CommercialDocument.DocType docType, String html) {
+    Agency agency =
+        agencyRepository
+            .findById(agencyId)
+            .orElseThrow(() -> new EntityNotFoundException("Agency " + agencyId + " not found"));
+    DocumentTemplate template =
+        documentTemplateRepository
+            .findByAgencyIdAndDocumentType(agencyId, docType)
+            .orElseGet(() -> new DocumentTemplate(UUID.randomUUID().toString(), agency, docType, html));
+    template.setHtml(html);
+    return documentTemplateRepository.save(template);
   }
 
   public Map<String, String> documentBindings(CommercialDocument document) {
