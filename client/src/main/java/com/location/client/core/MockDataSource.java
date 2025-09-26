@@ -391,6 +391,33 @@ public class MockDataSource implements DataSourceProvider {
     // Simulation instantanée : pas d'envoi réel en mode Mock.
   }
 
+  @Override
+  public java.nio.file.Path downloadClientsCsv(java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export Clients CSV indisponible en mode Mock (pas d'écriture fichier).");
+  }
+
+  @Override
+  public java.nio.file.Path downloadUnavailabilitiesCsv(
+      java.time.OffsetDateTime from,
+      java.time.OffsetDateTime to,
+      String resourceId,
+      java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export Indisponibilités CSV indisponible en mode Mock (pas d'écriture fichier).");
+  }
+
+  @Override
+  public java.util.Map<String, Boolean> getServerFeatures() {
+    java.util.HashMap<String, Boolean> features = new java.util.HashMap<>();
+    features.put("FEATURE_EMAIL_BULK", true);
+    features.put("FEATURE_RESOURCES_CSV", true);
+    features.put("FEATURE_INTERVENTION_PDF", true);
+    features.put("FEATURE_CLIENTS_CSV", true);
+    features.put("FEATURE_UNAVAILABILITIES_CSV", true);
+    return features;
+  }
+
   private static boolean overlaps(Instant start, Instant end, Instant from, Instant to) {
     if (from == null || to == null) {
       return true;

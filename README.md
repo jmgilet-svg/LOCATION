@@ -2,6 +2,34 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Sprint 12 — CSV Clients & Indispos + Feature Flags API + Aide/À propos (Full, Mock-safe)
+
+Dernier sprint d’endurcissement et de “petits plus” utiles.
+
+### Backend
+- **Exports CSV additionnels** :
+  - `GET /api/v1/clients/csv` → liste complète des clients (`id;name;billingEmail`).
+  - `GET /api/v1/unavailabilities/csv?from=&to=&resourceId=` → exports des indispos étendues (inclut les récurrentes dépliées quand `from..to` fournis).
+- **Feature Flags** : `GET /api/v1/system/features` retourne les flags calculés depuis les variables d’environnement (préfixe `FEATURE_...`).
+  - Exemples: `FEATURE_EMAIL_BULK`, `FEATURE_RESOURCES_CSV`, `FEATURE_INTERVENTION_PDF`.
+
+### Client Swing
+- **Menu Fichier** : nouveaux exports **Clients CSV** et **Indisponibilités CSV** (REST uniquement). En mode **Mock**, un message explique la limitation (pas d’écriture disque).
+- **Menu Aide** → **À propos & fonctionnalités serveur** : affiche les versions, la source de données active, et les **feature flags** exposés par le backend. En Mock, affiche une liste par défaut.
+
+### Mock
+- Aucune écriture disque : les exports REST sont **non disponibles** (message clair). Les features sont **simulées** : `EMAIL_BULK=true`, `RESOURCES_CSV=true`, `INTERVENTION_PDF=true`.
+
+### Tests
+- WebMvc : entêtes et content-type pour `clients/csv` et `unavailabilities/csv`.
+
+### Démarrage rapide
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+```
+
 ## Sprint 10 — Export PDF Intervention + Envoi Email (Full, REST) — Mock sûr (sans écriture disque)
 
 ### Nouveautés

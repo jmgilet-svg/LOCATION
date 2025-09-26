@@ -406,6 +406,79 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Path downloadClientsCsv(Path target) {
+    try {
+      ensureLogin();
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/clients/csv");
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Path downloadUnavailabilitiesCsv(
+      OffsetDateTime from, OffsetDateTime to, String resourceId, Path target) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v1/unavailabilities/csv");
+      List<String> params = new ArrayList<>();
+      if (from != null) {
+        params.add("from=" + encode(from.toString()));
+      }
+      if (to != null) {
+        params.add("to=" + encode(to.toString()));
+      }
+      if (resourceId != null && !resourceId.isBlank()) {
+        params.add("resourceId=" + encode(resourceId));
+      }
+      if (!params.isEmpty()) {
+        url.append('?').append(String.join("&", params));
+      }
+      HttpGet get = new HttpGet(url.toString());
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public Path downloadInterventionPdf(String interventionId, Path target) {
     try {
       ensureLogin();
@@ -468,6 +541,40 @@ public class RestDataSource implements DataSourceProvider {
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
             throw new IOException("HTTP " + code + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public java.util.Map<String, Boolean> getServerFeatures() {
+    try {
+      ensureLogin();
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/system/features");
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            if (sc >= 200 && sc < 300) {
+              java.util.HashMap<String, Boolean> flags = new java.util.HashMap<>();
+              if (body.isEmpty()) {
+                return flags;
+              }
+              JsonNode node = om.readTree(body);
+              node.fieldNames()
+                  .forEachRemaining(field -> flags.put(field, node.path(field).asBoolean(false)));
+              return flags;
+            }
+            throw new IOException("HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);

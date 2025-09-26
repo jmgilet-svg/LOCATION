@@ -36,4 +36,14 @@ public interface DataSourceProvider extends AutoCloseable {
   java.nio.file.Path downloadInterventionPdf(String interventionId, java.nio.file.Path target);
 
   void emailInterventionPdf(String interventionId, String to, String subject, String message);
+
+  java.nio.file.Path downloadClientsCsv(java.nio.file.Path target);
+
+  java.nio.file.Path downloadUnavailabilitiesCsv(
+      java.time.OffsetDateTime from,
+      java.time.OffsetDateTime to,
+      String resourceId,
+      java.nio.file.Path target);
+
+  java.util.Map<String, Boolean> getServerFeatures();
 }
