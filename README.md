@@ -2,6 +2,27 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## UX++ Tranche I+J — WYSIWYG modèles + Prévisualisation & Panneau d’envoi e‑mail
+
+### Ce que livre ce patch (exécutable, côté **client**)
+**I — WYSIWYG & Preview (local)**
+- **Éditeur WYSIWYG** léger pour les modèles **Devis/Commande/BL/Facture** (gras/italique, H1/H2, listes, variables).
+- **Prévisualisation en direct** (pane à droite) et **Aperçu dans une fenêtre**.
+- **Nouveau menu** : `Paramètres → Modèles document (WYSIWYG)` (coexiste avec l’éditeur texte existant).
+
+**J — Panneau d’e‑mail soigné**
+- **Dialogue “Envoi e‑mail”** avec **autocomplete** d’adresses (tirées des clients existants).
+- Saisie **sujet**/**message** (HTML simple), utilisation des **modèles e‑mail** si les champs sont vides.
+- Envoi via l’abstraction existante `DataSourceProvider.emailDocsBatch(ids, to, subject, message)`.
+
+> Aucun changement backend requis. La preview HTML s’appuie sur `JEditorPane` (HTML basique). Les envois passent par l’API déjà câblée (Mock/REST).
+
+### Build & run (client)
+```bash
+mvn -pl client -DskipTests package
+java -jar client/target/location-client.jar --datasource=mock   # ou --datasource=rest
+```
+
 ## UX++ Tranche G+H — Onboarding (tour guidé) & Notifications (toasts + activité)
 
 ### Ce que livre ce patch (exécutable)

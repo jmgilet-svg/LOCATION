@@ -563,6 +563,14 @@ public class MainFrame extends JFrame {
                 new DocTemplatesFrame(dsp).setVisible(true);
               }
             });
+    JMenuItem docWysiwyg =
+        new JMenuItem(
+            new AbstractAction("Modèles document (WYSIWYG)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new DocTemplatesWysiwygFrame(dsp).setVisible(true);
+              }
+            });
     settings.add(switchSrc);
     settings.add(cfg);
     settings.add(themeLight);
@@ -572,6 +580,7 @@ public class MainFrame extends JFrame {
     settings.add(tmpl);
     settings.add(docTmpl);
     settings.add(docHtmlTmpl);
+    settings.add(docWysiwyg);
 
     JMenu help = new JMenu("Aide");
     help.setMnemonic('A');
