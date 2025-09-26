@@ -2,6 +2,32 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 5 — Numérotation, Modèles d’email par agence, Export CSV (full Back/Front/Mock)
+
+### Nouveautés clés
+**Backend**
+- **Numérotation documentaire par agence + année** (`doc_sequence`) :
+  - `DV-YYYY-####` pour **Devis**, `BC-YYYY-####` **Commandes**, `BL-YYYY-####` **BL**, `FA-YYYY-####` **Factures**.
+  - Attribution automatique : **Devis** à la création, **Commande/BL/Facture** lors de la **transition**.
+- **Modèles d’email par agence & type** (`email_template`) avec fusion `{{agencyName}}`, `{{clientName}}`, `{{docRef}}`, `{{docTitle}}`, `{{docType}}`, `{{docDate}}`, `{{totalTtc}}`.
+- **Export CSV** des documents : `GET /api/v1/docs.csv?type&from&to&clientId` (encodage UTF‑8, séparateur `;`).
+
+**Client Swing**
+- **Bouton Export CSV** dans la fenêtre **Documents** (REST uniquement, Mock affiche message).
+- **Éditeur de modèles email** (menu **Paramètres → Modèles email**).
+  - Choix agence (courante) + type, édition `Sujet` / `Corps`, sauvegarde côté backend (ou mock in‑memory).
+
+**Mock**
+- Numérotation simulée et persistée en mémoire par agence+année+type.
+- Modèles email stockés en mémoire avec exemples par défaut.
+
+### Démarrage rapide
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+```
+
 ## Étape 4 — Qualité & Packaging (CI + Docker + Compose + Gzip)
 
 ### Ce que cette étape livre

@@ -26,16 +26,19 @@ public class CommercialDocumentService {
   private final CommercialDocumentLineRepository lineRepository;
   private final AgencyRepository agencyRepository;
   private final ClientRepository clientRepository;
+  private final DocumentNumberingService documentNumberingService;
 
   public CommercialDocumentService(
       CommercialDocumentRepository documentRepository,
       CommercialDocumentLineRepository lineRepository,
       AgencyRepository agencyRepository,
-      ClientRepository clientRepository) {
+      ClientRepository clientRepository,
+      DocumentNumberingService documentNumberingService) {
     this.documentRepository = documentRepository;
     this.lineRepository = lineRepository;
     this.agencyRepository = agencyRepository;
     this.clientRepository = clientRepository;
+    this.documentNumberingService = documentNumberingService;
   }
 
   @Transactional
@@ -52,6 +55,9 @@ public class CommercialDocumentService {
             OffsetDateTime.now(),
             agency,
             client);
+    if (type == DocType.QUOTE) {
+      document.setReference(documentNumberingService.nextReference(agency, type, document.getDate()));
+    }
     return documentRepository.save(document);
   }
 
@@ -99,6 +105,8 @@ public class CommercialDocumentService {
             OffsetDateTime.now(),
             source.getAgency(),
             source.getClient());
+    copy.setReference(
+        documentNumberingService.nextReference(copy.getAgency(), toType, copy.getDate()));
     documentRepository.save(copy);
 
     int index = 1;

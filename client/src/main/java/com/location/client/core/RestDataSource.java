@@ -737,6 +737,70 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public java.nio.file.Path downloadDocsCsv(String type, String clientId, java.nio.file.Path target) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v1/docs.csv");
+      java.util.List<String> params = new java.util.ArrayList<>();
+      if (type != null && !type.isBlank()) {
+        params.add("type=" + encode(type));
+      }
+      if (clientId != null && !clientId.isBlank()) {
+        params.add("clientId=" + encode(clientId));
+      }
+      if (!params.isEmpty()) {
+        url.append('?').append(String.join("&", params));
+      }
+      HttpGet get = new HttpGet(url.toString());
+      applyHeaders(get);
+      return http.execute(
+          get,
+          res -> {
+            if (res.getCode() != 200) {
+              throw new IOException("CSV HTTP " + res.getCode());
+            }
+            byte[] bytes = org.apache.hc.core5.http.io.entity.EntityUtils.toByteArray(res.getEntity());
+            java.nio.file.Files.write(target, bytes);
+            return target;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.EmailTemplate getEmailTemplate(String docType) {
+    try {
+      ensureLogin();
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/templates/" + encodeSegment(docType));
+      JsonNode node = executeForJson(get);
+      if (node.isNull() || node.isMissingNode()) {
+        return new Models.EmailTemplate("", "");
+      }
+      return new Models.EmailTemplate(node.path("subject").asText(""), node.path("body").asText(""));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.EmailTemplate saveEmailTemplate(String docType, String subject, String body) {
+    try {
+      ensureLogin();
+      HttpPut put = new HttpPut(baseUrl + "/api/v1/templates/" + encodeSegment(docType));
+      applyHeaders(put);
+      var payload = om.createObjectNode();
+      payload.put("subject", subject);
+      payload.put("body", body);
+      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(put);
+      return new Models.EmailTemplate(node.path("subject").asText(""), node.path("body").asText(""));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public Path downloadCsvInterventions(
       OffsetDateTime from,
       OffsetDateTime to,
