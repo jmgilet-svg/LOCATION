@@ -109,7 +109,17 @@ public class GlobalSearchDialog extends JDialog {
         all.add(new Row("Client", client.id(), client.name()));
       }
       for (Models.Resource resource : dataSourceProvider.listResources()) {
-        all.add(new Row("Ressource", resource.id(), resource.name()));
+        StringBuilder label = new StringBuilder(resource.name());
+        if (resource.tags() != null && !resource.tags().isBlank()) {
+          label.append(" [").append(resource.tags()).append(']');
+        }
+        if (resource.capacityTons() != null) {
+          label.append(" (").append(resource.capacityTons()).append("t)");
+        }
+        if (resource.licensePlate() != null && !resource.licensePlate().isBlank()) {
+          label.append(" – ").append(resource.licensePlate());
+        }
+        all.add(new Row("Ressource", resource.id(), label.toString()));
       }
       for (Models.Doc doc : dataSourceProvider.listDocs(null, null)) {
         all.add(new Row("Document", doc.id(), doc.title()));

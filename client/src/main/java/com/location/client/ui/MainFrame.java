@@ -11,6 +11,8 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Rectangle2D;
@@ -50,6 +52,7 @@ public class MainFrame extends JFrame {
   private final Timer heartbeat;
   private JDialog activityDialog;
   private GuidedTour guidedTour;
+  private boolean restoringGeometry;
 
   public MainFrame(DataSourceProvider dsp, Preferences prefs) {
     super("LOCATION — Planning");
@@ -79,6 +82,19 @@ public class MainFrame extends JFrame {
     }
 
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+    restoreWindowBounds();
+    addComponentListener(
+        new ComponentAdapter() {
+          @Override
+          public void componentMoved(ComponentEvent e) {
+            saveGeometry();
+          }
+
+          @Override
+          public void componentResized(ComponentEvent e) {
+            saveGeometry();
+          }
+        });
     addWindowListener(
         new WindowAdapter() {
           @Override
@@ -97,8 +113,6 @@ public class MainFrame extends JFrame {
             }
           }
         });
-    setSize(1100, 720);
-    setLocationRelativeTo(null);
 
     setJMenuBar(buildMenuBar());
     add(topBar, BorderLayout.NORTH);
@@ -162,6 +176,8 @@ public class MainFrame extends JFrame {
           } else {
             selectionInfo.setText("Aucune sélection");
           }
+          prefs.setDayIso(planning.getDay().toString());
+          prefs.save();
         });
     add(planningContainer, BorderLayout.CENTER);
     add(suggestionPanel, BorderLayout.EAST);
@@ -235,6 +251,32 @@ public class MainFrame extends JFrame {
         showBackendConfig();
       }
     });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control Z"), "undoHistory");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "undoHistory",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                planning.undoLast();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control Y"), "redoHistory");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "redoHistory",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                planning.redoLast();
+              }
+            });
     getRootPane()
         .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
         .put(KeyStroke.getKeyStroke("control LEFT"), "prevDay");
@@ -479,6 +521,22 @@ public class MainFrame extends JFrame {
     newUnav.addActionListener(e -> createUnavailabilityDialog());
     JMenuItem newRecurring = new JMenuItem("Nouvelle indisponibilité récurrente");
     newRecurring.addActionListener(e -> createRecurringUnavailabilityDialog());
+    JMenuItem manageResources =
+        new JMenuItem(
+            new AbstractAction("Gérer les ressources…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new ResourceEditorFrame(dsp).setVisible(true);
+              }
+            });
+    JMenuItem manageUnav =
+        new JMenuItem(
+            new AbstractAction("Gérer les indisponibilités…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new UnavailabilityFrame(dsp).setVisible(true);
+              }
+            });
     JMenuItem deleteIntervention =
         new JMenuItem(
             new AbstractAction("Supprimer l'intervention sélectionnée (Suppr)") {
@@ -501,6 +559,8 @@ public class MainFrame extends JFrame {
     data.add(editNotes);
     data.add(newUnav);
     data.add(newRecurring);
+    data.add(manageResources);
+    data.add(manageUnav);
     data.add(deleteIntervention);
     data.add(emailPdf);
     data.add(bulkEmail);
@@ -1221,6 +1281,37 @@ public class MainFrame extends JFrame {
     }
   }
 
+  private void restoreWindowBounds() {
+    Integer w = prefs.getWindowWidth();
+    Integer h = prefs.getWindowHeight();
+    if (w == null || h == null || w < 400 || h < 300) {
+      setSize(1100, 720);
+      setLocationRelativeTo(null);
+      return;
+    }
+    Integer x = prefs.getWindowX();
+    Integer y = prefs.getWindowY();
+    restoringGeometry = true;
+    if (x != null && y != null) {
+      setBounds(x, y, w, h);
+    } else {
+      setSize(w, h);
+      setLocationRelativeTo(null);
+    }
+    restoringGeometry = false;
+  }
+
+  private void saveGeometry() {
+    if (restoringGeometry || !isShowing()) {
+      return;
+    }
+    prefs.setWindowX(getX());
+    prefs.setWindowY(getY());
+    prefs.setWindowWidth(getWidth());
+    prefs.setWindowHeight(getHeight());
+    prefs.save();
+  }
+
   private void resetDemoData() {
     try {
       dsp.resetDemo();
@@ -1279,6 +1370,7 @@ public class MainFrame extends JFrame {
                     null));
         toastSuccess("Intervention créée");
         ActivityCenter.log("Création intervention " + created.id());
+        planning.rememberCreation(created, "Création");
         refreshData();
       } catch (Exception ex) {
         error(ex.getMessage());

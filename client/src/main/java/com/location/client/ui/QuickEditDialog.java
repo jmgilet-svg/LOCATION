@@ -10,9 +10,12 @@ import java.awt.event.ActionEvent;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
@@ -32,6 +35,10 @@ public class QuickEditDialog extends JDialog {
     void onSaved(Models.Intervention saved);
   }
 
+  public interface SavePairListener {
+    void onSaved(Models.Intervention original, Models.Intervention saved);
+  }
+
   private final DataSourceProvider dsp;
   private final Models.Intervention base;
   private final List<Models.Resource> resources;
@@ -40,6 +47,7 @@ public class QuickEditDialog extends JDialog {
   private final JTextField endField = new JTextField(6);
   private final JComboBox<Models.Resource> resourceCombo;
   private SaveListener listener;
+  private SavePairListener pairListener;
 
   public QuickEditDialog(
       Window owner,
@@ -58,6 +66,11 @@ public class QuickEditDialog extends JDialog {
 
   public QuickEditDialog onSaved(SaveListener listener) {
     this.listener = listener;
+    return this;
+  }
+
+  public QuickEditDialog onSavedPair(SavePairListener listener) {
+    this.pairListener = listener;
     return this;
   }
 
@@ -188,6 +201,28 @@ public class QuickEditDialog extends JDialog {
               newStart,
               newEnd,
               base.notes());
+      try {
+        List<Models.Unavailability> unavailabilityList =
+            dsp.listUnavailabilities(
+                OffsetDateTime.ofInstant(newStart, ZoneOffset.UTC),
+                OffsetDateTime.ofInstant(newEnd, ZoneOffset.UTC),
+                selectedResource.id());
+        for (Models.Unavailability unavailability : unavailabilityList) {
+          if (!selectedResource.id().equals(unavailability.resourceId())) {
+            continue;
+          }
+          if (unavailability.end().isAfter(newStart) && unavailability.start().isBefore(newEnd)) {
+            String reason = unavailability.reason();
+            String detail = (reason == null || reason.isBlank()) ? "" : " : " + reason;
+            throw new IllegalStateException("Chevauche une indisponibilité" + detail);
+          }
+        }
+      } catch (RuntimeException ex) {
+        String message = ex.getMessage();
+        if (message == null || !message.toLowerCase(Locale.ROOT).contains("non disponible")) {
+          throw ex;
+        }
+      }
       Models.Intervention saved = dsp.updateIntervention(payload);
       ActivityCenter.log("Intervention mise à jour " + saved.id());
       Window owner = getOwner();
@@ -198,6 +233,9 @@ public class QuickEditDialog extends JDialog {
       }
       if (listener != null) {
         listener.onSaved(saved);
+      }
+      if (pairListener != null) {
+        pairListener.onSaved(base, saved);
       }
       dispose();
     } catch (RuntimeException ex) {
