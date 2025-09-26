@@ -62,6 +62,11 @@ public class PlanningPanel extends JPanel {
   private List<Models.Intervention> interventions = List.of();
   private List<Models.Unavailability> unavailabilities = List.of();
   private final List<Runnable> reloadListeners = new ArrayList<>();
+  public interface SelectionListener {
+    void onSelection(List<Models.Intervention> selection, List<Models.Intervention> dayItems);
+  }
+
+  private final List<SelectionListener> selectionListeners = new ArrayList<>();
   private LocalDate day = LocalDate.now();
   private String filterAgencyId;
   private String filterResourceId;
@@ -189,7 +194,12 @@ public class PlanningPanel extends JPanel {
       @Override
       public void mouseClicked(MouseEvent e) {
         if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-          createAt(e.getPoint());
+          Optional<Tile> hit = findTileAt(e.getPoint());
+          if (hit.isPresent()) {
+            openQuickEdit(hit.get().i);
+          } else {
+            createAt(e.getPoint());
+          }
         }
       }
     };
@@ -301,6 +311,19 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  private void openQuickEdit(Models.Intervention intervention) {
+    List<Models.Resource> allResources = dsp.listResources();
+    QuickEditDialog dialog =
+        new QuickEditDialog(
+                SwingUtilities.getWindowAncestor(this), dsp, intervention, allResources)
+            .onSaved(
+                saved -> {
+                  selected = saved;
+                  reload();
+                });
+    dialog.setVisible(true);
+  }
+
   public void setWeekMode(boolean week) {
     if (this.weekMode == week) {
       return;
@@ -405,12 +428,24 @@ public class PlanningPanel extends JPanel {
     unavailabilities =
         unav.stream().filter(u -> visibleResourceIds.contains(u.resourceId())).toList();
     notifyReloadListeners();
+    fireSelectionChanged();
     repaint();
   }
 
   public void addReloadListener(Runnable listener) {
     if (listener != null) {
       reloadListeners.add(listener);
+    }
+  }
+
+  public void addSelectionListener(SelectionListener listener) {
+    if (listener != null) {
+      selectionListeners.add(listener);
+      try {
+        listener.onSelection(
+            selected == null ? List.of() : List.of(selected), List.copyOf(interventions));
+      } catch (RuntimeException ignored) {
+      }
     }
   }
 
@@ -423,6 +458,20 @@ public class PlanningPanel extends JPanel {
         listener.run();
       } catch (RuntimeException ex) {
         // On ignore les erreurs des listeners pour ne pas casser le rafraîchissement principal.
+      }
+    }
+  }
+
+  private void fireSelectionChanged() {
+    if (selectionListeners.isEmpty()) {
+      return;
+    }
+    List<Models.Intervention> snapshot = List.copyOf(interventions);
+    List<Models.Intervention> selection = selected == null ? List.of() : List.of(selected);
+    for (SelectionListener listener : new ArrayList<>(selectionListeners)) {
+      try {
+        listener.onSelection(selection, snapshot);
+      } catch (RuntimeException ignored) {
       }
     }
   }
@@ -538,6 +587,7 @@ public class PlanningPanel extends JPanel {
     if (selected != null) {
       selected = null;
       repaint();
+      fireSelectionChanged();
     }
   }
 
@@ -557,10 +607,12 @@ public class PlanningPanel extends JPanel {
     g2.setColor(new Color(250, 250, 255));
     g2.fillRect(0, 0, TIME_W, h);
     g2.setColor(new Color(245, 245, 245));
-    g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), HEADER_H);
-    g2.setColor(Color.GRAY);
-    g2.drawLine(0, HEADER_H, w, HEADER_H);
-    g2.drawLine(TIME_W, 0, TIME_W, h);
+   g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), HEADER_H);
+   g2.setColor(Color.GRAY);
+   g2.drawLine(0, HEADER_H, w, HEADER_H);
+   g2.drawLine(TIME_W, 0, TIME_W, h);
+
+    paintHeatmap(g2, viewDays, dayWidth, h);
 
     LocalDate headerStart = getViewStart();
     for (int d = 0; d < viewDays; d++) {
@@ -649,6 +701,49 @@ public class PlanningPanel extends JPanel {
 
     if (dragTile != null) {
       paintTile(g2, dragTile.withAlpha(0.6f));
+    }
+  }
+
+  private void paintHeatmap(Graphics2D g2, int viewDays, int dayWidth, int height) {
+    if (interventions.isEmpty() || dayWidth <= 0) {
+      return;
+    }
+    int stepsPerDay = HOURS * 2;
+    int bodyHeight = Math.max(0, height - HEADER_H);
+    if (bodyHeight <= 0) {
+      return;
+    }
+    ZoneId zone = ZoneId.systemDefault();
+    LocalDate startDate = getViewStart();
+    for (int dayIndex = 0; dayIndex < viewDays; dayIndex++) {
+      LocalDate currentDay = startDate.plusDays(dayIndex);
+      for (int step = 0; step < stepsPerDay; step++) {
+        java.time.ZonedDateTime slotStartZdt =
+            currentDay.atTime(START_HOUR, 0).atZone(zone).plusMinutes(30L * step);
+        Instant slotStart = slotStartZdt.toInstant();
+        Instant slotEnd = slotStartZdt.plusMinutes(30).toInstant();
+        int count = 0;
+        for (Models.Intervention intervention : interventions) {
+          if (intervention.end().isAfter(slotStart)
+              && intervention.start().isBefore(slotEnd)) {
+            count++;
+          }
+        }
+        if (count <= 0) {
+          continue;
+        }
+        int alpha = Math.min(90, 18 * count + 10);
+        int x1 =
+            TIME_W
+                + dayIndex * dayWidth
+                + Math.round(dayWidth * (step / (float) stepsPerDay));
+        int x2 =
+            TIME_W
+                + dayIndex * dayWidth
+                + Math.round(dayWidth * ((step + 1) / (float) stepsPerDay));
+        g2.setColor(new Color(255, 140, 0, alpha));
+        g2.fillRect(x1, HEADER_H, Math.max(1, x2 - x1), bodyHeight);
+      }
     }
   }
 
@@ -752,14 +847,18 @@ public class PlanningPanel extends JPanel {
     int x = Math.min(t.x1, t.x2);
     int w = Math.max(16, Math.abs(t.x2 - t.x1));
 
+    boolean conflict = hasConflict(t);
     Color base = new Color(66, 133, 244);
-    if (hasConflict(t)) base = new Color(219, 68, 55);
     if (t.alpha < 1f) {
       g2.setComposite(AlphaComposite.SrcOver.derive(t.alpha));
     }
     g2.setColor(base);
     g2.fillRoundRect(x, y, w, height, 10, 10);
-    g2.setColor(new Color(0, 0, 0, 80));
+    if (conflict) {
+      g2.setColor(new Color(219, 68, 55, 70));
+      g2.fillRoundRect(x, y, w, height, 10, 10);
+    }
+    g2.setColor(conflict ? new Color(219, 68, 55, 200) : new Color(0, 0, 0, 80));
     g2.drawRoundRect(x, y, w, height, 10, 10);
     g2.setComposite(AlphaComposite.SrcOver);
 
@@ -933,6 +1032,7 @@ public class PlanningPanel extends JPanel {
       selected = tile.i;
       dragTile = tile;
       repaint();
+      fireSelectionChanged();
       int x = Math.min(tile.x1, tile.x2);
       int w = Math.max(16, Math.abs(tile.x2 - tile.x1));
       if (Math.abs(p.x - x) <= 5) {
@@ -945,6 +1045,7 @@ public class PlanningPanel extends JPanel {
       if (selected != null) {
         selected = null;
         repaint();
+        fireSelectionChanged();
       }
     }
   }

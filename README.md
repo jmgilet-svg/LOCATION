@@ -2,6 +2,24 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## UX++ Tranche D+E — Aide au placement (suggestions + heatmap) & Édition inline
+
+### Ce que livre ce patch (exécutable)
+**D — Aide au placement & résolution de conflits**
+- **Heatmap de charge** sur le planning (fond plus dense quand la journée est chargée).
+- **Détection de conflits** (chevauchement même ressource) avec contour rouge.
+- **Panneau “Suggestions”** (dock à droite) sur une sélection :
+  - **Décaler +30 min** / **−30 min** (toutes les tuiles sélectionnées).
+  - **Proposer créneaux libres** (heuristique locale) dans la journée.
+  - **Changer de ressource** (alternative rapide) si dispo apparente.
+  - Rollback atomique si une mise à jour échoue.
+
+**E — Éditeurs inline + validations**
+- **Double‑clic** sur une tuile → **Édition rapide** (titre, heures, ressource) avec **validation immédiate** (heure fin > début).
+- Messages d’erreur clairs si le backend refuse (ex: conflit).
+
+> Implémentation **côté client** (Mock/REST identique). Aucun endpoint supplémentaire requis pour fonctionner.
+
 ## UX++ Tranche B+C — Navigation enrichie & aperçu planning
 
 ### Ce qui change
