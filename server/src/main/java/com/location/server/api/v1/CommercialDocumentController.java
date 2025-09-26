@@ -1,5 +1,6 @@
 package com.location.server.api.v1;
 
+import com.location.server.api.AgencyContext;
 import com.location.server.domain.CommercialDocument;
 import com.location.server.domain.CommercialDocument.DocType;
 import com.location.server.domain.CommercialDocumentLine;
@@ -57,7 +58,8 @@ public class CommercialDocumentController {
       @RequestParam(required = false)
           @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
           OffsetDateTime to) {
-    return documentRepository.search(type, clientId, from, to).stream()
+    String agencyId = AgencyContext.require();
+    return documentRepository.search(agencyId, type, clientId, from, to).stream()
         .map(CommercialDocumentController::toDto)
         .collect(Collectors.toList());
   }

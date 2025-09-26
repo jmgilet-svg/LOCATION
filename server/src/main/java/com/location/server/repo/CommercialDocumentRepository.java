@@ -10,12 +10,14 @@ import org.springframework.data.repository.query.Param;
 public interface CommercialDocumentRepository extends JpaRepository<CommercialDocument, String> {
   @Query(
       "select d from CommercialDocument d "
-          + "where (:type is null or d.type = :type) "
+          + "where d.agency.id = :agencyId "
+          + "and (:type is null or d.type = :type) "
           + "and (:clientId is null or d.client.id = :clientId) "
           + "and (:from is null or d.date >= :from) "
           + "and (:to is null or d.date < :to) "
           + "order by d.date desc")
   List<CommercialDocument> search(
+      @Param("agencyId") String agencyId,
       @Param("type") CommercialDocument.DocType type,
       @Param("clientId") String clientId,
       @Param("from") OffsetDateTime from,
