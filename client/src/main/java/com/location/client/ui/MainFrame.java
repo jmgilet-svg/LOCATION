@@ -128,6 +128,19 @@ public class MainFrame extends JFrame {
                 emailSelected();
               }
             });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("DELETE"), "deleteIntervention");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "deleteIntervention",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                deleteSelected();
+              }
+            });
   }
 
   private JMenuBar buildMenuBar() {
@@ -165,9 +178,18 @@ public class MainFrame extends JFrame {
     create.addActionListener(e -> createInterventionDialog());
     JMenuItem newUnav = new JMenuItem("Nouvelle indisponibilité");
     newUnav.addActionListener(e -> createUnavailabilityDialog());
+    JMenuItem deleteIntervention =
+        new JMenuItem(
+            new AbstractAction("Supprimer l'intervention sélectionnée (Suppr)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                deleteSelected();
+              }
+            });
     data.add(create);
     data.add(reset);
     data.add(newUnav);
+    data.add(deleteIntervention);
 
     JMenu settings = new JMenu("Paramètres");
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
@@ -296,6 +318,26 @@ public class MainFrame extends JFrame {
         }
       } else {
         JOptionPane.showMessageDialog(this, "(MOCK) Email simulé vers " + to);
+      }
+    }
+  }
+
+  private void deleteSelected() {
+    Models.Intervention sel = planning.getSelected();
+    if (sel == null) {
+      JOptionPane.showMessageDialog(this, "Aucune intervention sélectionnée.");
+      return;
+    }
+    int choice =
+        JOptionPane.showConfirmDialog(
+            this,
+            "Supprimer l'intervention \"" + sel.title() + "\" ?",
+            "Confirmation",
+            JOptionPane.OK_CANCEL_OPTION);
+    if (choice == JOptionPane.OK_OPTION) {
+      boolean done = planning.deleteSelected();
+      if (done) {
+        toast("Intervention supprimée");
       }
     }
   }

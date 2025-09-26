@@ -77,6 +77,14 @@ public final class ApiV1Dtos {
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end) {}
 
+  public record UpdateInterventionRequest(
+      @NotBlank String agencyId,
+      @NotBlank String resourceId,
+      @NotBlank String clientId,
+      @NotBlank @Size(max = 140) String title,
+      @NotNull OffsetDateTime start,
+      @NotNull OffsetDateTime end) {}
+
   public record CreateUnavailabilityRequest(
       @NotBlank String resourceId,
       @NotNull OffsetDateTime start,

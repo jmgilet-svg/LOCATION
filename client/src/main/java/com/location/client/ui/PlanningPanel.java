@@ -409,6 +409,22 @@ public class PlanningPanel extends JPanel {
     return Optional.empty();
   }
 
+  public boolean deleteSelected() {
+    if (selected == null) {
+      return false;
+    }
+    try {
+      dsp.deleteIntervention(selected.id());
+      selected = null;
+      reload();
+      return true;
+    } catch (RuntimeException ex) {
+      JOptionPane.showMessageDialog(
+          this, "Suppression impossible: " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      return false;
+    }
+  }
+
   private void updateCursor(Point p) {
     Optional<Tile> ot = findTileAt(p);
     if (ot.isEmpty()) {
@@ -431,13 +447,17 @@ public class PlanningPanel extends JPanel {
     dragResizeLeft = false;
     dragResizeRight = false;
     if (ot.isPresent()) {
-      selected = ot.get().i;
+      Tile tile = ot.get();
+      selected = tile.i;
+      dragTile = tile;
       repaint();
-      dragTile = ot.get();
-      int x = Math.min(dragTile.x1, dragTile.x2);
-      int w = Math.max(16, Math.abs(dragTile.x2 - dragTile.x1));
-      if (Math.abs(p.x - x) <= 5) dragResizeLeft = true;
-      else if (Math.abs(p.x - (x + w)) <= 5) dragResizeRight = true;
+      int x = Math.min(tile.x1, tile.x2);
+      int w = Math.max(16, Math.abs(tile.x2 - tile.x1));
+      if (Math.abs(p.x - x) <= 5) {
+        dragResizeLeft = true;
+      } else if (Math.abs(p.x - (x + w)) <= 5) {
+        dragResizeRight = true;
+      }
     } else {
       dragTile = null;
       if (selected != null) {
@@ -448,57 +468,70 @@ public class PlanningPanel extends JPanel {
   }
 
   private void onDrag(Point p) {
-    if (dragTile == null || dragStart == null) return;
-    int dx = p.x - dragStart.x;
-    int dy = p.y - dragStart.y;
-    int rowDelta = Math.round(dy / (float) ROW_H);
-    Tile t = dragTile;
-    if (dragResizeLeft) {
-      t = t.withX1(t.x1 + dx);
-    } else if (dragResizeRight) {
-      t = t.withX2(t.x2 + dx);
-    } else {
-      t = t.shift(dx, rowDelta);
+    if (dragTile == null || dragStart == null) {
+      return;
     }
-    dragTile = t;
+    int dx = p.x - dragStart.x;
+    Tile tile = dragTile;
+    if (dragResizeLeft) {
+      tile = tile.withX1(tile.x1 + dx);
+    } else if (dragResizeRight) {
+      tile = tile.withX2(tile.x2 + dx);
+    } else {
+      int dy = p.y - dragStart.y;
+      int rowDelta = Math.round(dy / (float) ROW_H);
+      int targetRow = resources.isEmpty() ? 0 : Math.max(0, Math.min(tile.row + rowDelta, resources.size() - 1));
+      tile = tile.shift(dx, targetRow - tile.row);
+    }
+    int minX = TIME_W;
+    int maxX = TIME_W + HOURS * colWidth;
+    int nx1 = Math.max(minX, Math.min(tile.x1, maxX));
+    int nx2 = Math.max(minX, Math.min(tile.x2, maxX));
+    dragTile = new Tile(tile.i, tile.row, nx1, nx2, tile.alpha);
     repaint();
   }
 
   private void onRelease() {
-    if (dragTile == null) return;
-    boolean isMock = "MOCK".equals(dsp.getLabel());
-    if (!isMock) {
-      dragTile = null;
-      repaint();
-      JOptionPane.showMessageDialog(
-          this,
-          "Mode REST en lecture seule pour le drag/resize (pas d'endpoint PATCH)\nLa modification n'est pas enregistrée.",
-          "Info",
-          JOptionPane.INFORMATION_MESSAGE);
+    if (dragTile == null) {
+      dragStart = null;
       return;
     }
+    Tile finalTile = dragTile;
+    dragTile = null;
+    dragStart = null;
+    repaint();
+    if (resources.isEmpty()) {
+      return;
+    }
+    int row = Math.max(0, Math.min(finalTile.row, resources.size() - 1));
+    Models.Resource resource = resources.get(row);
+    Instant start = instantForX(Math.min(finalTile.x1, finalTile.x2));
+    Instant end = instantForX(Math.max(finalTile.x1, finalTile.x2));
+    Models.Intervention original = finalTile.i;
+    boolean changed =
+        !resource.id().equals(original.resourceId())
+            || !start.equals(original.start())
+            || !end.equals(original.end());
+    if (!changed) {
+      return;
+    }
+    Models.Intervention updated =
+        new Models.Intervention(
+            original.id(),
+            resource.agencyId(),
+            resource.id(),
+            original.clientId(),
+            original.title(),
+            start,
+            end);
     try {
-      int row = Math.max(0, Math.min(resources.size() - 1, dragTile.row));
-      Models.Resource newRes = resources.get(row);
-      Instant ns = instantForX(Math.min(dragTile.x1, dragTile.x2));
-      Instant ne = instantForX(Math.max(dragTile.x1, dragTile.x2));
-      dsp.resetDemoData();
-      dsp.createIntervention(
-          new Models.Intervention(
-              null,
-              newRes.agencyId(),
-              newRes.id(),
-              dragTile.i.clientId(),
-              dragTile.i.title(),
-              ns,
-              ne));
+      Models.Intervention persisted = dsp.updateIntervention(updated);
+      selected = persisted;
       reload();
-      repaint();
-    } catch (Exception ex) {
-      JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
-    } finally {
-      dragTile = null;
-      repaint();
+    } catch (RuntimeException ex) {
+      JOptionPane.showMessageDialog(
+          this, "Erreur de sauvegarde: " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      reload();
     }
   }
 

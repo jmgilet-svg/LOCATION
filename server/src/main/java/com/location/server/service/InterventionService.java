@@ -60,4 +60,44 @@ public class InterventionService {
         new Intervention(UUID.randomUUID().toString(), title, start, end, agency, resource, client);
     return interventionRepository.save(intervention);
   }
+
+  @Transactional
+  public Intervention update(
+      String id,
+      String agencyId,
+      String resourceId,
+      String clientId,
+      String title,
+      OffsetDateTime start,
+      OffsetDateTime end) {
+    if (!start.isBefore(end)) {
+      throw new IllegalArgumentException("start must be before end");
+    }
+    if (interventionRepository.existsOverlapExcluding(id, resourceId, start, end)) {
+      throw new AssignmentConflictException(
+          "Intervention en conflit pour la ressource " + resourceId);
+    }
+    if (unavailabilityRepository.existsOverlap(resourceId, start, end)) {
+      throw new AssignmentConflictException("Ressource indisponible sur le créneau");
+    }
+    Intervention intervention = interventionRepository.findById(id).orElseThrow();
+    if (!intervention.getAgency().getId().equals(agencyId)) {
+      intervention.setAgency(agencyRepository.findById(agencyId).orElseThrow());
+    }
+    if (!intervention.getResource().getId().equals(resourceId)) {
+      intervention.setResource(resourceRepository.findById(resourceId).orElseThrow());
+    }
+    if (!intervention.getClient().getId().equals(clientId)) {
+      intervention.setClient(clientRepository.findById(clientId).orElseThrow());
+    }
+    intervention.setTitle(title);
+    intervention.setStart(start);
+    intervention.setEnd(end);
+    return interventionRepository.save(intervention);
+  }
+
+  @Transactional
+  public void delete(String id) {
+    interventionRepository.deleteById(id);
+  }
 }
