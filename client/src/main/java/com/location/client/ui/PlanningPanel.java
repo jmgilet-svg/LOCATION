@@ -67,6 +67,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private final List<SelectionListener> selectionListeners = new ArrayList<>();
+  private final History history = History.create();
   private LocalDate day = LocalDate.now();
   private String filterAgencyId;
   private String filterResourceId;
@@ -303,6 +304,7 @@ public class PlanningPanel extends JPanel {
       selected = created;
       reload();
       notifySuccess("Intervention créée", "Création intervention " + created.id());
+      pushCreationHistory("Création", created);
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
       JOptionPane.showMessageDialog(
@@ -318,10 +320,11 @@ public class PlanningPanel extends JPanel {
     QuickEditDialog dialog =
         new QuickEditDialog(
                 SwingUtilities.getWindowAncestor(this), dsp, intervention, allResources)
-            .onSaved(
-                saved -> {
+            .onSavedPair(
+                (original, saved) -> {
                   selected = saved;
                   reload();
+                  pushUpdateHistory("Édition", copyOf(original), saved);
                 });
     dialog.setVisible(true);
   }
@@ -618,6 +621,7 @@ public class PlanningPanel extends JPanel {
       selected = created;
       reload();
       notifySuccess("Intervention dupliquée", "Duplication intervention " + created.id());
+      pushCreationHistory("Duplication", created);
       return true;
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
@@ -635,6 +639,7 @@ public class PlanningPanel extends JPanel {
       Toolkit.getDefaultToolkit().beep();
       return false;
     }
+    Models.Intervention before = copyOf(selected);
     Instant start = selected.start().plus(delta);
     Instant end = selected.end().plus(delta);
     if (!end.isAfter(start)) {
@@ -658,6 +663,7 @@ public class PlanningPanel extends JPanel {
       selected = persisted;
       reload();
       notifySuccess("Intervention décalée", "Déplacement intervention " + persisted.id());
+      pushUpdateHistory("Déplacement", before, persisted);
       return true;
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
@@ -668,6 +674,26 @@ public class PlanningPanel extends JPanel {
           JOptionPane.ERROR_MESSAGE);
       return false;
     }
+  }
+
+  public void undoLast() {
+    String label = history.undo();
+    if (label == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    ActivityCenter.log("Undo: " + label);
+    showHistoryToast("Annulé", label);
+  }
+
+  public void redoLast() {
+    String label = history.redo();
+    if (label == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    ActivityCenter.log("Redo: " + label);
+    showHistoryToast("Rétabli", label);
   }
 
   public void clearSelection() {
@@ -1009,9 +1035,11 @@ public class PlanningPanel extends JPanel {
       return false;
     }
     try {
+      Models.Intervention removed = copyOf(selected);
       dsp.deleteIntervention(selected.id());
       selected = null;
       reload();
+      pushDeletionHistory("Suppression", removed);
       return true;
     } catch (RuntimeException ex) {
       JOptionPane.showMessageDialog(
@@ -1020,10 +1048,23 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  public void rememberCreation(Models.Intervention created) {
+    rememberCreation(created, "Création");
+  }
+
+  public void rememberCreation(Models.Intervention created, String label) {
+    if (created == null) {
+      return;
+    }
+    String effective = (label == null || label.isBlank()) ? "Création" : label;
+    pushCreationHistory(effective, created);
+  }
+
   private void nudgeTime(int minutes) {
     if (selected == null) {
       return;
     }
+    Models.Intervention before = copyOf(selected);
     int resourceIndex = indexOfResource(selected.resourceId());
     if (resourceIndex < 0) {
       Toolkit.getDefaultToolkit().beep();
@@ -1052,6 +1093,7 @@ public class PlanningPanel extends JPanel {
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
+      pushUpdateHistory("Déplacement", before, persisted);
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
     }
@@ -1062,6 +1104,7 @@ public class PlanningPanel extends JPanel {
       Toolkit.getDefaultToolkit().beep();
       return;
     }
+    Models.Intervention before = copyOf(selected);
     int current = indexOfResource(selected.resourceId());
     if (current < 0) {
       Toolkit.getDefaultToolkit().beep();
@@ -1089,6 +1132,7 @@ public class PlanningPanel extends JPanel {
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
+      pushUpdateHistory("Changement ressource", before, persisted);
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
     }
@@ -1187,6 +1231,7 @@ public class PlanningPanel extends JPanel {
     if (!changed) {
       return;
     }
+    Models.Intervention before = copyOf(original);
     Models.Intervention updated =
         new Models.Intervention(
             original.id(),
@@ -1204,6 +1249,7 @@ public class PlanningPanel extends JPanel {
       selected = persisted;
       reload();
       notifySuccess("Déplacement appliqué", "Déplacement intervention " + persisted.id());
+      pushUpdateHistory("Déplacement", before, persisted);
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
       selected = original;
@@ -1270,6 +1316,144 @@ public class PlanningPanel extends JPanel {
       return "";
     }
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  private Models.Intervention copyOf(Models.Intervention it) {
+    if (it == null) {
+      return null;
+    }
+    return new Models.Intervention(
+        it.id(),
+        it.agencyId(),
+        it.resourceId(),
+        it.clientId(),
+        it.driverId(),
+        it.title(),
+        it.start(),
+        it.end(),
+        it.notes());
+  }
+
+  private void pushUpdateHistory(String label, Models.Intervention before, Models.Intervention after) {
+    if (before == null || after == null) {
+      return;
+    }
+    Models.Intervention beforeCopy = copyOf(before);
+    Models.Intervention afterCopy = copyOf(after);
+    history.push(
+        label,
+        () -> {
+          try {
+            dsp.updateIntervention(beforeCopy);
+            selected = beforeCopy;
+          } catch (RuntimeException ex) {
+            Toolkit.getDefaultToolkit().beep();
+          }
+          reload();
+        },
+        () -> {
+          try {
+            dsp.updateIntervention(afterCopy);
+            selected = afterCopy;
+          } catch (RuntimeException ex) {
+            Toolkit.getDefaultToolkit().beep();
+          }
+          reload();
+        });
+  }
+
+  private void pushCreationHistory(String label, Models.Intervention created) {
+    if (created == null) {
+      return;
+    }
+    Models.Intervention template =
+        new Models.Intervention(
+            null,
+            created.agencyId(),
+            created.resourceId(),
+            created.clientId(),
+            created.driverId(),
+            created.title(),
+            created.start(),
+            created.end(),
+            created.notes());
+    String[] idRef = new String[] {created.id()};
+    history.push(
+        label,
+        () -> {
+          String id = idRef[0];
+          if (id != null) {
+            try {
+              dsp.deleteIntervention(id);
+            } catch (RuntimeException ex) {
+              Toolkit.getDefaultToolkit().beep();
+            }
+          }
+          selected = null;
+          reload();
+        },
+        () -> {
+          try {
+            Models.Intervention recreated = dsp.createIntervention(template);
+            idRef[0] = recreated.id();
+            selected = recreated;
+          } catch (RuntimeException ex) {
+            Toolkit.getDefaultToolkit().beep();
+          }
+          reload();
+        });
+  }
+
+  private void pushDeletionHistory(String label, Models.Intervention removed) {
+    if (removed == null) {
+      return;
+    }
+    Models.Intervention template =
+        new Models.Intervention(
+            null,
+            removed.agencyId(),
+            removed.resourceId(),
+            removed.clientId(),
+            removed.driverId(),
+            removed.title(),
+            removed.start(),
+            removed.end(),
+            removed.notes());
+    String[] idRef = new String[] {removed.id()};
+    history.push(
+        label,
+        () -> {
+          try {
+            Models.Intervention recreated = dsp.createIntervention(template);
+            idRef[0] = recreated.id();
+            selected = recreated;
+          } catch (RuntimeException ex) {
+            Toolkit.getDefaultToolkit().beep();
+          }
+          reload();
+        },
+        () -> {
+          String id = idRef[0];
+          if (id != null) {
+            try {
+              dsp.deleteIntervention(id);
+            } catch (RuntimeException ex) {
+              Toolkit.getDefaultToolkit().beep();
+            }
+          }
+          selected = null;
+          reload();
+        });
+  }
+
+  private void showHistoryToast(String prefix, String label) {
+    if (label == null || label.isBlank()) {
+      return;
+    }
+    java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+    if (window != null) {
+      Toast.info(window, prefix + ": " + label);
+    }
   }
 
   private void notifySuccess(String message, String activity) {

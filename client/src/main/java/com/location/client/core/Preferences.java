@@ -190,15 +190,20 @@ public class Preferences {
   }
 
   public String getDayIso() {
-    return props.getProperty("dayIso");
+    String value = props.getProperty("planning.lastDay");
+    if (value == null || value.isBlank()) {
+      value = props.getProperty("dayIso");
+    }
+    return value;
   }
 
   public void setDayIso(String value) {
-    if (value == null) {
-      props.remove("dayIso");
+    if (value == null || value.isBlank()) {
+      props.remove("planning.lastDay");
     } else {
-      props.setProperty("dayIso", value);
+      props.setProperty("planning.lastDay", value);
     }
+    props.remove("dayIso");
   }
 
   public boolean isTourShown() {
@@ -207,5 +212,56 @@ public class Preferences {
 
   public void setTourShown(boolean value) {
     props.setProperty("tourShown", Boolean.toString(value));
+  }
+
+  public Integer getWindowX() {
+    return parseInt(props.getProperty("window.x"));
+  }
+
+  public Integer getWindowY() {
+    return parseInt(props.getProperty("window.y"));
+  }
+
+  public Integer getWindowWidth() {
+    return parseInt(props.getProperty("window.w"));
+  }
+
+  public Integer getWindowHeight() {
+    return parseInt(props.getProperty("window.h"));
+  }
+
+  public void setWindowX(Integer value) {
+    setInt("window.x", value);
+  }
+
+  public void setWindowY(Integer value) {
+    setInt("window.y", value);
+  }
+
+  public void setWindowWidth(Integer value) {
+    setInt("window.w", value);
+  }
+
+  public void setWindowHeight(Integer value) {
+    setInt("window.h", value);
+  }
+
+  private Integer parseInt(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    try {
+      return Integer.parseInt(raw.trim());
+    } catch (NumberFormatException ignored) {
+      return null;
+    }
+  }
+
+  private void setInt(String key, Integer value) {
+    if (value == null) {
+      props.remove(key);
+    } else {
+      props.setProperty(key, Integer.toString(value));
+    }
   }
 }
