@@ -115,6 +115,19 @@ public class MainFrame extends JFrame {
                 createUnavailabilityDialog();
               }
             });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control M"), "emailDoc");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "emailDoc",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                emailSelected();
+              }
+            });
   }
 
   private JMenuBar buildMenuBar() {
@@ -127,9 +140,19 @@ public class MainFrame extends JFrame {
     exportCsvRest.addActionListener(e -> exportCsvRest());
     JMenuItem exportPdf = new JMenuItem("Exporter PDF (stub)");
     exportPdf.addActionListener(e -> exportPdfStub());
+    JMenuItem emailPdf =
+        new JMenuItem(
+            new AbstractAction("Envoyer PDF par email… (Ctrl+M)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                emailSelected();
+              }
+            });
+    emailPdf.setAccelerator(KeyStroke.getKeyStroke("control M"));
     file.add(exportCsv);
     file.add(exportCsvRest);
     file.add(exportPdf);
+    file.add(emailPdf);
 
     JMenu data = new JMenu("Données");
     JMenuItem reset = new JMenuItem("Réinitialiser la démo (Mock)");
@@ -230,6 +253,50 @@ public class MainFrame extends JFrame {
       Desktop.getDesktop().open(out.toFile());
     } catch (Exception ex) {
       error("Export PDF → " + ex.getMessage());
+    }
+  }
+
+  private void emailSelected() {
+    Models.Intervention sel = planning.getSelected();
+    if (sel == null) {
+      JOptionPane.showMessageDialog(
+          this,
+          "Sélectionnez d'abord une intervention (clic sur une tuile).",
+          "Information",
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    JTextField tfTo = new JTextField(prefs.getLastEmailTo());
+    JTextField tfSubject = new JTextField("Intervention " + sel.title());
+    JTextArea taBody = new JTextArea("Bonjour,\nVeuillez trouver le document en pièce jointe.\nCordialement.");
+    taBody.setLineWrap(true);
+    taBody.setWrapStyleWord(true);
+    taBody.setRows(6);
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
+    JPanel fields = new JPanel(new GridLayout(0, 1, 4, 4));
+    fields.add(new JLabel("Destinataire:"));
+    fields.add(tfTo);
+    fields.add(new JLabel("Objet:"));
+    fields.add(tfSubject);
+    panel.add(fields, BorderLayout.NORTH);
+    panel.add(new JScrollPane(taBody), BorderLayout.CENTER);
+    int result = JOptionPane.showConfirmDialog(this, panel, "Envoyer PDF par email", JOptionPane.OK_CANCEL_OPTION);
+    if (result == JOptionPane.OK_OPTION) {
+      String to = tfTo.getText().trim();
+      String subject = tfSubject.getText();
+      String body = taBody.getText();
+      prefs.setLastEmailTo(to);
+      prefs.save();
+      if (dsp instanceof RestDataSource rd) {
+        try {
+          rd.emailDocument(sel.id(), to, subject, body);
+          toast("Email envoyé (202 Accepted)");
+        } catch (Exception ex) {
+          error(ex.getMessage());
+        }
+      } else {
+        JOptionPane.showMessageDialog(this, "(MOCK) Email simulé vers " + to);
+      }
     }
   }
 
