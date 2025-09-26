@@ -165,22 +165,12 @@ public class MainFrame extends JFrame {
     exportCsvRest.addActionListener(e -> exportCsvRest());
     JMenuItem exportResources = new JMenuItem("Exporter ressources CSV");
     exportResources.addActionListener(e -> exportResourcesCsv());
-    JMenuItem exportPdf = new JMenuItem("Exporter PDF (stub)");
-    exportPdf.addActionListener(e -> exportPdfStub());
-    JMenuItem emailPdf =
-        new JMenuItem(
-            new AbstractAction("Envoyer PDF par email… (Ctrl+M)") {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                emailSelected();
-              }
-            });
-    emailPdf.setAccelerator(KeyStroke.getKeyStroke("control M"));
+    JMenuItem exportInterventionPdf = new JMenuItem("Exporter intervention (PDF)");
+    exportInterventionPdf.addActionListener(e -> exportInterventionPdf());
     file.add(exportCsv);
     file.add(exportCsvRest);
     file.add(exportResources);
-    file.add(exportPdf);
-    file.add(emailPdf);
+    file.add(exportInterventionPdf);
 
     JMenu data = new JMenu("Données");
     JMenuItem reset = new JMenuItem("Réinitialiser la démo (Mock)");
@@ -206,12 +196,22 @@ public class MainFrame extends JFrame {
                 deleteSelected();
               }
             });
+    JMenuItem emailPdf =
+        new JMenuItem(
+            new AbstractAction("Envoyer l'intervention par email… (Ctrl+M)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                emailSelected();
+              }
+            });
+    emailPdf.setAccelerator(KeyStroke.getKeyStroke("control M"));
     data.add(create);
     data.add(editNotes);
     data.add(reset);
     data.add(newUnav);
     data.add(newRecurring);
     data.add(deleteIntervention);
+    data.add(emailPdf);
 
     JMenu settings = new JMenu("Paramètres");
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
@@ -296,14 +296,19 @@ public class MainFrame extends JFrame {
     return value.replace(";", ",");
   }
 
-  private void exportPdfStub() {
-    if (!(dsp instanceof RestDataSource rd)) {
-      toast("PDF (stub) nécessite le mode REST");
+  private void exportInterventionPdf() {
+    Models.Intervention sel = planning.getSelected();
+    if (sel == null) {
+      toast("Sélectionnez une intervention dans le planning.");
+      return;
+    }
+    if (!(dsp instanceof RestDataSource)) {
+      toast("Export PDF disponible uniquement en mode REST.");
       return;
     }
     try {
-      Path out = Files.createTempFile("doc-", ".pdf");
-      rd.downloadPdfStub("demo", out);
+      Path out = Files.createTempFile("intervention-" + sel.id() + "-", ".pdf");
+      dsp.downloadInterventionPdf(sel.id(), out);
       toast("PDF exporté: " + out);
       Desktop.getDesktop().open(out.toFile());
     } catch (Exception ex) {
@@ -323,7 +328,7 @@ public class MainFrame extends JFrame {
     }
     JTextField tfTo = new JTextField(prefs.getLastEmailTo());
     JTextField tfSubject = new JTextField("Intervention " + sel.title());
-    JTextArea taBody = new JTextArea("Bonjour,\nVeuillez trouver le document en pièce jointe.\nCordialement.");
+    JTextArea taBody = new JTextArea("Bonjour,\nVeuillez trouver l'intervention en pièce jointe.\nCordialement.");
     taBody.setLineWrap(true);
     taBody.setWrapStyleWord(true);
     taBody.setRows(6);
@@ -335,22 +340,22 @@ public class MainFrame extends JFrame {
     fields.add(tfSubject);
     panel.add(fields, BorderLayout.NORTH);
     panel.add(new JScrollPane(taBody), BorderLayout.CENTER);
-    int result = JOptionPane.showConfirmDialog(this, panel, "Envoyer PDF par email", JOptionPane.OK_CANCEL_OPTION);
+    int result = JOptionPane.showConfirmDialog(this, panel, "Envoyer l'intervention par email", JOptionPane.OK_CANCEL_OPTION);
     if (result == JOptionPane.OK_OPTION) {
       String to = tfTo.getText().trim();
       String subject = tfSubject.getText();
       String body = taBody.getText();
       prefs.setLastEmailTo(to);
       prefs.save();
-      if (dsp instanceof RestDataSource rd) {
-        try {
-          rd.emailDocument(sel.id(), to, subject, body);
+      try {
+        dsp.emailInterventionPdf(sel.id(), to, subject, body);
+        if (dsp instanceof RestDataSource) {
           toast("Email envoyé (202 Accepted)");
-        } catch (Exception ex) {
-          error(ex.getMessage());
+        } else {
+          toast("Email simulé (mode Mock)");
         }
-      } else {
-        JOptionPane.showMessageDialog(this, "(MOCK) Email simulé vers " + to);
+      } catch (Exception ex) {
+        error(ex.getMessage());
       }
     }
   }

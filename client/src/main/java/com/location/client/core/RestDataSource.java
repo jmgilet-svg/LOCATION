@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -406,51 +405,73 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
-  public void emailDocument(String documentId, String to, String subject, String body) {
+  @Override
+  public Path downloadInterventionPdf(String interventionId, Path target) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encodeSegment(documentId) + "/email");
-      ObjectNode payload = om.createObjectNode();
-      if (to == null || to.isBlank()) {
-        throw new IllegalArgumentException("Destinataire requis");
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/pdf");
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
       }
-      payload.put("to", to);
-      if (subject != null) {
-        payload.put("subject", subject);
-      }
-      if (body != null) {
-        payload.put("body", body);
-      }
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      http.execute(
-          post,
-          res -> {
-            int code = res.getCode();
-            if (code != 202) {
-              throw new IOException("Email non accepté (" + code + ")");
+      return http.execute(
+          get,
+          response -> {
+            int sc = response.getCode();
+            HttpEntity entity = response.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
             }
-            return null;
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
   }
 
-  public void downloadPdfStub(String documentId, Path target) throws IOException {
-    ensureLogin();
-    HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encodeSegment(documentId) + "/export/pdf");
-    http.execute(post, response -> {
-      int sc = response.getCode();
-      HttpEntity entity = response.getEntity();
-      if (sc >= 200 && sc < 300 && entity != null) {
-        try (InputStream in = entity.getContent()) {
-          Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        }
-        return null;
+  @Override
+  public void emailInterventionPdf(String interventionId, String to, String subject, String message) {
+    try {
+      ensureLogin();
+      if (to == null || to.isBlank()) {
+        throw new IllegalArgumentException("Destinataire requis");
       }
-      String body = entity == null ? "" : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-      throw new IOException("HTTP " + sc + " → " + body);
-    });
+      HttpPost post =
+          new HttpPost(baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/email");
+      if (bearer.get() != null) {
+        post.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      ObjectNode payload = om.createObjectNode();
+      payload.put("to", to);
+      if (subject != null) {
+        payload.put("subject", subject);
+      }
+      if (message != null) {
+        payload.put("message", message);
+      }
+      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      http.execute(
+          post,
+          res -> {
+            int code = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (code == 202) {
+              return null;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + code + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public Path downloadCsvInterventions(

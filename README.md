@@ -2,34 +2,35 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
-## Sprint 9 — Notes d’intervention (Full, Back + Front + Mock)
+## Sprint 10 — Export PDF Intervention + Envoi Email (Full, REST) — Mock sûr (sans écriture disque)
 
-### Objectif
-Permettre d’ajouter des **notes riches** (texte libre) sur chaque intervention, éditables côté client, visibles dans le planning, et **persistées** côté backend (DB + API). Le mode **Mock** conserve aussi les notes en mémoire pour des démos live sans réseau.
+### Nouveautés
+**Backend (Spring Boot)**
+- **PDF Intervention** : `GET /api/v1/interventions/{id}/pdf` → `application/pdf` (OpenPDF).
+- **Email PDF** : `POST /api/v1/interventions/{id}/email` avec `{ "to": "...", "subject": "...", "message": "..." }` → `202 Accepted` et envoi via `MailGateway` (pièce jointe PDF).
+- **Service PDF** : rendu simple (titre, client, ressource, dates).
+- **Tests WebMvc** : vérif `application/pdf` + email `202`.
 
-### Backend
-- **Schéma** : colonne `notes` (TEXT) sur `intervention`. Migration Flyway `V6__intervention_notes.sql`.
-- **DTOs** : ajout du champ `notes` dans `InterventionDTO`, `CreateInterventionRequest`, `UpdateInterventionRequest`.
-- **Service** : création/mise à jour conservent les `notes` (validation de la durée inchangée).
-- **API** : `POST /api/v1/interventions` et `PUT /api/v1/interventions/{id}` acceptent/retournent `notes`.
-- **Tests WebMvc** : round-trip des notes via `PUT`.
+**Client (Swing)**
+- Menu **Fichier → Exporter Intervention (PDF)** (REST uniquement) : télécharge le PDF et l’ouvre.
+- Menu **Données → Envoyer PDF intervention par email** (REST & Mock) :
+  - En REST : appel direct de l’API d’envoi.
+  - En Mock : **simulation** (succès immédiat, aucune écriture disque conformément aux règles Mock).
 
-### Client Swing
-- **Modèle** : `Models.Intervention` enrichi avec `notes`.
-- **Planning** : les tuiles avec note affichent un **pictogramme** 📓 (coin supérieur droit).
-- **Édition** : `Ctrl+E` ou menu **Données → Éditer les notes** ouvre un éditeur multi‑lignes ; sauvegarde via **Mock** ou **REST** (PUT).
-- **Mock** : stockage des notes en mémoire ; mises à jour cohérentes avec conflits éventuels (inchangés).
+**Mode Mock**
+- Pas d’écriture fichier. L’envoi email est simulé côté client.
 
 ### Utilisation
-1. Sélectionner une tuile (clic).
-2. `Ctrl+E` → saisir les notes → **Enregistrer**.
-3. Les notes sont visibles (📓) et récupérées après rechargement.
+1. Sélectionnez une intervention dans le planning.
+2. **Exporter PDF** pour obtenir le fichier (REST).
+3. **Envoyer PDF par email** pour expédier au destinataire (REST réel, Mock simulé).
 
-### Build
+### Démarrage
 ```bash
 mvn -B -ntp verify
 mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
-mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=mock
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+
 ```
 
 ## Sprint 8 — Indisponibilités récurrentes + Tags/Capacité ressources + Export CSV (Full, Mock-ready)
