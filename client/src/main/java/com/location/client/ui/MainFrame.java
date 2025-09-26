@@ -4,6 +4,7 @@ import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.core.Preferences;
 import com.location.client.core.RestDataSource;
+import com.location.client.ui.i18n.Language;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
@@ -13,16 +14,18 @@ import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Rectangle2D;
+import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.MessageFormat;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.*;
 
 public class MainFrame extends JFrame {
@@ -215,11 +218,11 @@ public class MainFrame extends JFrame {
             });
     getRootPane()
         .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-        .put(KeyStroke.getKeyStroke("control shift E"), "exportCsv");
-    getRootPane().getActionMap().put("exportCsv", new AbstractAction() {
+        .put(KeyStroke.getKeyStroke("control shift E"), "exportPlanningCsv");
+    getRootPane().getActionMap().put("exportPlanningCsv", new AbstractAction() {
       @Override
       public void actionPerformed(ActionEvent e) {
-        exportCsv();
+        exportPlanningDayCsvDialog();
       }
     });
     getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("control L"), "login");
@@ -418,11 +421,13 @@ public class MainFrame extends JFrame {
   private JMenuBar buildMenuBar() {
     JMenuBar bar = new JMenuBar();
 
-    JMenu file = new JMenu("Fichier");
+    JMenu file = new JMenu(Language.tr("menu.file"));
     file.setMnemonic('F');
-    JMenuItem exportCsv = new JMenuItem("Exporter planning en CSV");
-    exportCsv.setAccelerator(KeyStroke.getKeyStroke("control shift E"));
-    exportCsv.addActionListener(e -> exportCsv());
+    JMenuItem exportPlanningDay = new JMenuItem(Language.tr("export.csv.planning"));
+    exportPlanningDay.setAccelerator(KeyStroke.getKeyStroke("control shift E"));
+    exportPlanningDay.addActionListener(e -> exportPlanningDayCsvDialog());
+    JMenuItem exportClientsCsv = new JMenuItem(Language.tr("export.csv.clients"));
+    exportClientsCsv.addActionListener(e -> exportClientsCsvDialog());
     JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
     exportCsvRest.addActionListener(e -> exportCsvRest());
     JMenuItem exportGeneral =
@@ -438,19 +443,21 @@ public class MainFrame extends JFrame {
     exportResources.addActionListener(e -> exportResourcesCsv());
     JMenuItem exportInterventionPdf = new JMenuItem("Exporter intervention (PDF)");
     exportInterventionPdf.addActionListener(e -> exportInterventionPdf());
-    JMenuItem exportClients = new JMenuItem("Exporter clients CSV (REST)");
-    exportClients.addActionListener(e -> exportClientsCsv());
+    JMenuItem exportClientsRest = new JMenuItem("Exporter clients CSV (REST)");
+    exportClientsRest.addActionListener(e -> exportClientsCsvRest());
     JMenuItem exportUnav = new JMenuItem("Exporter indisponibilités CSV (REST)");
     exportUnav.addActionListener(e -> exportUnavailabilitiesCsv());
-    file.add(exportCsv);
+    file.add(exportPlanningDay);
+    file.add(exportClientsCsv);
+    file.addSeparator();
     file.add(exportCsvRest);
     file.add(exportGeneral);
     file.add(exportResources);
     file.add(exportInterventionPdf);
-    file.add(exportClients);
+    file.add(exportClientsRest);
     file.add(exportUnav);
 
-    JMenu data = new JMenu("Données");
+    JMenu data = new JMenu(Language.tr("menu.data"));
     data.setMnemonic('D');
     JMenuItem create = new JMenuItem("Nouvelle intervention");
     create.setAccelerator(KeyStroke.getKeyStroke("control N"));
@@ -515,8 +522,8 @@ public class MainFrame extends JFrame {
     viewActivity.addActionListener(e -> openActivity());
     view.add(viewActivity);
 
-    JMenu settings = new JMenu("Paramètres");
-    settings.setMnemonic('P');
+    JMenu settings = new JMenu(Language.tr("menu.settings"));
+    settings.setMnemonic(Language.isEnglish() ? 'S' : 'P');
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
     switchSrc.addActionListener(e -> switchSource());
     JMenuItem cfg = new JMenuItem("Configurer le backend (URL/Login)");
@@ -576,14 +583,61 @@ public class MainFrame extends JFrame {
     settings.add(themeLight);
     settings.add(themeDark);
     settings.addSeparator();
+    settings.add(
+        new JMenuItem(
+            new AbstractAction(Language.tr("font.increase")) {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.setFontScale(Theme.getFontScale() + 0.1f);
+              }
+            }));
+    settings.add(
+        new JMenuItem(
+            new AbstractAction(Language.tr("font.decrease")) {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.setFontScale(Theme.getFontScale() - 0.1f);
+              }
+            }));
+    settings.add(
+        new JMenuItem(
+            new AbstractAction(Language.tr("font.reset")) {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.setFontScale(1.0f);
+              }
+            }));
+    JCheckBoxMenuItem highContrastItem = new JCheckBoxMenuItem(Language.tr("contrast.toggle"), Theme.isHighContrast());
+    highContrastItem.addActionListener(e -> Theme.setHighContrast(highContrastItem.isSelected()));
+    settings.add(highContrastItem);
+    settings.addSeparator();
+    settings.add(
+        new JMenuItem(
+            new AbstractAction(Language.tr("lang.fr")) {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Language.setLocale(Locale.FRENCH);
+                showLanguageRestartMessage();
+              }
+            }));
+    settings.add(
+        new JMenuItem(
+            new AbstractAction(Language.tr("lang.en")) {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Language.setLocale(Locale.ENGLISH);
+                showLanguageRestartMessage();
+              }
+            }));
+    settings.addSeparator();
     settings.add(loginItem);
     settings.add(tmpl);
     settings.add(docTmpl);
     settings.add(docHtmlTmpl);
     settings.add(docWysiwyg);
 
-    JMenu help = new JMenu("Aide");
-    help.setMnemonic('A');
+    JMenu help = new JMenu(Language.tr("menu.help"));
+    help.setMnemonic(Language.isEnglish() ? 'H' : 'A');
     JMenuItem startTour = new JMenuItem("Démarrer le tour");
     startTour.addActionListener(e -> startGuidedTour());
     JMenuItem resetDemo = new JMenuItem("Réinitialiser la démo");
@@ -815,33 +869,18 @@ public class MainFrame extends JFrame {
         JOptionPane.INFORMATION_MESSAGE);
   }
 
-  private void exportCsv() {
+  private void exportPlanningDayCsvDialog() {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle(Language.tr("dialog.export.title"));
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+    Path target = ensureCsvExtension(chooser.getSelectedFile());
     try {
-      Path tmp = Files.createTempFile("planning-", ".csv");
-      List<Models.Intervention> items = planning.getInterventions();
-      StringBuilder sb =
-          new StringBuilder("id;title;agencyId;resourceId;clientId;start;end\n");
-      for (Models.Intervention i : items) {
-        sb.append(i.id())
-            .append(';')
-            .append(escape(i.title()))
-            .append(';')
-            .append(escape(i.agencyId()))
-            .append(';')
-            .append(escape(i.resourceId()))
-            .append(';')
-            .append(escape(i.clientId()))
-            .append(';')
-            .append(i.start())
-            .append(';')
-            .append(i.end())
-            .append('\n');
-      }
-      Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-      toastSuccess("Export CSV: " + tmp);
-      Desktop.getDesktop().open(tmp.toFile());
+      CsvUtil.exportPlanningDay(dsp, planning.getDay(), target);
+      toastSuccess(MessageFormat.format(Language.tr("toast.export.ok"), target.getFileName()));
     } catch (IOException ex) {
-      error("Export CSV → " + ex.getMessage());
+      error(MessageFormat.format(Language.tr("toast.export.fail"), ex.getMessage()));
     }
   }
 
@@ -871,7 +910,22 @@ public class MainFrame extends JFrame {
     }
   }
 
-  private void exportClientsCsv() {
+  private void exportClientsCsvDialog() {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle(Language.tr("dialog.export.title"));
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+    Path target = ensureCsvExtension(chooser.getSelectedFile());
+    try {
+      CsvUtil.exportClients(dsp, target);
+      toastSuccess(MessageFormat.format(Language.tr("toast.export.ok"), target.getFileName()));
+    } catch (IOException ex) {
+      error(MessageFormat.format(Language.tr("toast.export.fail"), ex.getMessage()));
+    }
+  }
+
+  private void exportClientsCsvRest() {
     if (!(dsp instanceof RestDataSource)) {
       error("Export clients CSV disponible uniquement en mode REST.");
       return;
@@ -927,11 +981,17 @@ public class MainFrame extends JFrame {
     JOptionPane.showMessageDialog(this, scroll, "À propos", JOptionPane.INFORMATION_MESSAGE);
   }
 
-  private String escape(String value) {
-    if (value == null) {
-      return "";
+  private Path ensureCsvExtension(File file) {
+    Path path = file.toPath();
+    String name = path.getFileName().toString();
+    if (!name.toLowerCase(Locale.ROOT).endsWith(".csv")) {
+      return path.resolveSibling(name + ".csv");
     }
-    return value.replace(";", ",");
+    return path;
+  }
+
+  private void showLanguageRestartMessage() {
+    JOptionPane.showMessageDialog(this, Language.tr("lang.restart"));
   }
 
   private void exportInterventionPdf() {
