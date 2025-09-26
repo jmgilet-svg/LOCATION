@@ -3,12 +3,15 @@ package com.location.server.api.v1.dto;
 import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
 import com.location.server.domain.Intervention;
+import com.location.server.domain.RecurringUnavailability;
 import com.location.server.domain.Resource;
 import com.location.server.domain.Unavailability;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 
 public final class ApiV1Dtos {
   private ApiV1Dtos() {}
@@ -26,14 +29,22 @@ public final class ApiV1Dtos {
   }
 
   public record ResourceDto(
-      String id, String name, String licensePlate, Integer colorRgb, AgencyDto agency) {
+      String id,
+      String name,
+      String licensePlate,
+      Integer colorRgb,
+      AgencyDto agency,
+      String tags,
+      Integer capacityTons) {
     public static ResourceDto of(Resource resource) {
       return new ResourceDto(
           resource.getId(),
           resource.getName(),
           resource.getLicensePlate(),
           resource.getColorRgb(),
-          AgencyDto.of(resource.getAgency()));
+          AgencyDto.of(resource.getAgency()),
+          resource.getTags(),
+          resource.getCapacityTons());
     }
   }
 
@@ -58,14 +69,38 @@ public final class ApiV1Dtos {
   }
 
   public record UnavailabilityDto(
-      String id, String resourceId, OffsetDateTime start, OffsetDateTime end, String reason) {
+      String id,
+      String resourceId,
+      OffsetDateTime start,
+      OffsetDateTime end,
+      String reason,
+      boolean recurring) {
     public static UnavailabilityDto of(Unavailability unavailability) {
       return new UnavailabilityDto(
           unavailability.getId(),
           unavailability.getResource().getId(),
           unavailability.getStart(),
           unavailability.getEnd(),
-          unavailability.getReason());
+          unavailability.getReason(),
+          false);
+    }
+  }
+
+  public record RecurringUnavailabilityDto(
+      String id,
+      String resourceId,
+      DayOfWeek dayOfWeek,
+      LocalTime start,
+      LocalTime end,
+      String reason) {
+    public static RecurringUnavailabilityDto of(RecurringUnavailability recurring) {
+      return new RecurringUnavailabilityDto(
+          recurring.getId(),
+          recurring.getResource().getId(),
+          recurring.getDayOfWeek(),
+          recurring.getStartTime(),
+          recurring.getEndTime(),
+          recurring.getReason());
     }
   }
 
@@ -89,5 +124,12 @@ public final class ApiV1Dtos {
       @NotBlank String resourceId,
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end,
+      @NotBlank @Size(max = 140) String reason) {}
+
+  public record CreateRecurringUnavailabilityRequest(
+      @NotBlank String resourceId,
+      @NotNull DayOfWeek dayOfWeek,
+      @NotNull LocalTime start,
+      @NotNull LocalTime end,
       @NotBlank @Size(max = 140) String reason) {}
 }

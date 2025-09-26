@@ -27,6 +27,12 @@ public class Resource {
   @JoinColumn(name = "agency_id")
   private Agency agency;
 
+  @Column(length = 255)
+  private String tags;
+
+  @Column(name = "capacity_tons")
+  private Integer capacityTons;
+
   protected Resource() {}
 
   public Resource(String id, String name, String licensePlate, Integer colorRgb, Agency agency) {
@@ -35,6 +41,19 @@ public class Resource {
     this.licensePlate = licensePlate;
     this.colorRgb = colorRgb;
     this.agency = agency;
+  }
+
+  public Resource(
+      String id,
+      String name,
+      String licensePlate,
+      Integer colorRgb,
+      Agency agency,
+      String tags,
+      Integer capacityTons) {
+    this(id, name, licensePlate, colorRgb, agency);
+    this.tags = tags;
+    this.capacityTons = capacityTons;
   }
 
   public String getId() {
@@ -75,5 +94,21 @@ public class Resource {
 
   public void setAgency(Agency agency) {
     this.agency = agency;
+  }
+
+  public String getTags() {
+    return tags;
+  }
+
+  public void setTags(String tags) {
+    this.tags = tags;
+  }
+
+  public Integer getCapacityTons() {
+    return capacityTons;
+  }
+
+  public void setCapacityTons(Integer capacityTons) {
+    this.capacityTons = capacityTons;
   }
 }

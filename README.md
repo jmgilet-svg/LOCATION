@@ -2,6 +2,47 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Sprint 8 — Indisponibilités récurrentes + Tags/Capacité ressources + Export CSV (Full, Mock-ready)
+
+### Nouveautés
+**Backend**
+- **Indisponibilités récurrentes** hebdomadaires (jour de semaine + heure début/fin, motif).
+  - Entité `RecurringUnavailability`, endpoints :
+    - `GET  /api/v1/recurring-unavailabilities?resourceId`
+    - `POST /api/v1/recurring-unavailabilities`
+  - **Recherche d’indisponibilités** (`GET /api/v1/unavailabilities`) agrégée : retourne **à la fois** fixes et récurrentes **dépliées** sur la fenêtre `from..to`.
+- **Ressources : tags & capacité** (p. ex. `["grue","90t"]`, capacité en tonnes).
+  - Migration DB + DTO + filtre `tags` optionnel : `GET /api/v1/resources?tags=grue,90t`
+  - **Export CSV** des ressources : `GET /api/v1/resources/csv?tags=`
+
+**Client Swing**
+- Top bar : **filtre par tag** (champ texte, séparés par virgules).
+- Menu Fichier : **Exporter Ressources (CSV)** via REST.
+- Menu Données : **Nouvelle indisponibilité récurrente** (dialog).
+- Planning : les **indisponibilités récurrentes** apparaissent comme bandes hachurées (couleur plus claire).
+
+**Mode Mock**
+- Parité : stockage **in-memory** des récurrentes, expansion dans `listUnavailabilities`, tags/capacité sur ressources, filtre par tags.
+
+### Endpoints ajoutés
+- `GET/POST /api/v1/recurring-unavailabilities`
+- `GET /api/v1/resources/csv?tags=`
+- `GET /api/v1/resources?tags=`
+
+### Migrations DB
+- `V5__resource_tags_capacity_and_recurring_unav.sql`
+
+### Tests
+- Service : expansion récurrente dans une fenêtre donnée.
+- WebMvc : `resources/csv` renvoie `text/csv` + header `attachment`.
+
+### Utilisation rapide
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=mock
+```
+
 ## Sprint 7 — Édition REST (drag/resize), Suppression & Conflits (Full)
 
 ### Nouveautés

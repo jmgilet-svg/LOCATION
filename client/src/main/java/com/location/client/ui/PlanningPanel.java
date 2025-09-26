@@ -22,6 +22,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -42,6 +43,7 @@ public class PlanningPanel extends JPanel {
   private String filterResourceId;
   private String filterClientId;
   private String filterQuery = "";
+  private String filterTags = "";
 
   private static final int HEADER_H = 28;
   private static final int ROW_H = 60;
@@ -97,6 +99,20 @@ public class PlanningPanel extends JPanel {
       fetchedResources =
           fetchedResources.stream().filter(r -> agency.equals(r.agencyId())).toList();
     }
+    if (filterTags != null && !filterTags.isBlank()) {
+      Set<String> requested =
+          Arrays.stream(filterTags.toLowerCase().split("\\s*,\\s*")).filter(s -> !s.isBlank()).collect(Collectors.toSet());
+      if (!requested.isEmpty()) {
+        fetchedResources =
+            fetchedResources.stream()
+                .filter(
+                    r ->
+                        r.tags() != null
+                            && requested.stream()
+                                .allMatch(t -> r.tags().toLowerCase().contains(t)))
+                .toList();
+      }
+    }
     if (filterResourceId != null && !filterResourceId.isBlank()) {
       String rid = filterResourceId;
       fetchedResources = fetchedResources.stream().filter(r -> rid.equals(r.id())).toList();
@@ -121,6 +137,10 @@ public class PlanningPanel extends JPanel {
           data.stream()
               .filter(i -> i.title() != null && i.title().toLowerCase().contains(q))
               .toList();
+    }
+    if (filterTags != null && !filterTags.isBlank()) {
+      Set<String> visibleIds = resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
+      data = data.stream().filter(i -> visibleIds.contains(i.resourceId())).toList();
     }
     interventions = data;
     if (selectedId != null) {
@@ -187,6 +207,12 @@ public class PlanningPanel extends JPanel {
     repaint();
   }
 
+  public void setFilterTags(String value) {
+    filterTags = value == null ? "" : value;
+    reload();
+    repaint();
+  }
+
   public String getFilterAgencyId() {
     return filterAgencyId;
   }
@@ -201,6 +227,10 @@ public class PlanningPanel extends JPanel {
 
   public String getFilterQuery() {
     return filterQuery;
+  }
+
+  public String getFilterTags() {
+    return filterTags;
   }
 
   public List<Models.Resource> getResources() {
@@ -282,7 +312,7 @@ public class PlanningPanel extends JPanel {
       int x2 = xForInstant(unav.end());
       int y = HEADER_H + row * ROW_H + 6;
       int height = ROW_H - 12;
-      paintHatched(g2, Math.min(x1, x2), y, Math.max(12, Math.abs(x2 - x1)), height);
+      paintHatched(g2, Math.min(x1, x2), y, Math.max(12, Math.abs(x2 - x1)), height, unav.recurring());
     }
 
     for (Models.Intervention i : interventions) {
@@ -372,15 +402,17 @@ public class PlanningPanel extends JPanel {
     g2.drawString(t.i.title(), x + 8, y + 18);
   }
 
-  private void paintHatched(Graphics2D g2, int x, int y, int width, int height) {
-    Color base = new Color(219, 68, 55, 60);
+  private void paintHatched(Graphics2D g2, int x, int y, int width, int height, boolean recurring) {
+    int alpha = recurring ? 35 : 60;
+    int strokeAlpha = recurring ? 90 : 140;
+    Color base = new Color(219, 68, 55, alpha);
     g2.setColor(base);
     g2.fillRoundRect(x, y, width, height, 10, 10);
-    g2.setColor(new Color(219, 68, 55, 140));
+    g2.setColor(new Color(219, 68, 55, strokeAlpha));
     for (int i = x - height; i < x + width; i += 8) {
       g2.drawLine(i, y, i + height, y + height);
     }
-    g2.setColor(new Color(180, 0, 0, 120));
+    g2.setColor(new Color(180, 0, 0, recurring ? 80 : 120));
     g2.drawRoundRect(x, y, width, height, 10, 10);
   }
 

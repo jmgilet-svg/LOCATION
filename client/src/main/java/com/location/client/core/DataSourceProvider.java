@@ -26,4 +26,10 @@ public interface DataSourceProvider extends AutoCloseable {
       java.time.OffsetDateTime from, java.time.OffsetDateTime to, String resourceId);
 
   Models.Unavailability createUnavailability(Models.Unavailability unavailability);
+
+  List<Models.RecurringUnavailability> listRecurringUnavailabilities(String resourceId);
+
+  Models.RecurringUnavailability createRecurringUnavailability(Models.RecurringUnavailability recurring);
+
+  java.nio.file.Path downloadResourcesCsv(String tags, java.nio.file.Path target);
 }

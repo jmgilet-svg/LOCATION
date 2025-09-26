@@ -30,6 +30,7 @@ public class TopBar extends JPanel {
   private final JComboBox<Models.Resource> cbResource = new JComboBox<>();
   private final JComboBox<Models.Client> cbClient = new JComboBox<>();
   private final JTextField tfQuery = new JTextField();
+  private final JTextField tfTags = new JTextField();
   private final JSpinner spDate = new JSpinner(new SpinnerDateModel());
   private boolean updating = false;
 
@@ -118,6 +119,17 @@ public class TopBar extends JPanel {
           preferences.save();
         });
 
+    tfTags.setColumns(12);
+    tfTags.addActionListener(
+        e -> {
+          if (updating) {
+            return;
+          }
+          planning.setFilterTags(tfTags.getText());
+          preferences.setFilterTags(tfTags.getText());
+          preferences.save();
+        });
+
     right.add(new JLabel("Agence:"));
     right.add(cbAgency);
     right.add(new JLabel("Ressource:"));
@@ -126,6 +138,8 @@ public class TopBar extends JPanel {
     right.add(cbClient);
     right.add(new JLabel("Recherche:"));
     right.add(tfQuery);
+    right.add(new JLabel("Tags:"));
+    right.add(tfTags);
 
     add(left, BorderLayout.WEST);
     add(right, BorderLayout.EAST);
@@ -139,8 +153,9 @@ public class TopBar extends JPanel {
     String savedQuery = preferences.getFilterQuery();
     tfQuery.setText(savedQuery);
     planning.setFilterQuery(savedQuery);
-    preferences.setFilterQuery(savedQuery);
-    preferences.save();
+    String savedTags = preferences.getFilterTags();
+    tfTags.setText(savedTags);
+    planning.setFilterTags(savedTags);
     refreshCombos();
     selectById(cbAgency, Models.Agency::id, preferences.getFilterAgencyId());
     selectById(cbResource, Models.Resource::id, preferences.getFilterResourceId());
@@ -163,7 +178,7 @@ public class TopBar extends JPanel {
 
       List<Models.Resource> resources = planning.getResources();
       cbResource.removeAllItems();
-      cbResource.addItem(new Models.Resource(null, "(toutes ressources)", "", null, null));
+      cbResource.addItem(new Models.Resource(null, "(toutes ressources)", "", null, null, null, null));
       resources.forEach(cbResource::addItem);
       selectById(cbResource, Models.Resource::id, resourceId);
 
@@ -256,5 +271,9 @@ public class TopBar extends JPanel {
 
   public String getQuery() {
     return planning.getFilterQuery();
+  }
+
+  public String getTags() {
+    return planning.getFilterTags();
   }
 }
