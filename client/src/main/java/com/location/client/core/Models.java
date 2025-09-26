@@ -30,7 +30,8 @@ public final class Models {
       String clientId,
       String title,
       Instant start,
-      Instant end) {}
+      Instant end,
+      String notes) {}
 
   public record Unavailability(
       String id,

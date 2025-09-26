@@ -64,7 +64,16 @@ public class MainFrame extends JFrame {
         createInterventionDialog();
       }
     });
-    getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("control E"), "exportCsv");
+    getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("control E"), "editNotes");
+    getRootPane().getActionMap().put("editNotes", new AbstractAction() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        editNotes();
+      }
+    });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control shift E"), "exportCsv");
     getRootPane().getActionMap().put("exportCsv", new AbstractAction() {
       @Override
       public void actionPerformed(ActionEvent e) {
@@ -150,6 +159,7 @@ public class MainFrame extends JFrame {
 
     JMenu file = new JMenu("Fichier");
     JMenuItem exportCsv = new JMenuItem("Exporter planning en CSV");
+    exportCsv.setAccelerator(KeyStroke.getKeyStroke("control shift E"));
     exportCsv.addActionListener(e -> exportCsv());
     JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
     exportCsvRest.addActionListener(e -> exportCsvRest());
@@ -181,6 +191,9 @@ public class MainFrame extends JFrame {
     });
     JMenuItem create = new JMenuItem("Nouvelle intervention");
     create.addActionListener(e -> createInterventionDialog());
+    JMenuItem editNotes = new JMenuItem("Éditer les notes (Ctrl+E)");
+    editNotes.setAccelerator(KeyStroke.getKeyStroke("control E"));
+    editNotes.addActionListener(e -> editNotes());
     JMenuItem newUnav = new JMenuItem("Nouvelle indisponibilité");
     newUnav.addActionListener(e -> createUnavailabilityDialog());
     JMenuItem newRecurring = new JMenuItem("Nouvelle indisponibilité récurrente");
@@ -194,6 +207,7 @@ public class MainFrame extends JFrame {
               }
             });
     data.add(create);
+    data.add(editNotes);
     data.add(reset);
     data.add(newUnav);
     data.add(newRecurring);
@@ -361,6 +375,45 @@ public class MainFrame extends JFrame {
     }
   }
 
+  private void editNotes() {
+    Models.Intervention sel = planning.getSelected();
+    if (sel == null) {
+      JOptionPane.showMessageDialog(this, "Sélectionnez une intervention.");
+      return;
+    }
+    JTextArea ta = new JTextArea(sel.notes() == null ? "" : sel.notes());
+    ta.setLineWrap(true);
+    ta.setWrapStyleWord(true);
+    ta.setRows(12);
+    JScrollPane scroll = new JScrollPane(ta);
+    int result =
+        JOptionPane.showConfirmDialog(
+            this,
+            scroll,
+            "Notes pour: " + sel.title(),
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+    if (result == JOptionPane.OK_OPTION) {
+      Models.Intervention updated =
+          new Models.Intervention(
+              sel.id(),
+              sel.agencyId(),
+              sel.resourceId(),
+              sel.clientId(),
+              sel.title(),
+              sel.start(),
+              sel.end(),
+              ta.getText());
+      try {
+        dsp.updateIntervention(updated);
+        toast("Notes enregistrées");
+        refreshData();
+      } catch (Exception ex) {
+        error("Impossible d'enregistrer: " + ex.getMessage());
+      }
+    }
+  }
+
   private void createInterventionDialog() {
     List<Models.Resource> resources = planning.getResources();
     List<Models.Client> clients = planning.getClients();
@@ -402,7 +455,8 @@ public class MainFrame extends JFrame {
                 client.id(),
                 tfTitle.getText(),
                 Instant.parse(tfStart.getText()),
-                Instant.parse(tfEnd.getText())));
+                Instant.parse(tfEnd.getText()),
+                null));
         toast("Intervention créée");
         refreshData();
       } catch (Exception ex) {

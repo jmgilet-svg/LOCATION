@@ -43,11 +43,13 @@ class InterventionServiceTest {
   @Test
   void conflictDetectionThrowsException() {
     OffsetDateTime start = OffsetDateTime.of(2025, 1, 1, 8, 0, 0, 0, ZoneOffset.UTC);
-    service.create(AGENCY_ID, RESOURCE_ID, CLIENT_ID, "OK", start, start.plusHours(2));
+    service.create(AGENCY_ID, RESOURCE_ID, CLIENT_ID, "OK", start, start.plusHours(2), null);
 
     assertThrows(
         AssignmentConflictException.class,
-        () -> service.create(AGENCY_ID, RESOURCE_ID, CLIENT_ID, "KO", start.plusHours(1), start.plusHours(3)));
+        () ->
+            service.create(
+                AGENCY_ID, RESOURCE_ID, CLIENT_ID, "KO", start.plusHours(1), start.plusHours(3), null));
   }
 
   @Test
@@ -63,6 +65,8 @@ class InterventionServiceTest {
 
     assertThrows(
         AssignmentConflictException.class,
-        () -> service.create(AGENCY_ID, RESOURCE_ID, CLIENT_ID, "KO", start.plusHours(1), start.plusHours(3)));
+        () ->
+            service.create(
+                AGENCY_ID, RESOURCE_ID, CLIENT_ID, "KO", start.plusHours(1), start.plusHours(3), null));
   }
 }
