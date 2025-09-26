@@ -1,9 +1,9 @@
 package com.location.server.domain;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Column;
 
 @Entity
 @Table(name = "agency")
@@ -14,6 +14,12 @@ public class Agency {
 
   @Column(nullable = false, length = 128)
   private String name;
+
+  @Column(name = "email_subject_template", length = 255)
+  private String emailSubjectTemplate;
+
+  @Column(name = "email_body_template", columnDefinition = "TEXT")
+  private String emailBodyTemplate;
 
   protected Agency() {}
 
@@ -36,5 +42,21 @@ public class Agency {
 
   public void setName(String name) {
     this.name = name;
+  }
+
+  public String getEmailSubjectTemplate() {
+    return emailSubjectTemplate;
+  }
+
+  public void setEmailSubjectTemplate(String emailSubjectTemplate) {
+    this.emailSubjectTemplate = emailSubjectTemplate;
+  }
+
+  public String getEmailBodyTemplate() {
+    return emailBodyTemplate;
+  }
+
+  public void setEmailBodyTemplate(String emailBodyTemplate) {
+    this.emailBodyTemplate = emailBodyTemplate;
   }
 }

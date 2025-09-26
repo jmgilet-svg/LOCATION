@@ -19,6 +19,7 @@ import com.location.server.repo.UnavailabilityRepository;
 import com.location.server.service.InterventionService;
 import com.location.server.service.MailGateway;
 import com.location.server.service.PdfService;
+import com.location.server.service.TemplateService;
 import com.location.server.service.UnavailabilityService;
 import com.location.server.service.UnavailabilityQueryService;
 import jakarta.validation.Valid;
@@ -59,6 +60,7 @@ public class ApiV1Controller {
   private final UnavailabilityQueryService unavailabilityQueryService;
   private final MailGateway mailGateway;
   private final PdfService pdfService;
+  private final TemplateService templateService;
 
   public ApiV1Controller(
       AgencyRepository agencyRepository,
@@ -71,7 +73,8 @@ public class ApiV1Controller {
       RecurringUnavailabilityRepository recurringUnavailabilityRepository,
       UnavailabilityQueryService unavailabilityQueryService,
       MailGateway mailGateway,
-      PdfService pdfService) {
+      PdfService pdfService,
+      TemplateService templateService) {
     this.agencyRepository = agencyRepository;
     this.clientRepository = clientRepository;
     this.resourceRepository = resourceRepository;
@@ -83,6 +86,7 @@ public class ApiV1Controller {
     this.unavailabilityQueryService = unavailabilityQueryService;
     this.mailGateway = mailGateway;
     this.pdfService = pdfService;
+    this.templateService = templateService;
   }
 
   @GetMapping("/agencies")
@@ -214,6 +218,10 @@ public class ApiV1Controller {
     return value.replace(';', ',');
   }
 
+  private static String nullToEmpty(String value) {
+    return value == null ? "" : value;
+  }
+
   @PostMapping("/interventions")
   public InterventionDto create(@Valid @RequestBody CreateInterventionRequest request) {
     return InterventionDto.of(
@@ -314,6 +322,71 @@ public class ApiV1Controller {
     mailGateway.send(
         new MailGateway.Mail(
             request.to(), subject, body, pdf, "intervention-" + intervention.getId() + ".pdf"));
+    return ResponseEntity.accepted().build();
+  }
+
+  public record EmailTemplateDto(String subject, String body) {}
+
+  @GetMapping("/agencies/{id}/email-template")
+  public EmailTemplateDto getEmailTemplate(@PathVariable String id) {
+    var agency =
+        agencyRepository
+            .findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    return new EmailTemplateDto(agency.getEmailSubjectTemplate(), agency.getEmailBodyTemplate());
+  }
+
+  @PutMapping("/agencies/{id}/email-template")
+  public EmailTemplateDto updateEmailTemplate(
+      @PathVariable String id, @Valid @RequestBody EmailTemplateDto request) {
+    var agency =
+        agencyRepository
+            .findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    agency.setEmailSubjectTemplate(request.subject());
+    agency.setEmailBodyTemplate(request.body());
+    agencyRepository.save(agency);
+    return request;
+  }
+
+  public record BulkEmailRequest(List<String> ids, @Email String toOverride) {}
+
+  @PostMapping("/interventions/email-bulk")
+  public ResponseEntity<Void> emailBulk(@Valid @RequestBody BulkEmailRequest request) {
+    if (request.ids() == null || request.ids().isEmpty()) {
+      return ResponseEntity.badRequest().build();
+    }
+    for (String id : request.ids()) {
+      var intervention =
+          interventionRepository
+              .findById(id)
+              .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+      String recipient =
+          request.toOverride() != null && !request.toOverride().isBlank()
+              ? request.toOverride()
+              : nullToEmpty(intervention.getClient().getBillingEmail());
+      if (recipient.isBlank()) {
+        continue;
+      }
+      byte[] pdf = pdfService.buildInterventionPdf(intervention);
+      String subjectTemplate = intervention.getAgency().getEmailSubjectTemplate();
+      String bodyTemplate = intervention.getAgency().getEmailBodyTemplate();
+      String subject =
+          subjectTemplate == null || subjectTemplate.isBlank()
+              ? "Intervention " + sanitize(intervention.getTitle())
+              : templateService.renderSubject(subjectTemplate, intervention);
+      String body =
+          bodyTemplate == null || bodyTemplate.isBlank()
+              ? "Bonjour,\nVeuillez trouver la fiche intervention en pièce jointe."
+              : templateService.renderBody(bodyTemplate, intervention);
+      mailGateway.send(
+          new MailGateway.Mail(
+              recipient,
+              subject,
+              body,
+              pdf,
+              "intervention-" + intervention.getId() + ".pdf"));
+    }
     return ResponseEntity.accepted().build();
   }
 }
