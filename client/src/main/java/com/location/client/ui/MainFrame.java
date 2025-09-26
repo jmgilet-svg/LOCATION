@@ -141,6 +141,34 @@ public class MainFrame extends JFrame {
             });
     getRootPane()
         .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control 1"), "viewDay");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "viewDay",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                planning.setWeekMode(false);
+                topBar.refreshCombos();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control 2"), "viewWeek");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "viewWeek",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                planning.setWeekMode(true);
+                topBar.refreshCombos();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
         .put(KeyStroke.getKeyStroke("DELETE"), "deleteIntervention");
     getRootPane()
         .getActionMap()
@@ -222,6 +250,24 @@ public class MainFrame extends JFrame {
     data.add(emailPdf);
     data.add(bulkEmail);
 
+    JMenu view = new JMenu("Affichage");
+    JMenuItem dayView = new JMenuItem("Vue Jour (Ctrl+1)");
+    dayView.setAccelerator(KeyStroke.getKeyStroke("control 1"));
+    dayView.addActionListener(
+        e -> {
+          planning.setWeekMode(false);
+          topBar.refreshCombos();
+        });
+    JMenuItem weekView = new JMenuItem("Vue Semaine (Ctrl+2)");
+    weekView.setAccelerator(KeyStroke.getKeyStroke("control 2"));
+    weekView.addActionListener(
+        e -> {
+          planning.setWeekMode(true);
+          topBar.refreshCombos();
+        });
+    view.add(dayView);
+    view.add(weekView);
+
     JMenu settings = new JMenu("Paramètres");
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
     switchSrc.addActionListener(e -> switchSource());
@@ -240,6 +286,7 @@ public class MainFrame extends JFrame {
 
     bar.add(file);
     bar.add(data);
+    bar.add(view);
     bar.add(settings);
     bar.add(help);
     return bar;
