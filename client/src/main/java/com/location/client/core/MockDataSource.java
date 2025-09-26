@@ -511,6 +511,13 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public java.nio.file.Path downloadInterventionsCsv(
+      java.time.OffsetDateTime from, java.time.OffsetDateTime to, java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export Interventions CSV indisponible en mode Mock (pas d'écriture fichier).");
+  }
+
+  @Override
   public java.nio.file.Path downloadClientsCsv(java.nio.file.Path target) {
     throw new UnsupportedOperationException(
         "Export Clients CSV indisponible en mode Mock (pas d'écriture fichier).");

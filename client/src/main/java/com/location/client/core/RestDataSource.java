@@ -531,6 +531,37 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Path downloadInterventionsCsv(OffsetDateTime from, OffsetDateTime to, Path target) {
+    try {
+      ensureLogin();
+      String url =
+          baseUrl
+              + "/api/v1/interventions.csv?from="
+              + encode(from.toString())
+              + "&to="
+              + encode(to.toString());
+      return execute(
+          () -> new HttpGet(url),
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public Path downloadInterventionPdf(String interventionId, Path target) {
     try {
       ensureLogin();
