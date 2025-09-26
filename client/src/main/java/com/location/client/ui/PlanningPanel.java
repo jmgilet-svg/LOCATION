@@ -34,6 +34,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -62,6 +63,7 @@ public class PlanningPanel extends JPanel {
   private List<Models.Intervention> interventions = List.of();
   private List<Models.Unavailability> unavailabilities = List.of();
   private final List<Runnable> reloadListeners = new ArrayList<>();
+  private final java.util.Map<String, Color> resourceColors = new HashMap<>();
   public interface SelectionListener {
     void onSelection(List<Models.Intervention> selection, List<Models.Intervention> dayItems);
   }
@@ -391,6 +393,7 @@ public class PlanningPanel extends JPanel {
       fetchedResources = fetchedResources.stream().filter(r -> rid.equals(r.id())).toList();
     }
     resources = fetchedResources;
+    rebuildResourceColors();
 
     clients = dsp.listClients();
 
@@ -463,6 +466,15 @@ public class PlanningPanel extends JPanel {
         listener.run();
       } catch (RuntimeException ex) {
         // On ignore les erreurs des listeners pour ne pas casser le rafraîchissement principal.
+      }
+    }
+  }
+
+  private void rebuildResourceColors() {
+    resourceColors.clear();
+    for (Models.Resource resource : resources) {
+      if (resource.id() != null) {
+        resourceColors.put(resource.id(), ResourceColors.colorFor(resource));
       }
     }
   }
@@ -562,6 +574,11 @@ public class PlanningPanel extends JPanel {
 
   public List<Models.Resource> getResources() {
     return resources;
+  }
+
+  public void refreshResourceColors() {
+    rebuildResourceColors();
+    repaint();
   }
 
   public List<Models.Agency> getAgencies() {
@@ -961,7 +978,10 @@ public class PlanningPanel extends JPanel {
     int w = Math.max(16, Math.abs(t.x2 - t.x1));
 
     boolean conflict = hasConflict(t);
-    Color base = new Color(66, 133, 244);
+    Color base = resourceColors.get(t.i.resourceId());
+    if (base == null) {
+      base = ResourceColors.colorFor(null);
+    }
     if (t.alpha < 1f) {
       g2.setComposite(AlphaComposite.SrcOver.derive(t.alpha));
     }

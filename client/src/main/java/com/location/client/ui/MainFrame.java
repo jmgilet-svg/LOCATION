@@ -24,6 +24,7 @@ import java.text.MessageFormat;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Enumeration;
 import java.util.List;
@@ -45,6 +46,7 @@ public class MainFrame extends JFrame {
   private final JLabel modeBadge = new JLabel();
   private final JLabel agencyBadge = new JLabel();
   private final JMenu agencyMenu = new JMenu("Agence");
+  private final JMenu bookmarksMenu = new JMenu("Signets");
   private ButtonGroup agencyGroup = new ButtonGroup();
   private boolean updatingAgencyMenu;
   private final Timer heartbeat;
@@ -56,6 +58,7 @@ public class MainFrame extends JFrame {
     super("LOCATION — Planning");
     this.dsp = dsp;
     this.prefs = prefs;
+    ResourceColors.initialize(prefs);
     this.planning = new PlanningPanel(dsp);
     this.minimap = new PlanningMinimap();
     this.topBar = new TopBar(planning, prefs);
@@ -470,6 +473,10 @@ public class MainFrame extends JFrame {
     exportPlanningDay.addActionListener(e -> exportPlanningDayCsvDialog());
     JMenuItem exportClientsCsv = new JMenuItem(Language.tr("export.csv.clients"));
     exportClientsCsv.addActionListener(e -> exportClientsCsvDialog());
+    JMenuItem exportIcs = new JMenuItem("Export ICS (Planning jour)");
+    exportIcs.addActionListener(e -> exportPlanningDayIcsDialog());
+    JMenuItem exportPng = new JMenuItem("Export PNG (Planning)");
+    exportPng.addActionListener(e -> exportPlanningPngDialog());
     JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
     exportCsvRest.addActionListener(e -> exportCsvRest());
     JMenuItem exportGeneral =
@@ -491,6 +498,8 @@ public class MainFrame extends JFrame {
     exportUnav.addActionListener(e -> exportUnavailabilitiesCsv());
     file.add(exportPlanningDay);
     file.add(exportClientsCsv);
+    file.add(exportIcs);
+    file.add(exportPng);
     file.addSeparator();
     file.add(exportCsvRest);
     file.add(exportGeneral);
@@ -581,6 +590,8 @@ public class MainFrame extends JFrame {
     JMenuItem viewActivity = new JMenuItem("Activité récente");
     viewActivity.addActionListener(e -> openActivity());
     view.add(viewActivity);
+    view.addSeparator();
+    view.add(bookmarksMenu);
 
     JMenu settings = new JMenu(Language.tr("menu.settings"));
     settings.setMnemonic(Language.isEnglish() ? 'S' : 'P');
@@ -696,6 +707,14 @@ public class MainFrame extends JFrame {
     settings.add(docHtmlTmpl);
     settings.add(docWysiwyg);
 
+    JMenu tools = new JMenu("Outils");
+    JMenuItem generateData = new JMenuItem("Générer des interventions…");
+    generateData.addActionListener(e -> new StressTestDialog(MainFrame.this, dsp, planning).setVisible(true));
+    JMenuItem resourceColors = new JMenuItem("Couleurs des ressources…");
+    resourceColors.addActionListener(e -> new ResourceColorDialog(MainFrame.this, dsp, planning).setVisible(true));
+    tools.add(generateData);
+    tools.add(resourceColors);
+
     JMenu help = new JMenu(Language.tr("menu.help"));
     help.setMnemonic(Language.isEnglish() ? 'H' : 'A');
     JMenuItem startTour = new JMenuItem("Démarrer le tour");
@@ -715,8 +734,10 @@ public class MainFrame extends JFrame {
     bar.add(data);
     bar.add(documents);
     bar.add(view);
+    rebuildBookmarksMenu();
     bar.add(context);
     bar.add(settings);
+    bar.add(tools);
     bar.add(help);
     return bar;
   }
@@ -843,6 +864,39 @@ public class MainFrame extends JFrame {
     }
   }
 
+  private void rebuildBookmarksMenu() {
+    bookmarksMenu.removeAll();
+    JMenuItem addItem = new JMenuItem("Ajouter le jour courant ⭐");
+    addItem.addActionListener(e -> addCurrentDayBookmark());
+    bookmarksMenu.add(addItem);
+    List<String> days = prefs.getBookmarkDays();
+    if (!days.isEmpty()) {
+      bookmarksMenu.addSeparator();
+      for (String iso : days) {
+        JMenuItem dayItem = new JMenuItem(iso);
+        dayItem.addActionListener(e -> openBookmarkDay(iso));
+        bookmarksMenu.add(dayItem);
+      }
+    }
+  }
+
+  private void addCurrentDayBookmark() {
+    String iso = planning.getDay().toString();
+    prefs.addBookmarkDay(iso);
+    prefs.save();
+    rebuildBookmarksMenu();
+    Toast.info(this, "Jour ajouté aux signets");
+  }
+
+  private void openBookmarkDay(String iso) {
+    try {
+      LocalDate date = LocalDate.parse(iso);
+      topBar.jumpTo(date);
+    } catch (Exception ex) {
+      Toast.error(this, "Date invalide: " + iso);
+    }
+  }
+
   private void handleNavigation(String target) {
     switch (target) {
       case "planning" -> sidebar.setSelected("planning");
@@ -941,6 +995,36 @@ public class MainFrame extends JFrame {
       toastSuccess(MessageFormat.format(Language.tr("toast.export.ok"), target.getFileName()));
     } catch (IOException ex) {
       error(MessageFormat.format(Language.tr("toast.export.fail"), ex.getMessage()));
+    }
+  }
+
+  private void exportPlanningDayIcsDialog() {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Export ICS");
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+    Path target = ensureIcsExtension(chooser.getSelectedFile());
+    try {
+      IcsUtil.exportPlanningDay(dsp, planning.getDay(), target);
+      toastSuccess("ICS exporté: " + target.getFileName());
+    } catch (IOException ex) {
+      error("Export ICS → " + ex.getMessage());
+    }
+  }
+
+  private void exportPlanningPngDialog() {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Export PNG");
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+    Path target = ensurePngExtension(chooser.getSelectedFile());
+    try {
+      ImageExport.exportComponent(planning, target);
+      toastSuccess("PNG exporté: " + target.getFileName());
+    } catch (IOException ex) {
+      error("Export PNG → " + ex.getMessage());
     }
   }
 
@@ -1046,6 +1130,24 @@ public class MainFrame extends JFrame {
     String name = path.getFileName().toString();
     if (!name.toLowerCase(Locale.ROOT).endsWith(".csv")) {
       return path.resolveSibling(name + ".csv");
+    }
+    return path;
+  }
+
+  private Path ensureIcsExtension(File file) {
+    Path path = file.toPath();
+    String name = path.getFileName().toString();
+    if (!name.toLowerCase(Locale.ROOT).endsWith(".ics")) {
+      return path.resolveSibling(name + ".ics");
+    }
+    return path;
+  }
+
+  private Path ensurePngExtension(File file) {
+    Path path = file.toPath();
+    String name = path.getFileName().toString();
+    if (!name.toLowerCase(Locale.ROOT).endsWith(".png")) {
+      return path.resolveSibling(name + ".png");
     }
     return path;
   }
