@@ -152,7 +152,9 @@ public class RestDataSource implements DataSourceProvider {
           String client = intervention.path("clientId").asText();
           java.time.Instant start = java.time.Instant.parse(intervention.path("start").asText());
           java.time.Instant end = java.time.Instant.parse(intervention.path("end").asText());
-          result.add(new Models.Intervention(id, agency, resource, client, title, start, end));
+          JsonNode notesNode = intervention.path("notes");
+          String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
+          result.add(new Models.Intervention(id, agency, resource, client, title, start, end, notes));
         }
       }
       return result;
@@ -173,10 +175,25 @@ public class RestDataSource implements DataSourceProvider {
       payload.put("title", intervention.title());
       payload.put("start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
       payload.put("end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
+      if (intervention.notes() != null) {
+        payload.put("notes", intervention.notes());
+      } else {
+        payload.putNull("notes");
+      }
       post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
       JsonNode node = executeForJson(post);
       String id = node.path("id").asText();
-      return new Models.Intervention(id, intervention.agencyId(), intervention.resourceId(), intervention.clientId(), intervention.title(), intervention.start(), intervention.end());
+      JsonNode notesNode = node.path("notes");
+      String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
+      return new Models.Intervention(
+          id,
+          intervention.agencyId(),
+          intervention.resourceId(),
+          intervention.clientId(),
+          intervention.title(),
+          intervention.start(),
+          intervention.end(),
+          notes);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -194,6 +211,11 @@ public class RestDataSource implements DataSourceProvider {
       payload.put("title", intervention.title());
       payload.put("start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
       payload.put("end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
+      if (intervention.notes() != null) {
+        payload.put("notes", intervention.notes());
+      } else {
+        payload.putNull("notes");
+      }
       put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
       JsonNode node = executeForJson(put);
       return new Models.Intervention(
@@ -203,7 +225,10 @@ public class RestDataSource implements DataSourceProvider {
           node.path("clientId").asText(),
           node.path("title").asText(),
           java.time.Instant.parse(node.path("start").asText()),
-          java.time.Instant.parse(node.path("end").asText()));
+          java.time.Instant.parse(node.path("end").asText()),
+          node.path("notes").isMissingNode() || node.path("notes").isNull()
+              ? null
+              : node.path("notes").asText());
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

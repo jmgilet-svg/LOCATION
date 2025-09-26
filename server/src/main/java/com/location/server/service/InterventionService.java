@@ -42,7 +42,8 @@ public class InterventionService {
       String clientId,
       String title,
       OffsetDateTime start,
-      OffsetDateTime end) {
+      OffsetDateTime end,
+      String notes) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
     }
@@ -57,7 +58,8 @@ public class InterventionService {
     Resource resource = resourceRepository.findById(resourceId).orElseThrow();
     Client client = clientRepository.findById(clientId).orElseThrow();
     Intervention intervention =
-        new Intervention(UUID.randomUUID().toString(), title, start, end, agency, resource, client);
+        new Intervention(
+            UUID.randomUUID().toString(), title, start, end, agency, resource, client, notes);
     return interventionRepository.save(intervention);
   }
 
@@ -69,7 +71,8 @@ public class InterventionService {
       String clientId,
       String title,
       OffsetDateTime start,
-      OffsetDateTime end) {
+      OffsetDateTime end,
+      String notes) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
     }
@@ -93,6 +96,7 @@ public class InterventionService {
     intervention.setTitle(title);
     intervention.setStart(start);
     intervention.setEnd(end);
+    intervention.setNotes(notes);
     return interventionRepository.save(intervention);
   }
 

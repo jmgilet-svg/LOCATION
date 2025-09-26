@@ -223,7 +223,8 @@ public class ApiV1Controller {
             request.clientId(),
             request.title(),
             request.start(),
-            request.end()));
+            request.end(),
+            request.notes()));
   }
 
   @PutMapping("/interventions/{id}")
@@ -237,7 +238,8 @@ public class ApiV1Controller {
             request.clientId(),
             request.title(),
             request.start(),
-            request.end()));
+            request.end(),
+            request.notes()));
   }
 
   @DeleteMapping("/interventions/{id}")

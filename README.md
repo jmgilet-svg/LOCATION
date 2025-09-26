@@ -30,6 +30,7 @@ Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 mvn -B -ntp verify
 mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
 mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+
 ```
 
 ## Sprint 8 — Indisponibilités récurrentes + Tags/Capacité ressources + Export CSV (Full, Mock-ready)

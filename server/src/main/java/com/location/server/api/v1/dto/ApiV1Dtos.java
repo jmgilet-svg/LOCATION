@@ -55,7 +55,8 @@ public final class ApiV1Dtos {
       String resourceId,
       String clientId,
       OffsetDateTime start,
-      OffsetDateTime end) {
+      OffsetDateTime end,
+      String notes) {
     public static InterventionDto of(Intervention intervention) {
       return new InterventionDto(
           intervention.getId(),
@@ -64,7 +65,8 @@ public final class ApiV1Dtos {
           intervention.getResource().getId(),
           intervention.getClient().getId(),
           intervention.getStart(),
-          intervention.getEnd());
+          intervention.getEnd(),
+          intervention.getNotes());
     }
   }
 
@@ -110,7 +112,8 @@ public final class ApiV1Dtos {
       @NotBlank String clientId,
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,
-      @NotNull OffsetDateTime end) {}
+      @NotNull OffsetDateTime end,
+      @Size(max = 4000) String notes) {}
 
   public record UpdateInterventionRequest(
       @NotBlank String agencyId,
@@ -118,7 +121,8 @@ public final class ApiV1Dtos {
       @NotBlank String clientId,
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,
-      @NotNull OffsetDateTime end) {}
+      @NotNull OffsetDateTime end,
+      @Size(max = 4000) String notes) {}
 
   public record CreateUnavailabilityRequest(
       @NotBlank String resourceId,

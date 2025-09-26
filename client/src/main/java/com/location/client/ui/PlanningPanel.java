@@ -322,6 +322,22 @@ public class PlanningPanel extends JPanel {
       paintTile(g2, t);
     }
 
+    g2.setFont(getFont());
+    for (Models.Intervention i : interventions) {
+      if (i.notes() == null || i.notes().isBlank()) {
+        continue;
+      }
+      int r = indexOfResource(i.resourceId());
+      if (r < 0) {
+        continue;
+      }
+      Tile t = tileFor(i, r);
+      int iconX = Math.max(t.x1, t.x2) - 18;
+      int iconY = HEADER_H + r * ROW_H + 18;
+      g2.setColor(new Color(30, 30, 30, 200));
+      g2.drawString("\uD83D\uDCD3", iconX, iconY);
+    }
+
     if (selected != null) {
       int row = indexOfResource(selected.resourceId());
       if (row >= 0) {
@@ -555,7 +571,8 @@ public class PlanningPanel extends JPanel {
             original.clientId(),
             original.title(),
             start,
-            end);
+            end,
+            original.notes());
     try {
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
