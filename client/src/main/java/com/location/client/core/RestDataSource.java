@@ -13,8 +13,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.classic.methods.HttpPut;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -180,6 +182,52 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Models.Intervention updateIntervention(Models.Intervention intervention) {
+    try {
+      ensureLogin();
+      HttpPut put = new HttpPut(baseUrl + "/api/v1/interventions/" + encodeSegment(intervention.id()));
+      ObjectNode payload = om.createObjectNode();
+      payload.put("agencyId", intervention.agencyId());
+      payload.put("resourceId", intervention.resourceId());
+      payload.put("clientId", intervention.clientId());
+      payload.put("title", intervention.title());
+      payload.put("start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
+      payload.put("end", OffsetDateTime.ofInstant(intervention.end(), ZoneOffset.UTC).toString());
+      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(put);
+      return new Models.Intervention(
+          node.path("id").asText(),
+          node.path("agencyId").asText(),
+          node.path("resourceId").asText(),
+          node.path("clientId").asText(),
+          node.path("title").asText(),
+          java.time.Instant.parse(node.path("start").asText()),
+          java.time.Instant.parse(node.path("end").asText()));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteIntervention(String id) {
+    try {
+      ensureLogin();
+      HttpDelete delete = new HttpDelete(baseUrl + "/api/v1/interventions/" + encodeSegment(id));
+      http.execute(
+          delete,
+          res -> {
+            int code = res.getCode();
+            if (code != 204) {
+              throw new IOException("DELETE non OK: " + code);
+            }
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public List<Models.Unavailability> listUnavailabilities(
       OffsetDateTime from, OffsetDateTime to, String resourceId) {
     try {
@@ -241,7 +289,7 @@ public class RestDataSource implements DataSourceProvider {
   public void emailDocument(String documentId, String to, String subject, String body) {
     try {
       ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encode(documentId) + "/email");
+      HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encodeSegment(documentId) + "/email");
       ObjectNode payload = om.createObjectNode();
       if (to == null || to.isBlank()) {
         throw new IllegalArgumentException("Destinataire requis");
@@ -270,7 +318,7 @@ public class RestDataSource implements DataSourceProvider {
 
   public void downloadPdfStub(String documentId, Path target) throws IOException {
     ensureLogin();
-    HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encode(documentId) + "/export/pdf");
+    HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encodeSegment(documentId) + "/export/pdf");
     http.execute(post, response -> {
       int sc = response.getCode();
       HttpEntity entity = response.getEntity();
@@ -369,6 +417,10 @@ public class RestDataSource implements DataSourceProvider {
       }
       throw new IOException("HTTP " + sc + " → " + body);
     });
+  }
+
+  private static String encodeSegment(String value) {
+    return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
   }
 
   private static String encode(String value) {

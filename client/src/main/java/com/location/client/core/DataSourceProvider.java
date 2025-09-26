@@ -18,6 +18,10 @@ public interface DataSourceProvider extends AutoCloseable {
 
   Models.Intervention createIntervention(Models.Intervention intervention);
 
+  Models.Intervention updateIntervention(Models.Intervention intervention);
+
+  void deleteIntervention(String id);
+
   List<Models.Unavailability> listUnavailabilities(
       java.time.OffsetDateTime from, java.time.OffsetDateTime to, String resourceId);
 

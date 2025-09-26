@@ -139,6 +139,43 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Models.Intervention updateIntervention(Models.Intervention intervention) {
+    boolean overlap =
+        interventions.stream()
+            .filter(i -> !i.id().equals(intervention.id()))
+            .anyMatch(
+                i ->
+                    i.resourceId().equals(intervention.resourceId())
+                        && i.end().isAfter(intervention.start())
+                        && i.start().isBefore(intervention.end()));
+    if (overlap) {
+      throw new IllegalStateException("Conflit (MOCK) avec une autre intervention");
+    }
+    boolean unavailable =
+        unavailabilities.stream()
+            .anyMatch(
+                u ->
+                    u.resourceId().equals(intervention.resourceId())
+                        && u.end().isAfter(intervention.start())
+                        && u.start().isBefore(intervention.end()));
+    if (unavailable) {
+      throw new IllegalStateException("Conflit (MOCK) indisponibilité");
+    }
+    for (int i = 0; i < interventions.size(); i++) {
+      if (interventions.get(i).id().equals(intervention.id())) {
+        interventions.set(i, intervention);
+        return intervention;
+      }
+    }
+    throw new IllegalArgumentException("Intervention inconnue");
+  }
+
+  @Override
+  public void deleteIntervention(String id) {
+    interventions.removeIf(i -> i.id().equals(id));
+  }
+
+  @Override
   public List<Models.Unavailability> listUnavailabilities(
       java.time.OffsetDateTime from, java.time.OffsetDateTime to, String resourceId) {
     Instant fromInstant = from != null ? from.toInstant() : null;

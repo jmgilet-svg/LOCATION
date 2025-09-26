@@ -22,4 +22,12 @@ public interface InterventionRepository extends JpaRepository<Intervention, Stri
       @Param("rid") String resourceId,
       @Param("start") OffsetDateTime start,
       @Param("end") OffsetDateTime end);
+
+  @Query(
+      "select count(i) > 0 from Intervention i where i.id <> :id and i.resource.id = :rid and i.end > :start and i.start < :end")
+  boolean existsOverlapExcluding(
+      @Param("id") String id,
+      @Param("rid") String resourceId,
+      @Param("start") OffsetDateTime start,
+      @Param("end") OffsetDateTime end);
 }

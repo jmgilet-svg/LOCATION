@@ -7,6 +7,7 @@ import com.location.server.api.v1.dto.ApiV1Dtos.CreateUnavailabilityRequest;
 import com.location.server.api.v1.dto.ApiV1Dtos.InterventionDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.ResourceDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.UnavailabilityDto;
+import com.location.server.api.v1.dto.ApiV1Dtos.UpdateInterventionRequest;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
 import com.location.server.repo.InterventionRepository;
@@ -27,9 +28,11 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -178,6 +181,26 @@ public class ApiV1Controller {
             request.title(),
             request.start(),
             request.end()));
+  }
+
+  @PutMapping("/interventions/{id}")
+  public InterventionDto update(
+      @PathVariable String id, @Valid @RequestBody UpdateInterventionRequest request) {
+    return InterventionDto.of(
+        interventionService.update(
+            id,
+            request.agencyId(),
+            request.resourceId(),
+            request.clientId(),
+            request.title(),
+            request.start(),
+            request.end()));
+  }
+
+  @DeleteMapping("/interventions/{id}")
+  public ResponseEntity<Void> delete(@PathVariable String id) {
+    interventionService.delete(id);
+    return ResponseEntity.noContent().build();
   }
 
   @PostMapping("/unavailabilities")
