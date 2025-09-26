@@ -244,6 +244,10 @@ public class TopBar extends JPanel {
     }
   }
 
+  public void jumpTo(LocalDate day) {
+    setDay(day);
+  }
+
   public void prevDay() {
     long step = planning.isWeekMode() ? 7L : 1L;
     setDay(planning.getDay().minusDays(step));

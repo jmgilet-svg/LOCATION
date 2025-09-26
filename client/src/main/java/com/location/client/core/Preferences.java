@@ -201,6 +201,80 @@ public class Preferences {
     }
   }
 
+  public java.util.List<String> getBookmarkDays() {
+    String raw = props.getProperty("bookmarks", "");
+    if (raw.isBlank()) {
+      return java.util.List.of();
+    }
+    java.util.List<String> result = new java.util.ArrayList<>();
+    for (String token : raw.split(",")) {
+      String trimmed = token.trim();
+      if (!trimmed.isEmpty() && !result.contains(trimmed)) {
+        result.add(trimmed);
+      }
+    }
+    return result;
+  }
+
+  public void setBookmarkDays(java.util.List<String> days) {
+    if (days == null || days.isEmpty()) {
+      props.remove("bookmarks");
+    } else {
+      props.setProperty("bookmarks", String.join(",", days));
+    }
+  }
+
+  public void addBookmarkDay(String dayIso) {
+    if (dayIso == null || dayIso.isBlank()) {
+      return;
+    }
+    java.util.LinkedHashSet<String> values = new java.util.LinkedHashSet<>(getBookmarkDays());
+    values.add(dayIso);
+    setBookmarkDays(new java.util.ArrayList<>(values));
+  }
+
+  public void removeBookmarkDay(String dayIso) {
+    if (dayIso == null || dayIso.isBlank()) {
+      return;
+    }
+    java.util.List<String> current = new java.util.ArrayList<>(getBookmarkDays());
+    if (current.remove(dayIso)) {
+      setBookmarkDays(current);
+    }
+  }
+
+  public String getResourceColor(String resourceId) {
+    if (resourceId == null || resourceId.isBlank()) {
+      return null;
+    }
+    return props.getProperty("resourceColor." + resourceId);
+  }
+
+  public void setResourceColor(String resourceId, String hex) {
+    if (resourceId == null || resourceId.isBlank()) {
+      return;
+    }
+    if (hex == null || hex.isBlank()) {
+      props.remove("resourceColor." + resourceId);
+    } else {
+      props.setProperty("resourceColor." + resourceId, hex);
+    }
+  }
+
+  public java.util.Map<String, String> getResourceColors() {
+    java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
+    for (String key : props.stringPropertyNames()) {
+      if (key.startsWith("resourceColor.")) {
+        String id = key.substring("resourceColor.".length());
+        String value = props.getProperty(key);
+        if (!id.isBlank() && value != null && !value.isBlank()) {
+          map.put(id, value);
+        }
+      }
+    }
+    return map;
+  }
+
   public boolean isTourShown() {
     return Boolean.parseBoolean(props.getProperty("tourShown", "false"));
   }

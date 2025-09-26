@@ -2,18 +2,20 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
-## UX++ Tranche K+L — Exports CSV & Accessibilité + i18n (FR/EN)
+## ✨ Pack Imagination — Couleurs par ressource, export iCalendar/PNG, signets & générateur de données
 
 ### Ce que livre ce patch (exécutable, côté **client**)
-**K — Exports CSV**
-- **Export Planning (jour)** en CSV (ressource, début, fin, titre, client).
-- **Export Clients** en CSV.
-- Accès via **Fichier → Export CSV (Planning jour)** et **Export CSV (Clients)**.
+- **Couleurs par ressource** : chaque grue/camion/remorque est colorée dans le planning (édition rapide via Outils → Couleurs des ressources).
+- **Exports supplémentaires** :
+  - **ICS** (iCalendar) du **planning du jour** — importable dans Google/Outlook/Apple Calendar.
+  - **PNG** du planning — capture instantanée du composant Swing.
+- **Signets de jour** ⭐ : ajoute le jour courant à une liste de signets pour naviguer instantanément.
+- **Générateur de données** (stress test) : création de lots d’interventions aléatoires (Mock/REST via `createIntervention`) pour tester performance et conflits.
 
-**L — Accessibilité & Internationalisation**
-- **Taille de police ajustable** : `Paramètres → Police +`, `Police −`, `Police par défaut` (persistée).
-- **Contraste élevé** (clair/sombre compatible) : `Paramètres → Contraste élevé` (persisté).
-- **Bascule de langue** **Français/English** (persistée). Les libellés nouveaux utilisent le système i18n.
+### Menus
+- **Fichier → Export ICS (Planning jour)** ; **Fichier → Export PNG (Planning)**.
+- **Affichage → Signets → Ajouter le jour courant** + navigation vers les jours enregistrés.
+- **Outils → Générer des interventions…** (choix du nombre et de la fenêtre horaire) et **Outils → Couleurs des ressources…**.
 
 ### Build & run (client)
 ```bash
