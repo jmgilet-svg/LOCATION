@@ -13,8 +13,11 @@ import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
 import com.location.server.repo.UnavailabilityRepository;
 import com.location.server.service.InterventionService;
+import com.location.server.service.MailGateway;
 import com.location.server.service.UnavailabilityService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.nio.charset.StandardCharsets;
@@ -42,6 +45,7 @@ public class ApiV1Controller {
   private final InterventionService interventionService;
   private final UnavailabilityRepository unavailabilityRepository;
   private final UnavailabilityService unavailabilityService;
+  private final MailGateway mailGateway;
 
   public ApiV1Controller(
       AgencyRepository agencyRepository,
@@ -50,7 +54,8 @@ public class ApiV1Controller {
       InterventionRepository interventionRepository,
       InterventionService interventionService,
       UnavailabilityRepository unavailabilityRepository,
-      UnavailabilityService unavailabilityService) {
+      UnavailabilityService unavailabilityService,
+      MailGateway mailGateway) {
     this.agencyRepository = agencyRepository;
     this.clientRepository = clientRepository;
     this.resourceRepository = resourceRepository;
@@ -58,6 +63,7 @@ public class ApiV1Controller {
     this.interventionService = interventionService;
     this.unavailabilityRepository = unavailabilityRepository;
     this.unavailabilityService = unavailabilityService;
+    this.mailGateway = mailGateway;
   }
 
   @GetMapping("/agencies")
@@ -190,9 +196,17 @@ public class ApiV1Controller {
         .body(pdf);
   }
 
+  public record EmailDocumentRequest(@NotBlank @Email String to, String subject, String body) {}
+
   @PostMapping("/documents/{id}/email")
-  public ResponseEntity<Void> email(@PathVariable String id) {
-    System.out.println("EMAIL STUB for document " + id);
-    return ResponseEntity.ok().build();
+  public ResponseEntity<Void> email(@PathVariable String id, @Valid @RequestBody EmailDocumentRequest request) {
+    byte[] pdf = "%PDF-1.4\n% stub\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    String subject = request.subject() == null || request.subject().isBlank() ? "Document" : request.subject();
+    String body =
+        request.body() == null || request.body().isBlank()
+            ? "Veuillez trouver le document en pièce jointe."
+            : request.body();
+    mailGateway.send(new MailGateway.Mail(request.to(), subject, body, pdf, "document-" + id + ".pdf"));
+    return ResponseEntity.accepted().build();
   }
 }

@@ -72,6 +72,14 @@ public class Preferences {
     props.setProperty("restPass", value);
   }
 
+  public String getLastEmailTo() {
+    return props.getProperty("lastEmailTo", "");
+  }
+
+  public void setLastEmailTo(String value) {
+    props.setProperty("lastEmailTo", value == null ? "" : value);
+  }
+
   public String getFilterAgencyId() {
     return props.getProperty("filterAgencyId");
   }

@@ -3,6 +3,7 @@ package com.location.client.ui;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Font;
@@ -11,6 +12,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Stroke;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Instant;
@@ -52,6 +54,7 @@ public class PlanningPanel extends JPanel {
   private Point dragStart;
   private boolean dragResizeLeft;
   private boolean dragResizeRight;
+  private Models.Intervention selected;
 
   public PlanningPanel(DataSourceProvider dsp) {
     this.dsp = dsp;
@@ -86,6 +89,7 @@ public class PlanningPanel extends JPanel {
   }
 
   public void reload() {
+    String selectedId = getSelectedInterventionId();
     agencies = dsp.listAgencies();
     List<Models.Resource> fetchedResources = dsp.listResources();
     String agency = filterAgencyId;
@@ -119,6 +123,15 @@ public class PlanningPanel extends JPanel {
               .toList();
     }
     interventions = data;
+    if (selectedId != null) {
+      selected =
+          interventions.stream()
+              .filter(i -> selectedId.equals(i.id()))
+              .findFirst()
+              .orElse(null);
+    } else {
+      selected = null;
+    }
 
     List<Models.Unavailability> unav =
         dsp.listUnavailabilities(from, to, normalize(filterResourceId));
@@ -126,6 +139,7 @@ public class PlanningPanel extends JPanel {
         resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
     unavailabilities =
         unav.stream().filter(u -> visibleResourceIds.contains(u.resourceId())).toList();
+    repaint();
   }
 
   private String normalize(String value) {
@@ -209,6 +223,21 @@ public class PlanningPanel extends JPanel {
     return unavailabilities;
   }
 
+  public Models.Intervention getSelected() {
+    return selected;
+  }
+
+  public String getSelectedInterventionId() {
+    return selected == null ? null : selected.id();
+  }
+
+  public void clearSelection() {
+    if (selected != null) {
+      selected = null;
+      repaint();
+    }
+  }
+
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
@@ -261,6 +290,22 @@ public class PlanningPanel extends JPanel {
       if (r < 0) continue;
       Tile t = tileFor(i, r);
       paintTile(g2, t);
+    }
+
+    if (selected != null) {
+      int row = indexOfResource(selected.resourceId());
+      if (row >= 0) {
+        Tile t = tileFor(selected, row);
+        int x = Math.min(t.x1, t.x2);
+        int w = Math.max(16, Math.abs(t.x2 - t.x1));
+        int y = HEADER_H + row * ROW_H + 4;
+        int height = ROW_H - 8;
+        Stroke old = g2.getStroke();
+        g2.setColor(new Color(255, 200, 0, 180));
+        g2.setStroke(new BasicStroke(3f));
+        g2.drawRoundRect(x - 4, y, w + 8, height, 14, 14);
+        g2.setStroke(old);
+      }
     }
 
     if (dragTile != null) {
@@ -386,11 +431,19 @@ public class PlanningPanel extends JPanel {
     dragResizeLeft = false;
     dragResizeRight = false;
     if (ot.isPresent()) {
+      selected = ot.get().i;
+      repaint();
       dragTile = ot.get();
       int x = Math.min(dragTile.x1, dragTile.x2);
       int w = Math.max(16, Math.abs(dragTile.x2 - dragTile.x1));
       if (Math.abs(p.x - x) <= 5) dragResizeLeft = true;
       else if (Math.abs(p.x - (x + w)) <= 5) dragResizeRight = true;
+    } else {
+      dragTile = null;
+      if (selected != null) {
+        selected = null;
+        repaint();
+      }
     }
   }
 

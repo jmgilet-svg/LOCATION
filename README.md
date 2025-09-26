@@ -2,33 +2,34 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
-## Sprint 5 — Indisponibilités Ressource, Conflits & UI (Full)
+## Sprint 6 — Emailing PDF (stub), Sélection & Actions (Full)
 
 ### Nouveautés
-- **Indisponibilités** (maintenance, panne, congés chauffeur) par ressource :
-  - Backend : entité `Unavailability` + endpoints **REST** `/api/v1/unavailabilities` (`GET`, `POST`).
-  - **Règles de conflit** : création d'une **intervention** refusée si elle chevauche une indisponibilité de la ressource (**409 Conflict**).
-  - **Règles d'intégrité** : interdiction de créer une indisponibilité qui chevauche une intervention existante (409).
-- **UI Planning** : affichage des indisponibilités en **bandes rouges hachurées** derrière les tuiles, tooltip, et **menu** pour en créer.
-- **Mode Mock** : parité fonctionnelle (liste/création + détection de conflits).
-- **Prefs** : inchangées (les filtres/date continuent d'être persistés).
+- **Emailing de PDF** (stub **dev**) côté backend :
+  - Endpoint `POST /api/v1/documents/{id}/email` body `{to,subject,body}` → `202 Accepted`.
+  - Service `MailGateway` abstrait ; impl **DevMailGateway** loggue l’envoi (sans SMTP).
+  - Réutilise l’export PDF existant (stub) pour simuler la pièce jointe.
+- **Client Swing** :
+  - **Sélection d’intervention** par clic dans le planning (tuile avec halo).
+  - Action **“Envoyer PDF par email…”** (menu *Fichier*) : saisie destinataire/objet/corps, envoi via REST.
+  - En **mode Mock**, l’action affiche un message de simulation.
+- **Prefs** : mémorisation du dernier destinataire (`lastEmailTo`).
+
+### Comment utiliser
+1. Lancer le serveur (profil dev) et le client en REST.
+2. Cliquer une tuile pour la sélectionner.
+3. Menu **Fichier → Envoyer PDF par email…** ; renseigner le mail ; valider.
 
 ### Endpoints ajoutés
-- `GET  /api/v1/unavailabilities?from&to&resourceId`
-- `POST /api/v1/unavailabilities` (validation + anti-chevauchement avec interventions et autres indispos)
-
-### Migrations DB
-- `V4__unavailability.sql`
+- `POST /api/v1/documents/{id}/email`
 
 ### Tests
-- Service : intervention refusée si chevauche **indisponibilité** (409).
-- WebMvc : création d’indisponibilité refusée en cas de chevauchement avec intervention existante (409).
+- WebMvc : email → `202 Accepted` et payload requis.
 
-### Utilisation rapide
 ```bash
 mvn -B -ntp verify
 mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
-mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=mock
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
 ```
 
 ## Auth & SSE
