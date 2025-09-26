@@ -2,6 +2,28 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 8 — Planning interactif (drag, move, resize, hover) + détection visuelle des conflits
+
+### Livrables
+**Client Swing**
+- Nouveau **PlanningPanel** interactif (jour / semaine) :
+  - **Glisser‑déposer** : déplacer une intervention sur la grille ou la **redimensionner** (poignées haut/bas).
+  - **Création rapide** par **double‑clic** sur un créneau (choix client/ressource/chauffeur).
+  - **Conflits** : si le backend (ou le mock) renvoie **409**, la tuile clignote en **rouge** et l’action est **annulée** avec un message.
+  - **Tooltips** riches au survol (client, ressource, chauffeur, durée, HT estimée si dispo).
+  - **Zoom Jour/Semaine** via `Affichage → Zoom` (existant), le layout s’adapte.
+- Intégration avec `DataSourceProvider` existant (`listInterventions`, `saveIntervention`, `deleteIntervention`).  
+  Compatible **REST** et **Mock** (les règles de conflit sont déjà présentes côté Mock).
+
+**Backend / Mock**
+- Aucun changement d’API requis dans cette étape (on s’appuie sur `/api/v1/interventions` livrée en Étape 7).
+
+### Utilisation
+- Ouvrir l’appli, aller dans **Affichage** → **Zoom** (Jour / Semaine), puis interagir :
+  - **Déplacer** : drag sur la tuile → la requête `PUT /interventions/{id}` est appelée.
+  - **Redimensionner** : saisir les poignées haut/bas.
+  - **Double‑clic** pour créer une intervention : un petit formulaire s’ouvre.
+
 ## Étape 7 — Interventions (API v1) + Détection de conflits (ressource & chauffeur)
 
 ### Ce que cette étape livre
