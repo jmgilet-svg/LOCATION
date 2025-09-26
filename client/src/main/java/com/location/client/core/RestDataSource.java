@@ -179,6 +179,65 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public List<Models.Unavailability> listUnavailabilities(
+      OffsetDateTime from, OffsetDateTime to, String resourceId) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v1/unavailabilities");
+      List<String> params = new ArrayList<>();
+      if (from != null) {
+        params.add("from=" + encode(from.toString()));
+      }
+      if (to != null) {
+        params.add("to=" + encode(to.toString()));
+      }
+      if (resourceId != null) {
+        params.add("resourceId=" + encode(resourceId));
+      }
+      if (!params.isEmpty()) {
+        url.append('?').append(String.join("&", params));
+      }
+      JsonNode node = executeForJson(new HttpGet(url.toString()));
+      List<Models.Unavailability> result = new ArrayList<>();
+      if (node.isArray()) {
+        for (JsonNode unav : node) {
+          String id = unav.path("id").asText();
+          String rid = unav.path("resourceId").asText();
+          String reason = unav.path("reason").asText();
+          java.time.Instant start = java.time.Instant.parse(unav.path("start").asText());
+          java.time.Instant end = java.time.Instant.parse(unav.path("end").asText());
+          result.add(new Models.Unavailability(id, rid, reason, start, end));
+        }
+      }
+      return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Unavailability createUnavailability(Models.Unavailability unavailability) {
+    try {
+      ensureLogin();
+      HttpPost post = new HttpPost(baseUrl + "/api/v1/unavailabilities");
+      ObjectNode payload = om.createObjectNode();
+      payload.put("resourceId", unavailability.resourceId());
+      payload.put(
+          "start", OffsetDateTime.ofInstant(unavailability.start(), ZoneOffset.UTC).toString());
+      payload.put(
+          "end", OffsetDateTime.ofInstant(unavailability.end(), ZoneOffset.UTC).toString());
+      payload.put("reason", unavailability.reason());
+      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(post);
+      String id = node.path("id").asText();
+      return new Models.Unavailability(
+          id, unavailability.resourceId(), unavailability.reason(), unavailability.start(), unavailability.end());
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public void downloadPdfStub(String documentId, Path target) throws IOException {
     ensureLogin();
     HttpPost post = new HttpPost(baseUrl + "/api/v1/documents/" + encode(documentId) + "/export/pdf");

@@ -2,30 +2,34 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
-## Sprint 4 — Filtres, Navigation Jour & Export CSV REST (Full)
+## Sprint 5 — Indisponibilités Ressource, Conflits & UI (Full)
 
-### Nouvelles fonctionnalités
-- **Navigation jour** (← / → et sélecteur de date) dans le planning.
-- **Filtres** : Agence, Ressource, Client, Recherche texte (titre).
-- **Export CSV côté serveur** : `GET /api/v1/interventions/csv?from&to&resourceId&clientId&q` (UTF‑8, `text/csv` avec `Content-Disposition`).
-- **Export CSV côté client** (Mock ou REST) depuis menu Fichier ou `Ctrl+E`.
-- **Préférences** : persistance des derniers filtres et de la dernière date (`~/.location/app.properties`).
-- **Accessibilité** : focus clair, raccourcis `Ctrl+←/→` pour naviguer dans les jours.
+### Nouveautés
+- **Indisponibilités** (maintenance, panne, congés chauffeur) par ressource :
+  - Backend : entité `Unavailability` + endpoints **REST** `/api/v1/unavailabilities` (`GET`, `POST`).
+  - **Règles de conflit** : création d'une **intervention** refusée si elle chevauche une indisponibilité de la ressource (**409 Conflict**).
+  - **Règles d'intégrité** : interdiction de créer une indisponibilité qui chevauche une intervention existante (409).
+- **UI Planning** : affichage des indisponibilités en **bandes rouges hachurées** derrière les tuiles, tooltip, et **menu** pour en créer.
+- **Mode Mock** : parité fonctionnelle (liste/création + détection de conflits).
+- **Prefs** : inchangées (les filtres/date continuent d'être persistés).
 
-### Démarrage rapide
+### Endpoints ajoutés
+- `GET  /api/v1/unavailabilities?from&to&resourceId`
+- `POST /api/v1/unavailabilities` (validation + anti-chevauchement avec interventions et autres indispos)
+
+### Migrations DB
+- `V4__unavailability.sql`
+
+### Tests
+- Service : intervention refusée si chevauche **indisponibilité** (409).
+- WebMvc : création d’indisponibilité refusée en cas de chevauchement avec intervention existante (409).
+
+### Utilisation rapide
 ```bash
 mvn -B -ntp verify
 mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
-# Client
 mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=mock
 ```
-
-### Endpoints ajoutés
-- `GET /api/v1/interventions/csv?from&to&resourceId&clientId&q` → CSV
-
-### Tests
-- WebMvc : CSV 200 + header `attachment`.
-- UI : simple test de persistance des préférences.
 
 ## Auth & SSE
 - `POST /auth/login` → `{ "token": "..." }`

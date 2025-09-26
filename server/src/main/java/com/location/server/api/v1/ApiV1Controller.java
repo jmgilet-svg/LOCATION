@@ -3,13 +3,17 @@ package com.location.server.api.v1;
 import com.location.server.api.v1.dto.ApiV1Dtos.AgencyDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.ClientDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.CreateInterventionRequest;
+import com.location.server.api.v1.dto.ApiV1Dtos.CreateUnavailabilityRequest;
 import com.location.server.api.v1.dto.ApiV1Dtos.InterventionDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.ResourceDto;
+import com.location.server.api.v1.dto.ApiV1Dtos.UnavailabilityDto;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
 import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
+import com.location.server.repo.UnavailabilityRepository;
 import com.location.server.service.InterventionService;
+import com.location.server.service.UnavailabilityService;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -36,18 +40,24 @@ public class ApiV1Controller {
   private final ResourceRepository resourceRepository;
   private final InterventionRepository interventionRepository;
   private final InterventionService interventionService;
+  private final UnavailabilityRepository unavailabilityRepository;
+  private final UnavailabilityService unavailabilityService;
 
   public ApiV1Controller(
       AgencyRepository agencyRepository,
       ClientRepository clientRepository,
       ResourceRepository resourceRepository,
       InterventionRepository interventionRepository,
-      InterventionService interventionService) {
+      InterventionService interventionService,
+      UnavailabilityRepository unavailabilityRepository,
+      UnavailabilityService unavailabilityService) {
     this.agencyRepository = agencyRepository;
     this.clientRepository = clientRepository;
     this.resourceRepository = resourceRepository;
     this.interventionRepository = interventionRepository;
     this.interventionService = interventionService;
+    this.unavailabilityRepository = unavailabilityRepository;
+    this.unavailabilityService = unavailabilityService;
   }
 
   @GetMapping("/agencies")
@@ -63,6 +73,22 @@ public class ApiV1Controller {
   @GetMapping("/resources")
   public List<ResourceDto> resources() {
     return resourceRepository.findAll().stream().map(ResourceDto::of).collect(Collectors.toList());
+  }
+
+  @GetMapping("/unavailabilities")
+  public List<UnavailabilityDto> unavailabilities(
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to,
+      @RequestParam(required = false) String resourceId) {
+    return unavailabilityRepository
+        .search(from, to, resourceId)
+        .stream()
+        .map(UnavailabilityDto::of)
+        .collect(Collectors.toList());
   }
 
   @GetMapping("/interventions")
@@ -146,6 +172,14 @@ public class ApiV1Controller {
             request.title(),
             request.start(),
             request.end()));
+  }
+
+  @PostMapping("/unavailabilities")
+  public UnavailabilityDto createUnavailability(
+      @Valid @RequestBody CreateUnavailabilityRequest request) {
+    return UnavailabilityDto.of(
+        unavailabilityService.create(
+            request.resourceId(), request.start(), request.end(), request.reason()));
   }
 
   @PostMapping(value = "/documents/{id}/export/pdf", produces = MediaType.APPLICATION_PDF_VALUE)

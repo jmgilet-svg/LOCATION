@@ -22,6 +22,8 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.ToolTipManager;
@@ -32,6 +34,7 @@ public class PlanningPanel extends JPanel {
   private List<Models.Resource> resources = List.of();
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
+  private List<Models.Unavailability> unavailabilities = List.of();
   private LocalDate day = LocalDate.now();
   private String filterAgencyId;
   private String filterResourceId;
@@ -116,6 +119,13 @@ public class PlanningPanel extends JPanel {
               .toList();
     }
     interventions = data;
+
+    List<Models.Unavailability> unav =
+        dsp.listUnavailabilities(from, to, normalize(filterResourceId));
+    Set<String> visibleResourceIds =
+        resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
+    unavailabilities =
+        unav.stream().filter(u -> visibleResourceIds.contains(u.resourceId())).toList();
   }
 
   private String normalize(String value) {
@@ -195,6 +205,10 @@ public class PlanningPanel extends JPanel {
     return interventions;
   }
 
+  public List<Models.Unavailability> getUnavailabilities() {
+    return unavailabilities;
+  }
+
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
@@ -228,6 +242,18 @@ public class PlanningPanel extends JPanel {
       g2.setColor(Color.DARK_GRAY);
       g2.drawString(resources.get(r).name(), 8, y + 18);
       g2.setColor(Color.GRAY);
+    }
+
+    for (Models.Unavailability unav : unavailabilities) {
+      int row = indexOfResource(unav.resourceId());
+      if (row < 0) {
+        continue;
+      }
+      int x1 = xForInstant(unav.start());
+      int x2 = xForInstant(unav.end());
+      int y = HEADER_H + row * ROW_H + 6;
+      int height = ROW_H - 12;
+      paintHatched(g2, Math.min(x1, x2), y, Math.max(12, Math.abs(x2 - x1)), height);
     }
 
     for (Models.Intervention i : interventions) {
@@ -299,6 +325,18 @@ public class PlanningPanel extends JPanel {
     g2.setColor(Color.WHITE);
     g2.setFont(getFont().deriveFont(Font.BOLD));
     g2.drawString(t.i.title(), x + 8, y + 18);
+  }
+
+  private void paintHatched(Graphics2D g2, int x, int y, int width, int height) {
+    Color base = new Color(219, 68, 55, 60);
+    g2.setColor(base);
+    g2.fillRoundRect(x, y, width, height, 10, 10);
+    g2.setColor(new Color(219, 68, 55, 140));
+    for (int i = x - height; i < x + width; i += 8) {
+      g2.drawLine(i, y, i + height, y + height);
+    }
+    g2.setColor(new Color(180, 0, 0, 120));
+    g2.drawRoundRect(x, y, width, height, 10, 10);
   }
 
   private boolean hasConflict(Tile t) {

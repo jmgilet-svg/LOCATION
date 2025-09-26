@@ -19,4 +19,7 @@ public final class Models {
       String title,
       Instant start,
       Instant end) {}
+
+  public record Unavailability(
+      String id, String resourceId, String reason, Instant start, Instant end) {}
 }
