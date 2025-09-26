@@ -2,6 +2,29 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 11 — Modèles documents versionnés (HTML) + Email groupé (full Back/Front/Mock)
+
+### Nouveautés
+**Backend**
+- **DocumentTemplate** (par **agence** + **type de document**) : stockage HTML (version active).
+- API `/api/v1/templates/doc/{docType}` :
+  - `GET` → modèle actif (ou vide).
+  - `PUT` → enregistre/active un modèle (remplace l’actif).
+- **Email groupé** : `POST /api/v1/docs/email-batch` avec `{ "ids":[...], "to":"client@x.tld", "subject":"", "message":"" }`.
+  - Utilise l’API de génération PDF existante + fusion des modèles email si `subject/message` vides (cf. Étape 5).
+- **Flyway** `V11__document_template.sql`.
+
+**Client Swing**
+- **Éditeur de modèles document** (HTML) : **Paramètres → Modèles document** (par type : Devis/Commande/BL/Facture).
+  - Sauvegarde côté backend (ou **mock** en mémoire).
+- **Email groupé** : dans la fenêtre **Documents**, bouton **Email groupé** → saisie d’un destinataire, envoi pour tous les IDs indiqués (sélection via champ texte — minimaliste et fiable dans toutes les variantes de table).
+
+**Mock**
+- Persistance **in‑memory** des modèles document + no‑op pour les emails groupés.
+
+### Remarques
+Le rendu PDF continue d’utiliser le gabarit par défaut. Les modèles HTML stockés sont prêts pour intégration au moteur HTML→PDF (prochaine étape d’activation transparente).
+
 ## Étape 10 — Indisponibilités récurrentes + Tags & Capacité des ressources (full Back/Front/Mock)
 
 ### Livré dans cette étape

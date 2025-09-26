@@ -320,11 +320,20 @@ public class MainFrame extends JFrame {
                 new EmailTemplatesFrame(dsp).setVisible(true);
               }
             });
+    JMenuItem docHtmlTmpl =
+        new JMenuItem(
+            new AbstractAction("Modèles document (HTML)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new DocTemplatesFrame(dsp).setVisible(true);
+              }
+            });
     settings.add(switchSrc);
     settings.add(cfg);
     settings.add(loginItem);
     settings.add(tmpl);
     settings.add(docTmpl);
+    settings.add(docHtmlTmpl);
 
     JMenu help = new JMenu("Aide");
     JMenuItem about = new JMenuItem("À propos & fonctionnalités serveur");

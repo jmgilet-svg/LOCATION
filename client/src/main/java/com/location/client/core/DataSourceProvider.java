@@ -74,4 +74,9 @@ public interface DataSourceProvider extends AutoCloseable {
 
   Models.EmailTemplate saveEmailTemplate(String docType, String subject, String body);
 
+  Models.DocTemplate getDocTemplate(String docType);
+
+  Models.DocTemplate saveDocTemplate(String docType, String html);
+
+  void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message);
 }

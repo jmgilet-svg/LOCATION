@@ -32,6 +32,7 @@ public class MockDataSource implements DataSourceProvider {
   private final Map<String, Models.EmailTemplate> agencyTemplates = new HashMap<>();
   private final Map<String, Map<String, Integer>> docSequences = new HashMap<>();
   private final Map<String, Map<String, Models.EmailTemplate>> docTemplates = new HashMap<>();
+  private final Map<String, Map<String, Models.DocTemplate>> docHtmlTemplates = new HashMap<>();
   private static final Pattern DOC_REF_PATTERN = Pattern.compile("(DV|BC|BL|FA)-(\\d{4})-(\\d{4})");
   private final List<Models.Doc> docs = new ArrayList<>();
 
@@ -71,6 +72,7 @@ public class MockDataSource implements DataSourceProvider {
     agencyTemplates.clear();
     docSequences.clear();
     docTemplates.clear();
+    docHtmlTemplates.clear();
     docs.clear();
 
     var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
@@ -103,6 +105,13 @@ public class MockDataSource implements DataSourceProvider {
             new Models.EmailTemplate(
                 "Facture {{docRef}}",
                 "Bonjour {{clientName}},\nVeuillez trouver votre facture {{docRef}} (montant TTC : {{totalTtc}} €)."));
+
+    docHtmlTemplates
+        .computeIfAbsent(a1.id(), k -> new HashMap<>())
+        .put("QUOTE", new Models.DocTemplate("<h1>Devis {{docRef}}</h1>"));
+    docHtmlTemplates
+        .computeIfAbsent(a1.id(), k -> new HashMap<>())
+        .put("INVOICE", new Models.DocTemplate("<h1>Facture {{docRef}}</h1>"));
 
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
@@ -645,6 +654,22 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Models.DocTemplate getDocTemplate(String docType) {
+    var templates = docHtmlTemplates.getOrDefault(currentAgencyId, java.util.Map.of());
+    return templates.getOrDefault(docType, new Models.DocTemplate(""));
+  }
+
+  @Override
+  public Models.DocTemplate saveDocTemplate(String docType, String html) {
+    if (currentAgencyId == null || currentAgencyId.isBlank()) {
+      throw new IllegalStateException("Agence courante non définie (Mock)");
+    }
+    Models.DocTemplate template = new Models.DocTemplate(html);
+    docHtmlTemplates.computeIfAbsent(currentAgencyId, k -> new HashMap<>()).put(docType, template);
+    return template;
+  }
+
+  @Override
   public java.nio.file.Path downloadDocPdf(String id, java.nio.file.Path target) {
     throw new UnsupportedOperationException(
         "Export PDF docs indisponible en mode Mock (pas d'écriture disque).");
@@ -652,6 +677,11 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public void emailDoc(String id, String to, String subject, String message) {
+    // Simulation : aucun envoi réel en mode Mock.
+  }
+
+  @Override
+  public void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message) {
     // Simulation : aucun envoi réel en mode Mock.
   }
 

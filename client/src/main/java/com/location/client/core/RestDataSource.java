@@ -893,6 +893,84 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public Models.DocTemplate getDocTemplate(String docType) {
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(
+              () -> new HttpGet(baseUrl + "/api/v1/templates/doc/" + encodeSegment(docType)));
+      if (node.isNull() || node.isMissingNode()) {
+        return new Models.DocTemplate("");
+      }
+      return new Models.DocTemplate(node.path("html").asText(""));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.DocTemplate saveDocTemplate(String docType, String html) {
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPut put =
+                    new HttpPut(baseUrl + "/api/v1/templates/doc/" + encodeSegment(docType));
+                ObjectNode payload = om.createObjectNode();
+                payload.put("html", html);
+                put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return put;
+              });
+      return new Models.DocTemplate(node.path("html").asText(""));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message) {
+    try {
+      ensureLogin();
+      execute(
+          () -> {
+            HttpPost post = new HttpPost(baseUrl + "/api/v1/docs/email-batch");
+            ObjectNode payload = om.createObjectNode();
+            ArrayNode arr = payload.putArray("ids");
+            ids.forEach(arr::add);
+            payload.put("to", to);
+            if (subject == null || subject.isBlank()) {
+              payload.putNull("subject");
+            } else {
+              payload.put("subject", subject);
+            }
+            if (message == null || message.isBlank()) {
+              payload.putNull("message");
+            } else {
+              payload.put("message", message);
+            }
+            post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+            return post;
+          },
+          res -> {
+            int code = res.getCode();
+            if (code != 202) {
+              String body =
+                  res.getEntity() == null
+                      ? ""
+                      : new String(
+                          res.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
+              throw new IOException("Email batch HTTP " + code + " → " + body);
+            }
+            EntityUtils.consumeQuietly(res.getEntity());
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   public Path downloadCsvInterventions(
       OffsetDateTime from,
       OffsetDateTime to,

@@ -12,6 +12,7 @@ import com.location.server.service.TemplateService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -157,31 +158,50 @@ public class CommercialDocumentController {
   @PostMapping("/{id}/email")
   public ResponseEntity<Void> email(@PathVariable String id, @Valid @RequestBody EmailRequest request) {
     CommercialDocument document = documentRepository.findById(id).orElseThrow();
+    MailGateway.Mail mail = buildMail(request.to, request.subject, request.message, document);
+    mailGateway.send(mail);
+    return ResponseEntity.accepted().build();
+  }
+
+  @PostMapping("/email-batch")
+  public ResponseEntity<Void> emailBatch(@Valid @RequestBody EmailBatchRequest request) {
+    for (String documentId : request.ids()) {
+      CommercialDocument document = documentRepository.findById(documentId).orElseThrow();
+      MailGateway.Mail mail =
+          buildMail(request.to(), request.subject(), request.message(), document);
+      mailGateway.send(mail);
+    }
+    return ResponseEntity.accepted().build();
+  }
+
+  private MailGateway.Mail buildMail(
+      String to, String subject, String message, CommercialDocument document) {
     byte[] pdf = pdfService.build(document);
-    String subject = request.subject;
-    String body = request.message;
-    if ((subject == null || subject.isBlank()) || (body == null || body.isBlank())) {
+    String effectiveSubject = subject;
+    String effectiveBody = message;
+    if ((effectiveSubject == null || effectiveSubject.isBlank())
+        || (effectiveBody == null || effectiveBody.isBlank())) {
       var optionalTemplate =
-          templateService.findDocumentTemplate(document.getAgency().getId(), document.getType());
+          templateService.findDocumentEmailTemplate(
+              document.getAgency().getId(), document.getType());
       if (optionalTemplate.isPresent()) {
         var template = optionalTemplate.get();
         var bindings = templateService.documentBindings(document);
-        if (subject == null || subject.isBlank()) {
-          subject = templateService.merge(template.getSubject(), bindings);
+        if (effectiveSubject == null || effectiveSubject.isBlank()) {
+          effectiveSubject = templateService.merge(template.getSubject(), bindings);
         }
-        if (body == null || body.isBlank()) {
-          body = templateService.merge(template.getBody(), bindings);
+        if (effectiveBody == null || effectiveBody.isBlank()) {
+          effectiveBody = templateService.merge(template.getBody(), bindings);
         }
       }
     }
-    if (subject == null || subject.isBlank()) {
-      subject = titleFor(document);
+    if (effectiveSubject == null || effectiveSubject.isBlank()) {
+      effectiveSubject = titleFor(document);
     }
-    if (body == null || body.isBlank()) {
-      body = "Bonjour,\nVeuillez trouver le document en pièce jointe.";
+    if (effectiveBody == null || effectiveBody.isBlank()) {
+      effectiveBody = "Bonjour,\nVeuillez trouver le document en pièce jointe.";
     }
-    mailGateway.send(new MailGateway.Mail(request.to, subject, body, pdf, filenameFor(document)));
-    return ResponseEntity.accepted().build();
+    return new MailGateway.Mail(to, effectiveSubject, effectiveBody, pdf, filenameFor(document));
   }
 
   private static DocDto toDto(CommercialDocument document) {
@@ -255,4 +275,7 @@ public class CommercialDocumentController {
   public record UpdateDocRequest(String reference, @NotBlank String title, List<@Valid DocLineDto> lines) {}
 
   public record EmailRequest(@NotBlank @Email String to, String subject, String message) {}
+
+  public record EmailBatchRequest(
+      @NotEmpty List<String> ids, @NotBlank @Email String to, String subject, String message) {}
 }
