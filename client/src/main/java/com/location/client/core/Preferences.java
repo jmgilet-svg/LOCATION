@@ -167,4 +167,12 @@ public class Preferences {
       props.setProperty("dayIso", value);
     }
   }
+
+  public boolean isTourShown() {
+    return Boolean.parseBoolean(props.getProperty("tourShown", "false"));
+  }
+
+  public void setTourShown(boolean value) {
+    props.setProperty("tourShown", Boolean.toString(value));
+  }
 }

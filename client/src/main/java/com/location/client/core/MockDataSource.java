@@ -227,6 +227,11 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public void resetDemo() {
+    resetDemoData();
+  }
+
+  @Override
   public List<Models.Agency> listAgencies() {
     return List.copyOf(agencies);
   }

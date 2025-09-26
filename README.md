@@ -2,6 +2,19 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## UX++ Tranche G+H — Onboarding (tour guidé) & Notifications (toasts + activité)
+
+### Ce que livre ce patch (exécutable)
+**G — Onboarding & données démo**
+- **Tour guidé interactif** (coach marks) : démarre au premier lancement et via **Aide → Démarrer le tour**.
+- **Réinitialiser la démo** (Mock/REST) : **Aide → Réinitialiser la démo** appelle `DataSourceProvider.resetDemo()`.
+- Persistance `~/.location/app.properties` (`tourShown=true`) pour ne montrer le tour automatique qu’une fois.
+
+**H — Notifications & activité récente**
+- **Toasts** non bloquants (succès/info/erreur) en bas‑droite.
+- **Activité récente** : panneau compact listant les dernières actions (création, duplication, suppression, déplacements…). Accessible via **Affichage → Activité récente** ou le bouton dans la barre de status.
+- Intégration : duplication/suppression/déplacements affichent des toasts et s’enregistrent dans l’activité.
+
 ## UX++ Tranche E+F — Édition inline + Raccourcis & actions rapides
 
 ### Ce que livre ce patch (exécutable)

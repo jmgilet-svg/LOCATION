@@ -189,6 +189,13 @@ public class QuickEditDialog extends JDialog {
               newEnd,
               base.notes());
       Models.Intervention saved = dsp.updateIntervention(payload);
+      ActivityCenter.log("Intervention mise à jour " + saved.id());
+      Window owner = getOwner();
+      if (owner instanceof MainFrame mf) {
+        mf.toastSuccess("Modifications enregistrées");
+      } else {
+        Toast.success(owner, "Modifications enregistrées");
+      }
       if (listener != null) {
         listener.onSaved(saved);
       }
