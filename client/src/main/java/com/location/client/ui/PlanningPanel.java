@@ -7,6 +7,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.GridLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
@@ -38,10 +39,18 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.swing.AbstractAction;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
 import javax.swing.JPanel;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.JTextField;
+import javax.swing.Timer;
 import javax.swing.ToolTipManager;
 
 public class PlanningPanel extends JPanel {
@@ -65,6 +74,7 @@ public class PlanningPanel extends JPanel {
   private static final int START_HOUR = 7;
   private static final int SLOT_MINUTES = 15;
   private static final DayOfWeek WEEK_START = DayOfWeek.MONDAY;
+  private static final Duration DEFAULT_CREATE_DURATION = Duration.ofHours(2);
 
   private int colWidth;
   private Tile dragTile;
@@ -73,6 +83,9 @@ public class PlanningPanel extends JPanel {
   private boolean dragResizeRight;
   private Models.Intervention selected;
   private boolean weekMode;
+  private String flashingInterventionId;
+  private double flashingPhase;
+  private Timer flashingTimer;
 
   public PlanningPanel(DataSourceProvider dsp) {
     this.dsp = dsp;
@@ -170,9 +183,120 @@ public class PlanningPanel extends JPanel {
       public void mouseMoved(MouseEvent e) {
         updateCursor(e.getPoint());
       }
+
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
+          createAt(e.getPoint());
+        }
+      }
     };
     addMouseListener(adapter);
     addMouseMotionListener(adapter);
+  }
+
+  private void createAt(Point p) {
+    if (p.y < HEADER_H || resources.isEmpty() || clients.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    if (findTileAt(p).isPresent()) {
+      return;
+    }
+    int row = (p.y - HEADER_H) / ROW_H;
+    if (row < 0 || row >= resources.size()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    Models.Resource resource = resources.get(row);
+    Instant start = alignToSlot(instantForX(p.x));
+    JComboBox<Models.Client> clientCombo = new JComboBox<>(clients.toArray(new Models.Client[0]));
+    clientCombo.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              javax.swing.JList<?> list,
+              Object value,
+              int index,
+              boolean isSelected,
+              boolean cellHasFocus) {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            if (value instanceof Models.Client client) {
+              setText(client.name());
+            }
+            return this;
+          }
+        });
+    JTextField titleField = new JTextField("Nouvelle intervention", 20);
+    JTextField driverField = new JTextField(15);
+    JSpinner durationSpinner =
+        new JSpinner(
+            new SpinnerNumberModel(
+                (int) DEFAULT_CREATE_DURATION.toMinutes(),
+                SLOT_MINUTES,
+                HOURS * 60,
+                SLOT_MINUTES));
+
+    ZonedDateTime zonedStart = start.atZone(ZoneId.systemDefault());
+    JPanel panel = new JPanel(new GridLayout(0, 2, 6, 6));
+    panel.add(new JLabel("Ressource:"));
+    panel.add(new JLabel(resource.name()));
+    panel.add(new JLabel("Date:"));
+    panel.add(new JLabel(zonedStart.toLocalDate().toString()));
+    panel.add(new JLabel("Début:"));
+    panel.add(new JLabel(zonedStart.toLocalTime().truncatedTo(ChronoUnit.MINUTES).toString()));
+    panel.add(new JLabel("Durée (min):"));
+    panel.add(durationSpinner);
+    panel.add(new JLabel("Client:"));
+    panel.add(clientCombo);
+    panel.add(new JLabel("Chauffeur (id):"));
+    panel.add(driverField);
+    panel.add(new JLabel("Titre:"));
+    panel.add(titleField);
+
+    int option =
+        JOptionPane.showConfirmDialog(
+            SwingUtilities.getWindowAncestor(this),
+            panel,
+            "Créer une intervention",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+    if (option != JOptionPane.OK_OPTION) {
+      return;
+    }
+    Models.Client client = (Models.Client) clientCombo.getSelectedItem();
+    if (client == null) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(this, "Sélectionnez un client valide.");
+      return;
+    }
+    String title = titleField.getText().isBlank() ? "Nouvelle intervention" : titleField.getText().trim();
+    String driverId = driverField.getText().isBlank() ? null : driverField.getText().trim();
+    int minutes = ((Number) durationSpinner.getValue()).intValue();
+    Instant end = start.plus(Duration.ofMinutes(minutes));
+    Models.Intervention payload =
+        new Models.Intervention(
+            null,
+            resource.agencyId(),
+            resource.id(),
+            client.id(),
+            driverId,
+            title,
+            start,
+            end,
+            null);
+    try {
+      Models.Intervention created = dsp.createIntervention(payload);
+      selected = created;
+      reload();
+    } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible de créer l'intervention: " + ex.getMessage(),
+          "Erreur",
+          JOptionPane.ERROR_MESSAGE);
+    }
   }
 
   public void setWeekMode(boolean week) {
@@ -558,6 +682,40 @@ public class PlanningPanel extends JPanel {
     return ldt.atZone(ZoneId.systemDefault()).toInstant();
   }
 
+  private Instant alignToSlot(Instant instant) {
+    ZonedDateTime zoned = instant.atZone(ZoneId.systemDefault()).withSecond(0).withNano(0);
+    int minute = zoned.getMinute();
+    int remainder = minute % SLOT_MINUTES;
+    if (remainder != 0) {
+      zoned = zoned.minusMinutes(remainder);
+    }
+    return zoned.toInstant();
+  }
+
+  private void triggerConflictFlash(String interventionId) {
+    if (interventionId == null) {
+      return;
+    }
+    flashingInterventionId = interventionId;
+    flashingPhase = 0d;
+    if (flashingTimer != null && flashingTimer.isRunning()) {
+      flashingTimer.stop();
+    }
+    flashingTimer =
+        new Timer(
+            70,
+            e -> {
+              flashingPhase += 0.4d;
+              if (flashingPhase > Math.PI * 4) {
+                flashingTimer.stop();
+                flashingInterventionId = null;
+              }
+              repaint();
+            });
+    flashingTimer.setRepeats(true);
+    flashingTimer.start();
+  }
+
   private void paintTile(Graphics2D g2, Tile t) {
     int y = HEADER_H + t.row * ROW_H + 6;
     int height = ROW_H - 12;
@@ -578,6 +736,13 @@ public class PlanningPanel extends JPanel {
     g2.setColor(new Color(255, 255, 255, 160));
     g2.fillRect(x, y, 4, height);
     g2.fillRect(x + w - 4, y, 4, height);
+
+    if (flashingInterventionId != null && flashingInterventionId.equals(t.i.id())) {
+      float pulse = (float) (0.5 + 0.5 * Math.sin(flashingPhase));
+      int alpha = Math.min(255, (int) (120 + 120 * pulse));
+      g2.setColor(new Color(219, 68, 55, alpha));
+      g2.fillRoundRect(x, y, w, height, 10, 10);
+    }
 
     g2.setColor(Color.WHITE);
     g2.setFont(getFont().deriveFont(Font.BOLD));
@@ -818,6 +983,9 @@ public class PlanningPanel extends JPanel {
       selected = persisted;
       reload();
     } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      selected = original;
+      triggerConflictFlash(original.id());
       JOptionPane.showMessageDialog(
           this, "Erreur de sauvegarde: " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
       reload();
@@ -843,7 +1011,25 @@ public class PlanningPanel extends JPanel {
         .append("<br/>")
         .append("Ressource: ")
         .append(htmlEscape(resource != null ? resource.name() : i.resourceId()))
-        .append("<br/>")
+        .append("<br/>");
+    if (i.driverId() != null) {
+      sb.append("Chauffeur: ").append(htmlEscape(i.driverId())).append("<br/>");
+    }
+    Duration duration = Duration.between(i.start(), i.end());
+    long totalMinutes = Math.max(0, duration.toMinutes());
+    long hours = totalMinutes / 60;
+    long minutes = totalMinutes % 60;
+    sb.append("Durée: ");
+    if (hours > 0) {
+      sb.append(hours).append("h");
+    }
+    if (minutes > 0 || hours == 0) {
+      if (hours > 0) {
+        sb.append(' ');
+      }
+      sb.append(minutes).append("min");
+    }
+    sb.append("<br/>")
         .append(start.toLocalDate())
         .append(' ')
         .append(start.toLocalTime())
