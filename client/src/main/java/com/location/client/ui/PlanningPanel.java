@@ -301,6 +301,7 @@ public class PlanningPanel extends JPanel {
       Models.Intervention created = dsp.createIntervention(payload);
       selected = created;
       reload();
+      notifySuccess("Intervention créée", "Création intervention " + created.id());
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
       JOptionPane.showMessageDialog(
@@ -614,6 +615,7 @@ public class PlanningPanel extends JPanel {
       Models.Intervention created = dsp.createIntervention(payload);
       selected = created;
       reload();
+      notifySuccess("Intervention dupliquée", "Duplication intervention " + created.id());
       return true;
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
@@ -652,6 +654,7 @@ public class PlanningPanel extends JPanel {
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
+      notifySuccess("Intervention décalée", "Déplacement intervention " + persisted.id());
       return true;
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
@@ -1194,6 +1197,7 @@ public class PlanningPanel extends JPanel {
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
+      notifySuccess("Déplacement appliqué", "Déplacement intervention " + persisted.id());
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
       selected = original;
@@ -1260,6 +1264,16 @@ public class PlanningPanel extends JPanel {
       return "";
     }
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  private void notifySuccess(String message, String activity) {
+    java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+    if (window instanceof MainFrame mf) {
+      mf.toastSuccess(message);
+    } else if (window != null) {
+      Toast.success(window, message);
+    }
+    ActivityCenter.log(activity);
   }
 
   private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {

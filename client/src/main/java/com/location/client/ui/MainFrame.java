@@ -8,6 +8,7 @@ import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -33,6 +34,7 @@ public class MainFrame extends JFrame {
   private final Sidebar sidebar;
   private final JToolBar selectionBar = new JToolBar();
   private final JButton selectionInfo = new JButton();
+  private final JButton activityButton = new JButton("Activité");
   private final JLabel connectionBadge = new JLabel();
   private final JLabel status = new JLabel();
   private final JLabel modeBadge = new JLabel();
@@ -41,6 +43,8 @@ public class MainFrame extends JFrame {
   private ButtonGroup agencyGroup = new ButtonGroup();
   private boolean updatingAgencyMenu;
   private final Timer heartbeat;
+  private JDialog activityDialog;
+  private GuidedTour guidedTour;
 
   public MainFrame(DataSourceProvider dsp, Preferences prefs) {
     super("LOCATION — Planning");
@@ -69,16 +73,24 @@ public class MainFrame extends JFrame {
     }
 
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-    addWindowListener(new WindowAdapter() {
-      @Override
-      public void windowClosed(WindowEvent e) {
-        heartbeat.stop();
-        try {
-          dsp.close();
-        } catch (Exception ignored) {
-        }
-      }
-    });
+    addWindowListener(
+        new WindowAdapter() {
+          @Override
+          public void windowOpened(WindowEvent e) {
+            if (!prefs.isTourShown()) {
+              SwingUtilities.invokeLater(MainFrame.this::startGuidedTour);
+            }
+          }
+
+          @Override
+          public void windowClosed(WindowEvent e) {
+            heartbeat.stop();
+            try {
+              dsp.close();
+            } catch (Exception ignored) {
+            }
+          }
+        });
     setSize(1100, 720);
     setLocationRelativeTo(null);
 
@@ -105,9 +117,7 @@ public class MainFrame extends JFrame {
             new AbstractAction("Dupliquer") {
               @Override
               public void actionPerformed(ActionEvent e) {
-                if (planning.duplicateSelected()) {
-                  toast("Intervention dupliquée");
-                }
+                planning.duplicateSelected();
               }
             }));
     selectionBar.add(
@@ -115,9 +125,7 @@ public class MainFrame extends JFrame {
             new AbstractAction("−30 min") {
               @Override
               public void actionPerformed(ActionEvent e) {
-                if (planning.shiftSelection(Duration.ofMinutes(-30))) {
-                  toast("Intervention décalée");
-                }
+                planning.shiftSelection(Duration.ofMinutes(-30));
               }
             }));
     selectionBar.add(
@@ -125,9 +133,7 @@ public class MainFrame extends JFrame {
             new AbstractAction("+30 min") {
               @Override
               public void actionPerformed(ActionEvent e) {
-                if (planning.shiftSelection(Duration.ofMinutes(30))) {
-                  toast("Intervention décalée");
-                }
+                planning.shiftSelection(Duration.ofMinutes(30));
               }
             }));
     selectionBar.add(
@@ -164,6 +170,9 @@ public class MainFrame extends JFrame {
     south.add(badges, BorderLayout.WEST);
     status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
     south.add(status, BorderLayout.CENTER);
+    activityButton.setFocusable(false);
+    activityButton.addActionListener(e -> openActivity());
+    south.add(activityButton, BorderLayout.EAST);
     JPanel bottom = new JPanel(new BorderLayout());
     bottom.add(selectionBar, BorderLayout.NORTH);
     bottom.add(south, BorderLayout.SOUTH);
@@ -188,9 +197,7 @@ public class MainFrame extends JFrame {
             new AbstractAction() {
               @Override
               public void actionPerformed(ActionEvent e) {
-                if (planning.duplicateSelected()) {
-                  toast("Intervention dupliquée");
-                }
+                planning.duplicateSelected();
               }
             });
     getRootPane()
@@ -445,12 +452,6 @@ public class MainFrame extends JFrame {
 
     JMenu data = new JMenu("Données");
     data.setMnemonic('D');
-    JMenuItem reset = new JMenuItem("Réinitialiser la démo (Mock)");
-    reset.addActionListener(e -> {
-      dsp.resetDemoData();
-      refreshData();
-      toast("Données de démonstration réinitialisées");
-    });
     JMenuItem create = new JMenuItem("Nouvelle intervention");
     create.setAccelerator(KeyStroke.getKeyStroke("control N"));
     create.addActionListener(e -> createInterventionDialog());
@@ -482,7 +483,6 @@ public class MainFrame extends JFrame {
     emailPdf.setAccelerator(KeyStroke.getKeyStroke("control M"));
     data.add(create);
     data.add(editNotes);
-    data.add(reset);
     data.add(newUnav);
     data.add(newRecurring);
     data.add(deleteIntervention);
@@ -511,6 +511,9 @@ public class MainFrame extends JFrame {
         });
     view.add(dayView);
     view.add(weekView);
+    JMenuItem viewActivity = new JMenuItem("Activité récente");
+    viewActivity.addActionListener(e -> openActivity());
+    view.add(viewActivity);
 
     JMenu settings = new JMenu("Paramètres");
     settings.setMnemonic('P');
@@ -572,8 +575,14 @@ public class MainFrame extends JFrame {
 
     JMenu help = new JMenu("Aide");
     help.setMnemonic('A');
+    JMenuItem startTour = new JMenuItem("Démarrer le tour");
+    startTour.addActionListener(e -> startGuidedTour());
+    JMenuItem resetDemo = new JMenuItem("Réinitialiser la démo");
+    resetDemo.addActionListener(e -> resetDemoData());
     JMenuItem about = new JMenuItem("À propos & fonctionnalités serveur");
     about.addActionListener(e -> showAbout());
+    help.add(startTour);
+    help.add(resetDemo);
     help.add(about);
 
     JMenu context = new JMenu("Contexte");
@@ -587,6 +596,14 @@ public class MainFrame extends JFrame {
     bar.add(settings);
     bar.add(help);
     return bar;
+  }
+
+  private void openActivity() {
+    if (activityDialog == null || activityDialog.getOwner() != this) {
+      activityDialog = ActivityCenter.dialog(this);
+    }
+    activityDialog.setLocationRelativeTo(this);
+    activityDialog.setVisible(true);
   }
 
   private void initializeCurrentAgency() {
@@ -812,7 +829,7 @@ public class MainFrame extends JFrame {
             .append('\n');
       }
       Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-      toast("Export CSV: " + tmp);
+      toastSuccess("Export CSV: " + tmp);
       Desktop.getDesktop().open(tmp.toFile());
     } catch (IOException ex) {
       error("Export CSV → " + ex.getMessage());
@@ -821,7 +838,7 @@ public class MainFrame extends JFrame {
 
   private void exportCsvRest() {
     if (!(dsp instanceof RestDataSource rd)) {
-      toast("Export CSV REST nécessite le mode REST");
+      error("Export CSV REST nécessite le mode REST");
       return;
     }
     try {
@@ -838,7 +855,7 @@ public class MainFrame extends JFrame {
     try {
       Path tmp = Files.createTempFile("resources-", ".csv");
       dsp.downloadResourcesCsv(topBar.getTags(), tmp);
-      toast("Ressources exportées: " + tmp);
+      toastSuccess("Ressources exportées: " + tmp);
       Desktop.getDesktop().open(tmp.toFile());
     } catch (Exception ex) {
       error("Export ressources → " + ex.getMessage());
@@ -921,7 +938,7 @@ public class MainFrame extends JFrame {
     try {
       Path out = Files.createTempFile("intervention-" + sel.id() + "-", ".pdf");
       dsp.downloadInterventionPdf(sel.id(), out);
-      toast("PDF exporté: " + out);
+      toastSuccess("PDF exporté: " + out);
       Desktop.getDesktop().open(out.toFile());
     } catch (Exception ex) {
       error("Export PDF → " + ex.getMessage());
@@ -962,9 +979,9 @@ public class MainFrame extends JFrame {
       try {
         dsp.emailInterventionPdf(sel.id(), to, subject, body);
         if (dsp instanceof RestDataSource) {
-          toast("Email envoyé (202 Accepted)");
+          toastSuccess("Email envoyé (202 Accepted)");
         } else {
-          toast("Email simulé (mode Mock)");
+          toastSuccess("Email simulé (mode Mock)");
         }
       } catch (Exception ex) {
         error(ex.getMessage());
@@ -987,7 +1004,8 @@ public class MainFrame extends JFrame {
     if (choice == JOptionPane.OK_OPTION) {
       boolean done = planning.deleteSelected();
       if (done) {
-        toast("Intervention supprimée");
+        toastSuccess("Intervention supprimée");
+        ActivityCenter.log("Suppression intervention " + sel.id());
       }
     }
   }
@@ -1024,11 +1042,22 @@ public class MainFrame extends JFrame {
               ta.getText());
       try {
         dsp.updateIntervention(updated);
-        toast("Notes enregistrées");
+        toastSuccess("Notes enregistrées");
         refreshData();
       } catch (Exception ex) {
         error("Impossible d'enregistrer: " + ex.getMessage());
       }
+    }
+  }
+
+  private void resetDemoData() {
+    try {
+      dsp.resetDemo();
+      refreshData();
+      toastSuccess("Données de démonstration réinitialisées");
+      ActivityCenter.log("Réinitialisation des données démo");
+    } catch (RuntimeException ex) {
+      error(ex.getMessage());
     }
   }
 
@@ -1065,18 +1094,20 @@ public class MainFrame extends JFrame {
         return;
       }
       try {
-        dsp.createIntervention(
-            new Models.Intervention(
-                null,
-                resource.agencyId(),
-                resource.id(),
-                client.id(),
-                null,
-                tfTitle.getText(),
-                Instant.parse(tfStart.getText()),
-                Instant.parse(tfEnd.getText()),
-                null));
-        toast("Intervention créée");
+        Models.Intervention created =
+            dsp.createIntervention(
+                new Models.Intervention(
+                    null,
+                    resource.agencyId(),
+                    resource.id(),
+                    client.id(),
+                    null,
+                    tfTitle.getText(),
+                    Instant.parse(tfStart.getText()),
+                    Instant.parse(tfEnd.getText()),
+                    null));
+        toastSuccess("Intervention créée");
+        ActivityCenter.log("Création intervention " + created.id());
         refreshData();
       } catch (Exception ex) {
         error(ex.getMessage());
@@ -1121,7 +1152,7 @@ public class MainFrame extends JFrame {
                 Instant.parse(tfStart.getText()),
                 Instant.parse(tfEnd.getText()),
                 false));
-        toast("Indisponibilité créée");
+        toastSuccess("Indisponibilité créée");
         refreshData();
       } catch (Exception ex) {
         error(ex.getMessage());
@@ -1170,7 +1201,7 @@ public class MainFrame extends JFrame {
                 LocalTime.parse(tfStart.getText()),
                 LocalTime.parse(tfEnd.getText()),
                 tfReason.getText()));
-        toast("Indisponibilité récurrente créée");
+        toastSuccess("Indisponibilité récurrente créée");
         refreshData();
       } catch (Exception ex) {
         error(ex.getMessage());
@@ -1221,7 +1252,7 @@ public class MainFrame extends JFrame {
       if (dsp instanceof RestDataSource rd) {
         rd.configure(prefs.getBaseUrl(), prefs.getRestUser(), prefs.getRestPass());
       }
-      toast("Configuration enregistrée");
+      toastSuccess("Configuration enregistrée");
     }
   }
 
@@ -1241,7 +1272,7 @@ public class MainFrame extends JFrame {
     }
     try {
       dsp.emailBulk(items.stream().map(Models.Intervention::id).toList(), to);
-      toast("Envoi groupé demandé");
+      toastSuccess("Envoi groupé demandé");
     } catch (Exception ex) {
       error("Échec envoi groupé : " + ex.getMessage());
     }
@@ -1274,7 +1305,7 @@ public class MainFrame extends JFrame {
     if (ok == JOptionPane.OK_OPTION) {
       try {
         dsp.updateAgencyEmailTemplate(selected.id(), new Models.EmailTemplate(subjectField.getText(), bodyField.getText()));
-        toast("Modèle enregistré");
+        toastSuccess("Modèle enregistré");
       } catch (Exception ex) {
         error("Échec sauvegarde : " + ex.getMessage());
       }
@@ -1282,10 +1313,65 @@ public class MainFrame extends JFrame {
   }
 
   private void toast(String message) {
+    toastInfo(message);
+  }
+
+  public void toastInfo(String message) {
     status.setText(message);
+    Toast.info(this, message);
+  }
+
+  public void toastSuccess(String message) {
+    status.setText(message);
+    Toast.success(this, message);
   }
 
   private void error(String message) {
     status.setText("⚠️ " + message);
+    Toast.error(this, message);
+  }
+
+  private void startGuidedTour() {
+    if (!isShowing()) {
+      SwingUtilities.invokeLater(this::startGuidedTour);
+      return;
+    }
+    if (guidedTour != null) {
+      getLayeredPane().remove(guidedTour);
+      guidedTour = null;
+    }
+    GuidedTour tour =
+        new GuidedTour(
+            getLayeredPane(),
+            () -> {
+              prefs.setTourShown(true);
+              prefs.save();
+              guidedTour = null;
+            });
+    guidedTour =
+        tour.addStep(
+                () -> componentRect(sidebar),
+                "Navigation",
+                "Utilisez la barre latérale pour ouvrir planning, documents et modules à venir.")
+            .addStep(
+                () -> componentRect(planning),
+                "Planning interactif",
+                "Glissez pour déplacer ou redimensionner, double‑clic pour éditer, raccourcis Ctrl+N/D, Suppr…")
+            .addStep(
+                () -> componentRect(activityButton),
+                "Toasts & activité",
+                "Chaque action affiche un toast en bas à droite et s’enregistre dans l’activité récente.");
+    guidedTour.start();
+  }
+
+  private Rectangle componentRect(java.awt.Component component) {
+    if (component == null || component.getParent() == null) {
+      return new Rectangle(0, 0, getWidth(), getHeight());
+    }
+    Rectangle rect = SwingUtilities.convertRectangle(component, component.getVisibleRect(), getLayeredPane());
+    if (rect.width <= 0 || rect.height <= 0) {
+      rect = new Rectangle(rect.x, rect.y, Math.max(1, component.getWidth()), Math.max(1, component.getHeight()));
+    }
+    return rect;
   }
 }

@@ -89,6 +89,29 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public void resetDemo() {
+    try {
+      ensureLogin();
+      execute(
+          () -> new HttpPost(baseUrl + "/api/v1/demo/reset"),
+          res -> {
+            int sc = res.getCode();
+            EntityUtils.consumeQuietly(res.getEntity());
+            if (sc >= 200 && sc < 300) {
+              return null;
+            }
+            if (sc == 404) {
+              throw new RuntimeException(
+                  "Réinitialisation démo indisponible côté backend (HTTP 404).");
+            }
+            throw httpError(sc, "HTTP " + sc + " → réinitialisation démo");
+          });
+    } catch (IOException e) {
+      throw new RuntimeException("Réinitialisation démo indisponible: " + e.getMessage(), e);
+    }
+  }
+
+  @Override
   public List<Models.Agency> listAgencies() {
     try {
       ensureLogin();
