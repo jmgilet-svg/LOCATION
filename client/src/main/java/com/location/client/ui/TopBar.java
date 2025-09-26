@@ -7,7 +7,6 @@ import java.awt.Component;
 import java.awt.FlowLayout;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.List;
 import java.util.function.Function;
@@ -246,19 +245,21 @@ public class TopBar extends JPanel {
   }
 
   public void prevDay() {
-    setDay(planning.getDay().minusDays(1));
+    long step = planning.isWeekMode() ? 7L : 1L;
+    setDay(planning.getDay().minusDays(step));
   }
 
   public void nextDay() {
-    setDay(planning.getDay().plusDays(1));
+    long step = planning.isWeekMode() ? 7L : 1L;
+    setDay(planning.getDay().plusDays(step));
   }
 
   public java.time.OffsetDateTime getFrom() {
-    return planning.getDay().atTime(0, 0).atOffset(ZoneOffset.UTC);
+    return planning.getViewFrom();
   }
 
   public java.time.OffsetDateTime getTo() {
-    return planning.getDay().plusDays(1).atTime(0, 0).atOffset(ZoneOffset.UTC);
+    return planning.getViewTo();
   }
 
   public String getResourceId() {

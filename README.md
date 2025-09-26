@@ -2,6 +2,29 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 1 — Planning “pro” (drag, resize, hover, zoom jour/semaine, filtres)
+
+### Ce que ça livre (résumé)
+- **Client Swing**
+  - **Drag & Drop** des interventions (déplacement horaire et changement de ressource au vol).
+  - **Resize** au bord gauche/droit de la tuile pour ajuster la durée.
+  - **Tooltips enrichis** (titre, client, ressource, date/heure, notes).
+  - **Zoom Jour/Semaine** via menu *Affichage* ou raccourcis `Ctrl+1` (jour) / `Ctrl+2` (semaine).
+  - **Filtres rapides** (agence, ressource, client, recherche texte, tags) synchronisés avec la barre supérieure.
+  - **Détection de conflits** : tentative de sauvegarde → appel REST ; conflit (`409`) ⇒ rollback local + message ou bip clavier.
+  - **Accessibilité** : flèches `← → ↑ ↓` pour décaler de 15 min, `Alt+↑/↓` pour changer de ressource.
+
+> Côté **Backend**, la logique de conflit existante (`InterventionService`) est réutilisée ; aucune évolution serveur n'est requise.
+
+### Raccourcis
+- Drag: maintenir la souris sur la tuile, déplacer horizontalement pour changer l'horaire, verticalement pour changer de ressource.
+- Resize: saisir un bord (curseur ↔) et tirer.
+- `Ctrl+1` jour, `Ctrl+2` semaine ; `Ctrl+E` notes ; `Ctrl+M` email PDF ; flèches pour nudges, `Alt+↑/↓` pour changer de ressource.
+
+### Limitations connues
+- La vue s'appuie sur une plage de 12h (07h→19h) et un pas de 15 minutes.
+- La vue semaine affiche 7 colonnes (lun→dim) avec la même granularité.
+
 ## Sprint 12 — CSV Clients & Indispos + Feature Flags API + Aide/À propos (Full, Mock-safe)
 
 Dernier sprint d’endurcissement et de “petits plus” utiles.
