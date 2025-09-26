@@ -10,9 +10,12 @@ import java.awt.event.ActionEvent;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
@@ -188,6 +191,28 @@ public class QuickEditDialog extends JDialog {
               newStart,
               newEnd,
               base.notes());
+      try {
+        List<Models.Unavailability> unavailabilityList =
+            dsp.listUnavailabilities(
+                OffsetDateTime.ofInstant(newStart, ZoneOffset.UTC),
+                OffsetDateTime.ofInstant(newEnd, ZoneOffset.UTC),
+                selectedResource.id());
+        for (Models.Unavailability unavailability : unavailabilityList) {
+          if (!selectedResource.id().equals(unavailability.resourceId())) {
+            continue;
+          }
+          if (unavailability.end().isAfter(newStart) && unavailability.start().isBefore(newEnd)) {
+            String reason = unavailability.reason();
+            String detail = (reason == null || reason.isBlank()) ? "" : " : " + reason;
+            throw new IllegalStateException("Chevauche une indisponibilité" + detail);
+          }
+        }
+      } catch (RuntimeException ex) {
+        String message = ex.getMessage();
+        if (message == null || !message.toLowerCase(Locale.ROOT).contains("non disponible")) {
+          throw ex;
+        }
+      }
       Models.Intervention saved = dsp.updateIntervention(payload);
       ActivityCenter.log("Intervention mise à jour " + saved.id());
       Window owner = getOwner();
