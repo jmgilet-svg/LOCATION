@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,6 +14,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.apache.hc.client5.http.classic.methods.HttpDelete;
@@ -26,6 +30,7 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 
 public class RestDataSource implements DataSourceProvider {
   private static final String DEFAULT_AGENCY_ID =
@@ -33,6 +38,8 @@ public class RestDataSource implements DataSourceProvider {
   private final CloseableHttpClient http = HttpClients.createDefault();
   private final ObjectMapper om = new ObjectMapper();
   private final AtomicReference<String> bearer = new AtomicReference<>();
+  private final AtomicBoolean pingThreadStarted = new AtomicBoolean();
+  private final AtomicLong lastPingEpochMs = new AtomicLong();
 
   private static final String DEFAULT_USERNAME =
       System.getenv().getOrDefault("LOCATION_USERNAME", "demo");
@@ -57,6 +64,7 @@ public class RestDataSource implements DataSourceProvider {
     this.username = username != null ? username : DEFAULT_USERNAME;
     this.password = password != null ? password : DEFAULT_PASSWORD;
     bearer.set(null);
+    lastPingEpochMs.set(0L);
   }
 
   public synchronized void setCredentials(String username, String password) {
@@ -122,6 +130,74 @@ public class RestDataSource implements DataSourceProvider {
   @Override
   public void setCurrentAgencyId(String agencyId) {
     this.currentAgencyId = agencyId;
+  }
+
+  public void startPingThread() {
+    if (!pingThreadStarted.compareAndSet(false, true)) {
+      return;
+    }
+    Thread t =
+        new Thread(
+            () -> {
+              while (!Thread.currentThread().isInterrupted()) {
+                try {
+                  ensureLogin();
+                  ClassicHttpRequest request =
+                      ClassicRequestBuilder.get(baseUrl + "/api/system/ping")
+                          .addHeader("Accept", "text/event-stream")
+                          .build();
+                  applyHeaders(request);
+                  http.execute(
+                      request,
+                      response -> {
+                        int sc = response.getCode();
+                        if (sc == 401) {
+                          EntityUtils.consumeQuietly(response.getEntity());
+                          throw new UnauthorizedException();
+                        }
+                        if (sc < 200 || sc >= 300) {
+                          String body =
+                              response.getEntity() == null
+                                  ? ""
+                                  : new String(
+                                      response.getEntity().getContent().readAllBytes(),
+                                      StandardCharsets.UTF_8);
+                          throw httpError(sc, "SSE HTTP " + sc + (body.isEmpty() ? "" : " → " + body));
+                        }
+                        try (BufferedReader reader =
+                            new BufferedReader(
+                                new InputStreamReader(
+                                    response.getEntity().getContent(), StandardCharsets.UTF_8))) {
+                          String line;
+                          while ((line = reader.readLine()) != null) {
+                            if (line.startsWith("data:")) {
+                              lastPingEpochMs.set(System.currentTimeMillis());
+                            }
+                          }
+                        }
+                        return null;
+                      });
+                } catch (UnauthorizedException e) {
+                  bearer.set(null);
+                  lastPingEpochMs.set(0L);
+                } catch (IOException e) {
+                  lastPingEpochMs.set(0L);
+                  try {
+                    Thread.sleep(1000L);
+                  } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                  }
+                }
+              }
+            },
+            "rest-sse-ping");
+    t.setDaemon(true);
+    t.start();
+  }
+
+  public long getLastPingEpochMs() {
+    return lastPingEpochMs.get();
   }
 
   @Override
@@ -298,7 +374,7 @@ public class RestDataSource implements DataSourceProvider {
           res -> {
             int code = res.getCode();
             if (code != 204) {
-              throw new IOException("DELETE non OK: " + code);
+              throw httpError(code, "DELETE non OK: " + code);
             }
             return null;
           });
@@ -458,7 +534,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -483,7 +559,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -523,7 +599,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -554,7 +630,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -581,7 +657,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -624,7 +700,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + code + " → " + body);
+            throw httpError(code, "HTTP " + code + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -654,7 +730,7 @@ public class RestDataSource implements DataSourceProvider {
                   .forEachRemaining(field -> flags.put(field, node.path(field).asBoolean(false)));
               return flags;
             }
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -782,7 +858,7 @@ public class RestDataSource implements DataSourceProvider {
           () -> new HttpGet(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/pdf"),
           res -> {
             if (res.getCode() != 200) {
-              throw new IOException("PDF HTTP " + res.getCode());
+              throw httpError(res.getCode(), "PDF HTTP " + res.getCode());
             }
             byte[] bytes = EntityUtils.toByteArray(res.getEntity());
             java.nio.file.Files.write(target, bytes);
@@ -817,7 +893,7 @@ public class RestDataSource implements DataSourceProvider {
           },
           res -> {
             if (res.getCode() != 202) {
-              throw new IOException("Email HTTP " + res.getCode());
+              throw httpError(res.getCode(), "Email HTTP " + res.getCode());
             }
             EntityUtils.consumeQuietly(res.getEntity());
             return null;
@@ -846,7 +922,7 @@ public class RestDataSource implements DataSourceProvider {
           () -> new HttpGet(url.toString()),
           res -> {
             if (res.getCode() != 200) {
-              throw new IOException("CSV HTTP " + res.getCode());
+              throw httpError(res.getCode(), "CSV HTTP " + res.getCode());
             }
             byte[] bytes = EntityUtils.toByteArray(res.getEntity());
             java.nio.file.Files.write(target, bytes);
@@ -961,7 +1037,7 @@ public class RestDataSource implements DataSourceProvider {
                       ? ""
                       : new String(
                           res.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
-              throw new IOException("Email batch HTTP " + code + " → " + body);
+              throw httpError(code, "Email batch HTTP " + code + " → " + body);
             }
             EntityUtils.consumeQuietly(res.getEntity());
             return null;
@@ -1014,7 +1090,7 @@ public class RestDataSource implements DataSourceProvider {
                 entity == null
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-            throw new IOException("HTTP " + sc + " → " + body);
+            throw httpError(sc, "HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -1042,21 +1118,24 @@ public class RestDataSource implements DataSourceProvider {
         payload.put("password", password);
         post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
         JsonNode node =
-            http.execute(
-                post,
-                res -> {
-                  int sc = res.getCode();
-                  HttpEntity entity = res.getEntity();
-                  String body =
-                      entity == null
-                          ? ""
-                          : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
-                  if (sc >= 200 && sc < 300) {
-                    if (body.isEmpty()) return om.nullNode();
-                    return om.readTree(body);
-                  }
-                  throw new IOException("HTTP " + sc + " → " + body);
-                });
+            withRetries(
+                () ->
+                    http.execute(
+                        post,
+                        res -> {
+                          int sc = res.getCode();
+                          HttpEntity entity = res.getEntity();
+                          String body =
+                              entity == null
+                                  ? ""
+                                  : new String(
+                                      entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+                          if (sc >= 200 && sc < 300) {
+                            if (body.isEmpty()) return om.nullNode();
+                            return om.readTree(body);
+                          }
+                          throw httpError(sc, "HTTP " + sc + " → " + body);
+                        }));
         String token = node.path("token").asText(null);
         if (token == null) {
           throw new IllegalStateException("Token manquant dans /auth/login");
@@ -1082,26 +1161,28 @@ public class RestDataSource implements DataSourceProvider {
             if (body.isEmpty()) return om.nullNode();
             return om.readTree(body);
           }
-          throw new IOException("HTTP " + sc + " → " + body);
+          throw httpError(sc, "HTTP " + sc + " → " + body);
         });
   }
 
   private <T> T execute(Supplier<HttpUriRequestBase> supplier, ResponseHandler<T> handler)
       throws IOException {
-    return withAutoRetry(
-        () -> {
-          HttpUriRequestBase request = supplier.get();
-          applyHeaders(request);
-          return http.execute(
-              request,
-              response -> {
-                if (response.getCode() == 401) {
-                  EntityUtils.consumeQuietly(response.getEntity());
-                  throw new UnauthorizedException();
-                }
-                return handler.handle(response);
-              });
-        });
+    return withRetries(
+        () ->
+            withAutoRetry(
+                () -> {
+                  HttpUriRequestBase request = supplier.get();
+                  applyHeaders(request);
+                  return http.execute(
+                      request,
+                      response -> {
+                        if (response.getCode() == 401) {
+                          EntityUtils.consumeQuietly(response.getEntity());
+                          throw new UnauthorizedException();
+                        }
+                        return handler.handle(response);
+                      });
+                }));
   }
 
   private <T> T withAutoRetry(IoSupplier<T> call) throws IOException {
@@ -1122,7 +1203,41 @@ public class RestDataSource implements DataSourceProvider {
     if (unauthorized != null) {
       throw unauthorized;
     }
-    throw new IOException("Unauthorized");
+    throw new UnauthorizedException();
+  }
+
+  private <T> T withRetries(IoSupplier<T> call) throws IOException {
+    int attempts = 0;
+    long backoff = 250L;
+    while (true) {
+      try {
+        return call.get();
+      } catch (IOException e) {
+        if (e instanceof UnauthorizedException) {
+          throw e;
+        }
+        if (e instanceof HttpStatusException status
+            && status.statusCode() >= 400
+            && status.statusCode() < 500) {
+          throw e;
+        }
+        attempts++;
+        if (attempts >= 3) {
+          throw e;
+        }
+        try {
+          Thread.sleep(backoff);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new IOException("Interrupted during retry", ie);
+        }
+        backoff = Math.min(backoff * 2, 2000L);
+      }
+    }
+  }
+
+  private static HttpStatusException httpError(int statusCode, String message) {
+    return new HttpStatusException(statusCode, message);
   }
 
   @FunctionalInterface
@@ -1136,6 +1251,19 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   private static final class UnauthorizedException extends IOException {}
+
+  private static final class HttpStatusException extends IOException {
+    private final int statusCode;
+
+    private HttpStatusException(int statusCode, String message) {
+      super(message);
+      this.statusCode = statusCode;
+    }
+
+    int statusCode() {
+      return statusCode;
+    }
+  }
 
   private Models.Doc docFrom(JsonNode node) {
     java.util.List<Models.DocLine> lines = new java.util.ArrayList<>();
