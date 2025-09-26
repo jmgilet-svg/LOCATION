@@ -406,19 +406,31 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
-  public Models.EmailTemplate getAgencyEmailTemplate(String agencyId) {
-    return agencyTemplates.getOrDefault(agencyId, new Models.EmailTemplate(null, null));
+  public java.nio.file.Path downloadClientsCsv(java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export Clients CSV indisponible en mode Mock (pas d'écriture fichier).");
   }
 
   @Override
-  public Models.EmailTemplate updateAgencyEmailTemplate(String agencyId, Models.EmailTemplate template) {
-    agencyTemplates.put(agencyId, template);
-    return template;
+  public java.nio.file.Path downloadUnavailabilitiesCsv(
+      java.time.OffsetDateTime from,
+      java.time.OffsetDateTime to,
+      String resourceId,
+      java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export Indisponibilités CSV indisponible en mode Mock (pas d'écriture fichier).");
   }
 
   @Override
-  public void emailBulk(List<String> ids, String toOverride) {
-    // Mode mock : rien à faire, considéré comme réussi.
+  public java.util.Map<String, Boolean> getServerFeatures() {
+    java.util.HashMap<String, Boolean> features = new java.util.HashMap<>();
+    features.put("FEATURE_EMAIL_BULK", true);
+    features.put("FEATURE_RESOURCES_CSV", true);
+    features.put("FEATURE_INTERVENTION_PDF", true);
+    features.put("FEATURE_CLIENTS_CSV", true);
+    features.put("FEATURE_UNAVAILABILITIES_CSV", true);
+    return features;
+
   }
 
   private static boolean overlaps(Instant start, Instant end, Instant from, Instant to) {

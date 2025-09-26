@@ -27,6 +27,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -89,6 +90,29 @@ public class ApiV1Controller {
     this.templateService = templateService;
   }
 
+  @GetMapping("/system/features")
+  public Map<String, Boolean> features() {
+    var env = System.getenv();
+    java.util.HashMap<String, Boolean> flags = new java.util.HashMap<>();
+    env.forEach(
+        (key, value) -> {
+          if (key.startsWith("FEATURE_")) {
+            boolean enabled =
+                "1".equals(value)
+                    || "true".equalsIgnoreCase(value)
+                    || "yes".equalsIgnoreCase(value)
+                    || "on".equalsIgnoreCase(value);
+            flags.put(key, enabled);
+          }
+        });
+    flags.putIfAbsent("FEATURE_EMAIL_BULK", true);
+    flags.putIfAbsent("FEATURE_RESOURCES_CSV", true);
+    flags.putIfAbsent("FEATURE_INTERVENTION_PDF", true);
+    flags.putIfAbsent("FEATURE_CLIENTS_CSV", true);
+    flags.putIfAbsent("FEATURE_UNAVAILABILITIES_CSV", true);
+    return flags;
+  }
+
   @GetMapping("/agencies")
   public List<AgencyDto> agencies() {
     return agencyRepository.findAll().stream().map(AgencyDto::of).collect(Collectors.toList());
@@ -97,6 +121,26 @@ public class ApiV1Controller {
   @GetMapping("/clients")
   public List<ClientDto> clients() {
     return clientRepository.findAll().stream().map(ClientDto::of).collect(Collectors.toList());
+  }
+
+  @GetMapping(value = "/clients/csv", produces = "text/csv")
+  public ResponseEntity<byte[]> exportClientsCsv() {
+    StringBuilder csv = new StringBuilder("id;name;billingEmail\n");
+    clientRepository
+        .findAll()
+        .forEach(
+            client ->
+                csv.append(client.getId())
+                    .append(';')
+                    .append(sanitize(client.getName()))
+                    .append(';')
+                    .append(client.getBillingEmail() == null ? "" : client.getBillingEmail())
+                    .append('\n'));
+    byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"clients.csv\"")
+        .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+        .body(bytes);
   }
 
   @GetMapping("/resources")
@@ -145,6 +189,38 @@ public class ApiV1Controller {
         .stream()
         .map(span -> new UnavailabilityDto(span.id(), span.resourceId(), span.start(), span.end(), span.reason(), span.recurring()))
         .collect(Collectors.toList());
+  }
+
+  @GetMapping(value = "/unavailabilities/csv", produces = "text/csv")
+  public ResponseEntity<byte[]> exportUnavailabilitiesCsv(
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false)
+          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to,
+      @RequestParam(required = false) String resourceId) {
+    var spans = unavailabilityQueryService.search(from, to, resourceId);
+    StringBuilder csv = new StringBuilder("id;resourceId;start;end;reason;recurring\n");
+    spans.forEach(
+        span ->
+            csv.append(span.id())
+                .append(';')
+                .append(span.resourceId())
+                .append(';')
+                .append(span.start())
+                .append(';')
+                .append(span.end())
+                .append(';')
+                .append(sanitize(span.reason()))
+                .append(';')
+                .append(span.recurring())
+                .append('\n'));
+    byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"unavailabilities.csv\"")
+        .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+        .body(bytes);
   }
 
   @GetMapping("/interventions")

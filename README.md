@@ -2,29 +2,27 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
-## Sprint 11 — Modèles d’email par agence + Envoi groupé de PDFs d’interventions (Full, Mock-ready)
+## Sprint 12 — CSV Clients & Indispos + Feature Flags API + Aide/À propos (Full, Mock-safe)
 
-### Ce que ça apporte
-**Backend**
-- **Modèle d’email par agence** (sujet + corps) avec variables de fusion :  
-  `{{agencyName}} {{clientName}} {{interventionTitle}} {{start}} {{end}}`
-  - `GET  /api/v1/agencies/{id}/email-template`
-  - `PUT  /api/v1/agencies/{id}/email-template`
-- **Envoi groupé** des PDFs d’interventions :  
-  `POST /api/v1/interventions/email-bulk` → 202 Accepted  
-  Body: `{ "ids":["I1","I2"], "toOverride":"dest@example.com" }` (si `toOverride` vide, utilise l’email de facturation du client).
+Dernier sprint d’endurcissement et de “petits plus” utiles.
 
-**Client (Swing)**
-- Menu **Paramètres → Modèle email (Agence)** : éditeur sujet/corps, sauvegarde côté backend ou en Mock.
-- Menu **Données → Envoyer PDFs du jour (lot)** : envoie toutes les interventions visibles du jour.
-- **Mode Mock** : stockage en mémoire des modèles, envoi simulé (aucune écriture disque).
+### Backend
+- **Exports CSV additionnels** :
+  - `GET /api/v1/clients/csv` → liste complète des clients (`id;name;billingEmail`).
+  - `GET /api/v1/unavailabilities/csv?from=&to=&resourceId=` → exports des indispos étendues (inclut les récurrentes dépliées quand `from..to` fournis).
+- **Feature Flags** : `GET /api/v1/system/features` retourne les flags calculés depuis les variables d’environnement (préfixe `FEATURE_...`).
+  - Exemples: `FEATURE_EMAIL_BULK`, `FEATURE_RESOURCES_CSV`, `FEATURE_INTERVENTION_PDF`.
 
-### Variables de fusion (exemples)
-- `{{agencyName}}` → “Agence Nord”
-- `{{clientName}}` → “Client Alpha”
-- `{{interventionTitle}}` → “Levage poutres”
-- `{{start}}` → “2025-10-02 08:00”
-- `{{end}}` → “2025-10-02 10:00”
+### Client Swing
+- **Menu Fichier** : nouveaux exports **Clients CSV** et **Indisponibilités CSV** (REST uniquement). En mode **Mock**, un message explique la limitation (pas d’écriture disque).
+- **Menu Aide** → **À propos & fonctionnalités serveur** : affiche les versions, la source de données active, et les **feature flags** exposés par le backend. En Mock, affiche une liste par défaut.
+
+### Mock
+- Aucune écriture disque : les exports REST sont **non disponibles** (message clair). Les features sont **simulées** : `EMAIL_BULK=true`, `RESOURCES_CSV=true`, `INTERVENTION_PDF=true`.
+
+### Tests
+- WebMvc : entêtes et content-type pour `clients/csv` et `unavailabilities/csv`.
+
 
 ### Démarrage rapide
 ```bash

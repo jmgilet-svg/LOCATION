@@ -37,9 +37,14 @@ public interface DataSourceProvider extends AutoCloseable {
 
   void emailInterventionPdf(String interventionId, String to, String subject, String message);
 
-  Models.EmailTemplate getAgencyEmailTemplate(String agencyId);
+  java.nio.file.Path downloadClientsCsv(java.nio.file.Path target);
 
-  Models.EmailTemplate updateAgencyEmailTemplate(String agencyId, Models.EmailTemplate template);
+  java.nio.file.Path downloadUnavailabilitiesCsv(
+      java.time.OffsetDateTime from,
+      java.time.OffsetDateTime to,
+      String resourceId,
+      java.nio.file.Path target);
 
-  void emailBulk(List<String> ids, String toOverride);
+  java.util.Map<String, Boolean> getServerFeatures();
+
 }

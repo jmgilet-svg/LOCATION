@@ -407,6 +407,79 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Path downloadClientsCsv(Path target) {
+    try {
+      ensureLogin();
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/clients/csv");
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Path downloadUnavailabilitiesCsv(
+      OffsetDateTime from, OffsetDateTime to, String resourceId, Path target) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v1/unavailabilities/csv");
+      List<String> params = new ArrayList<>();
+      if (from != null) {
+        params.add("from=" + encode(from.toString()));
+      }
+      if (to != null) {
+        params.add("to=" + encode(to.toString()));
+      }
+      if (resourceId != null && !resourceId.isBlank()) {
+        params.add("resourceId=" + encode(resourceId));
+      }
+      if (!params.isEmpty()) {
+        url.append('?').append(String.join("&", params));
+      }
+      HttpGet get = new HttpGet(url.toString());
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
+      }
+      return http.execute(
+          get,
+          res -> {
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            if (sc >= 200 && sc < 300 && entity != null) {
+              byte[] bytes = EntityUtils.toByteArray(entity);
+              Files.write(target, bytes);
+              return target;
+            }
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IOException("HTTP " + sc + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public Path downloadInterventionPdf(String interventionId, Path target) {
     try {
       ensureLogin();
@@ -476,64 +549,33 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
-  public Models.EmailTemplate getAgencyEmailTemplate(String agencyId) {
+  public java.util.Map<String, Boolean> getServerFeatures() {
     try {
       ensureLogin();
-      JsonNode node = executeForJson(new HttpGet(baseUrl + "/api/v1/agencies/" + encodeSegment(agencyId) + "/email-template"));
-      return new Models.EmailTemplate(node.path("subject").asText(null), node.path("body").asText(null));
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  @Override
-  public Models.EmailTemplate updateAgencyEmailTemplate(String agencyId, Models.EmailTemplate template) {
-    try {
-      ensureLogin();
-      HttpPut put = new HttpPut(baseUrl + "/api/v1/agencies/" + encodeSegment(agencyId) + "/email-template");
-      ObjectNode payload = om.createObjectNode();
-      if (template.subject() == null) {
-        payload.putNull("subject");
-      } else {
-        payload.put("subject", template.subject());
+      HttpGet get = new HttpGet(baseUrl + "/api/v1/system/features");
+      if (bearer.get() != null) {
+        get.addHeader("Authorization", "Bearer " + bearer.get());
       }
-      if (template.body() == null) {
-        payload.putNull("body");
-      } else {
-        payload.put("body", template.body());
-      }
-      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      JsonNode node = executeForJson(put);
-      return new Models.EmailTemplate(node.path("subject").asText(null), node.path("body").asText(null));
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  @Override
-  public void emailBulk(List<String> ids, String toOverride) {
-    try {
-      ensureLogin();
-      HttpPost post = new HttpPost(baseUrl + "/api/v1/interventions/email-bulk");
-      ObjectNode payload = om.createObjectNode();
-      ArrayNode arr = payload.putArray("ids");
-      for (String id : ids) {
-        arr.add(id);
-      }
-      if (toOverride == null || toOverride.isBlank()) {
-        payload.putNull("toOverride");
-      } else {
-        payload.put("toOverride", toOverride);
-      }
-      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-      http.execute(
-          post,
+      return http.execute(
+          get,
           res -> {
-            int code = res.getCode();
-            if (code != 202) {
-              throw new IOException("Bulk email HTTP " + code);
+            int sc = res.getCode();
+            HttpEntity entity = res.getEntity();
+            String body =
+                entity == null
+                    ? ""
+                    : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+            if (sc >= 200 && sc < 300) {
+              java.util.HashMap<String, Boolean> flags = new java.util.HashMap<>();
+              if (body.isEmpty()) {
+                return flags;
+              }
+              JsonNode node = om.readTree(body);
+              node.fieldNames()
+                  .forEachRemaining(field -> flags.put(field, node.path(field).asBoolean(false)));
+              return flags;
             }
-            return null;
+            throw new IOException("HTTP " + sc + " → " + body);
           });
     } catch (IOException e) {
       throw new RuntimeException(e);

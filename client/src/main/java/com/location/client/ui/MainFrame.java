@@ -167,10 +167,16 @@ public class MainFrame extends JFrame {
     exportResources.addActionListener(e -> exportResourcesCsv());
     JMenuItem exportInterventionPdf = new JMenuItem("Exporter intervention (PDF)");
     exportInterventionPdf.addActionListener(e -> exportInterventionPdf());
+    JMenuItem exportClients = new JMenuItem("Exporter clients CSV (REST)");
+    exportClients.addActionListener(e -> exportClientsCsv());
+    JMenuItem exportUnav = new JMenuItem("Exporter indisponibilités CSV (REST)");
+    exportUnav.addActionListener(e -> exportUnavailabilitiesCsv());
     file.add(exportCsv);
     file.add(exportCsvRest);
     file.add(exportResources);
     file.add(exportInterventionPdf);
+    file.add(exportClients);
+    file.add(exportUnav);
 
     JMenu data = new JMenu("Données");
     JMenuItem reset = new JMenuItem("Réinitialiser la démo (Mock)");
@@ -227,9 +233,15 @@ public class MainFrame extends JFrame {
     settings.add(cfg);
     settings.add(tmpl);
 
+    JMenu help = new JMenu("Aide");
+    JMenuItem about = new JMenuItem("À propos & fonctionnalités serveur");
+    about.addActionListener(e -> showAbout());
+    help.add(about);
+
     bar.add(file);
     bar.add(data);
     bar.add(settings);
+    bar.add(help);
     return bar;
   }
 
@@ -293,6 +305,62 @@ public class MainFrame extends JFrame {
     } catch (Exception ex) {
       error("Export ressources → " + ex.getMessage());
     }
+  }
+
+  private void exportClientsCsv() {
+    if (!(dsp instanceof RestDataSource)) {
+      error("Export clients CSV disponible uniquement en mode REST.");
+      return;
+    }
+    try {
+      Path tmp = Files.createTempFile("clients-", ".csv");
+      dsp.downloadClientsCsv(tmp);
+      Desktop.getDesktop().open(tmp.toFile());
+    } catch (Exception ex) {
+      error("Export clients → " + ex.getMessage());
+    }
+  }
+
+  private void exportUnavailabilitiesCsv() {
+    if (!(dsp instanceof RestDataSource)) {
+      error("Export indisponibilités CSV disponible uniquement en mode REST.");
+      return;
+    }
+    try {
+      Path tmp = Files.createTempFile("unavailabilities-", ".csv");
+      dsp.downloadUnavailabilitiesCsv(topBar.getFrom(), topBar.getTo(), topBar.getResourceId(), tmp);
+      Desktop.getDesktop().open(tmp.toFile());
+    } catch (Exception ex) {
+      error("Export indisponibilités → " + ex.getMessage());
+    }
+  }
+
+  private void showAbout() {
+    java.util.Map<String, Boolean> features;
+    try {
+      features = dsp.getServerFeatures();
+    } catch (Exception ex) {
+      features = java.util.Map.of();
+    }
+    StringBuilder sb = new StringBuilder();
+    sb.append("LOCATION\n");
+    sb.append("Source actuelle: ").append(dsp.getLabel()).append('\n');
+    sb.append('\n').append("Fonctionnalités serveur:\n");
+    if (features.isEmpty()) {
+      sb.append("  (indisponible)\n");
+    } else {
+      features.entrySet().stream()
+          .sorted(java.util.Map.Entry.comparingByKey())
+          .forEach(entry -> sb.append("  ").append(entry.getKey()).append(" = ").append(entry.getValue()).append('\n'));
+    }
+    JTextArea ta = new JTextArea(sb.toString());
+    ta.setEditable(false);
+    ta.setLineWrap(true);
+    ta.setWrapStyleWord(true);
+    ta.setFont(new JTextArea().getFont());
+    JScrollPane scroll = new JScrollPane(ta);
+    scroll.setPreferredSize(new java.awt.Dimension(360, 240));
+    JOptionPane.showMessageDialog(this, scroll, "À propos", JOptionPane.INFORMATION_MESSAGE);
   }
 
   private String escape(String value) {
