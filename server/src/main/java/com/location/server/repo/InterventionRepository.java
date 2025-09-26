@@ -30,4 +30,19 @@ public interface InterventionRepository extends JpaRepository<Intervention, Stri
       @Param("rid") String resourceId,
       @Param("start") OffsetDateTime start,
       @Param("end") OffsetDateTime end);
+
+  @Query(
+      "select count(i) > 0 from Intervention i where i.driver is not null and i.driver.id = :driverId and i.end > :start and i.start < :end")
+  boolean existsDriverOverlap(
+      @Param("driverId") String driverId,
+      @Param("start") OffsetDateTime start,
+      @Param("end") OffsetDateTime end);
+
+  @Query(
+      "select count(i) > 0 from Intervention i where i.id <> :id and i.driver is not null and i.driver.id = :driverId and i.end > :start and i.start < :end")
+  boolean existsDriverOverlapExcluding(
+      @Param("id") String id,
+      @Param("driverId") String driverId,
+      @Param("start") OffsetDateTime start,
+      @Param("end") OffsetDateTime end);
 }

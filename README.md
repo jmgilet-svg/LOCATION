@@ -2,6 +2,40 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 7 — Interventions (API v1) + Détection de conflits (ressource & chauffeur)
+
+### Ce que cette étape livre
+**Backend (Spring Boot)**
+- Entité `Intervention` enrichie (agence, client, ressource, chauffeur, titre, début/fin, notes).
+- Service `InterventionService` avec **détection de chevauchements** (ressource **et** chauffeur) :
+  - Un conflit est levé si un créneau `[start,end)` intersecte un autre sur la même ressource ou le même chauffeur.
+  - Erreur structurée **409 CONFLICT** (`AssignmentConflictException`) avec le détail.
+- Endpoints `/api/v1/interventions` :
+  - `GET /interventions?from=...&to=...&resourceId=...` (ISO date-time) — filtré par agence (`X-Agency-Id`).
+  - `POST /interventions` — crée après validation de non-conflit.
+  - `PUT /interventions/{id}` — met à jour avec validation.
+  - `DELETE /interventions/{id}` — supprime.
+- Migration Flyway `V10__drivers_and_intervention_conflicts.sql` (table `driver`, colonne `driver_id` + index).
+
+**Client Swing**
+- Les appels REST (`RestDataSource`) gèrent désormais le champ `driverId` pour lister/créer/mettre à jour/supprimer.
+- `MockDataSource` reproduit la **logique de conflit** (ressource ou chauffeur) pour garder la parité fonctionnelle.
+
+**Mock**
+- Jeux de données enrichis avec chauffeurs fictifs et affectations pour tester les collisions.
+
+### Exemples rapides
+```bash
+# Liste (jour/semaine)
+curl -H "Authorization: Bearer <JWT>" -H "X-Agency-Id: A" \
+  "http://localhost:8080/api/v1/interventions?from=2025-09-01T00:00:00Z&to=2025-09-08T00:00:00Z"
+
+# Création (409 si conflit ressource/chauffeur)
+curl -X POST -H "Authorization: Bearer <JWT>" -H "X-Agency-Id: A" -H "Content-Type: application/json" \
+  -d '{"agencyId":"A","clientId":"C1","resourceId":"R1","driverId":"D1","title":"Levage X","start":"2025-09-02T07:00:00Z","end":"2025-09-02T12:00:00Z"}' \
+  http://localhost:8080/api/v1/interventions
+```
+
 ## Étape 6 — Auth côté client (auto-renouvellement) + Dialog de connexion (full Front)
 
 ### Pourquoi maintenant ?

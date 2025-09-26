@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
+import com.location.server.domain.Driver;
 import com.location.server.domain.Resource;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
+import com.location.server.repo.DriverRepository;
 import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,7 @@ class ApiV1ControllerTest {
   @Autowired AgencyRepository agencyRepository;
   @Autowired ClientRepository clientRepository;
   @Autowired ResourceRepository resourceRepository;
+  @Autowired DriverRepository driverRepository;
   @Autowired InterventionRepository interventionRepository;
 
   @BeforeEach
@@ -41,6 +44,7 @@ class ApiV1ControllerTest {
       Agency agency = agencyRepository.save(new Agency("A", "Agence"));
       clientRepository.save(new Client("C", "Client", "client@example.test"));
       resourceRepository.save(new Resource("R", "Camion", "", null, agency));
+      driverRepository.save(new Driver("D", "Chauffeur", "driver@example.test"));
     }
   }
 
@@ -55,6 +59,7 @@ class ApiV1ControllerTest {
     first.put("agencyId", "A");
     first.put("resourceId", "R");
     first.put("clientId", "C");
+    first.put("driverId", "D");
     first.put("title", "Intervention 1");
     first.put("start", "2025-01-01T08:00:00Z");
     first.put("end", "2025-01-01T10:00:00Z");
@@ -70,6 +75,7 @@ class ApiV1ControllerTest {
     conflict.put("agencyId", "A");
     conflict.put("resourceId", "R");
     conflict.put("clientId", "C");
+    conflict.put("driverId", "D");
     conflict.put("title", "Intervention 2");
     conflict.put("start", "2025-01-01T09:00:00Z");
     conflict.put("end", "2025-01-01T11:00:00Z");

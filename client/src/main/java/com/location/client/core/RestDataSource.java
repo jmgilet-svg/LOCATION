@@ -175,11 +175,13 @@ public class RestDataSource implements DataSourceProvider {
           String agency = intervention.path("agencyId").asText();
           String resource = intervention.path("resourceId").asText();
           String client = intervention.path("clientId").asText();
+          JsonNode driverNode = intervention.path("driverId");
+          String driver = driverNode.isMissingNode() || driverNode.isNull() ? null : driverNode.asText();
           java.time.Instant start = java.time.Instant.parse(intervention.path("start").asText());
           java.time.Instant end = java.time.Instant.parse(intervention.path("end").asText());
           JsonNode notesNode = intervention.path("notes");
           String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
-          result.add(new Models.Intervention(id, agency, resource, client, title, start, end, notes));
+          result.add(new Models.Intervention(id, agency, resource, client, driver, title, start, end, notes));
         }
       }
       return result;
@@ -200,6 +202,11 @@ public class RestDataSource implements DataSourceProvider {
                 payload.put("agencyId", intervention.agencyId());
                 payload.put("resourceId", intervention.resourceId());
                 payload.put("clientId", intervention.clientId());
+                if (intervention.driverId() != null) {
+                  payload.put("driverId", intervention.driverId());
+                } else {
+                  payload.putNull("driverId");
+                }
                 payload.put("title", intervention.title());
                 payload.put(
                     "start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
@@ -221,6 +228,7 @@ public class RestDataSource implements DataSourceProvider {
           intervention.agencyId(),
           intervention.resourceId(),
           intervention.clientId(),
+          intervention.driverId(),
           intervention.title(),
           intervention.start(),
           intervention.end(),
@@ -244,6 +252,11 @@ public class RestDataSource implements DataSourceProvider {
                 payload.put("agencyId", intervention.agencyId());
                 payload.put("resourceId", intervention.resourceId());
                 payload.put("clientId", intervention.clientId());
+                if (intervention.driverId() != null) {
+                  payload.put("driverId", intervention.driverId());
+                } else {
+                  payload.putNull("driverId");
+                }
                 payload.put("title", intervention.title());
                 payload.put(
                     "start", OffsetDateTime.ofInstant(intervention.start(), ZoneOffset.UTC).toString());
@@ -262,6 +275,9 @@ public class RestDataSource implements DataSourceProvider {
           node.path("agencyId").asText(),
           node.path("resourceId").asText(),
           node.path("clientId").asText(),
+          node.path("driverId").isMissingNode() || node.path("driverId").isNull()
+              ? null
+              : node.path("driverId").asText(),
           node.path("title").asText(),
           java.time.Instant.parse(node.path("start").asText()),
           java.time.Instant.parse(node.path("end").asText()),
