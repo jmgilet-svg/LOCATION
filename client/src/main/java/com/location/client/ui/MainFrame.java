@@ -250,6 +250,11 @@ public class MainFrame extends JFrame {
     data.add(emailPdf);
     data.add(bulkEmail);
 
+    JMenu documents = new JMenu("Documents");
+    JMenuItem openDocs = new JMenuItem("Ouvrir les documents commerciaux");
+    openDocs.addActionListener(e -> new DocumentsFrame(dsp).setVisible(true));
+    documents.add(openDocs);
+
     JMenu view = new JMenu("Affichage");
     JMenuItem dayView = new JMenuItem("Vue Jour (Ctrl+1)");
     dayView.setAccelerator(KeyStroke.getKeyStroke("control 1"));
@@ -286,6 +291,7 @@ public class MainFrame extends JFrame {
 
     bar.add(file);
     bar.add(data);
+    bar.add(documents);
     bar.add(view);
     bar.add(settings);
     bar.add(help);

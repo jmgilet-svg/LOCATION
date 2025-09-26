@@ -6,6 +6,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -26,6 +27,7 @@ public class MockDataSource implements DataSourceProvider {
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
   private final List<Models.RecurringUnavailability> recurring = new ArrayList<>();
   private final Map<String, Models.EmailTemplate> agencyTemplates = new HashMap<>();
+  private final List<Models.Doc> docs = new ArrayList<>();
 
   public MockDataSource() {
     resetDemoData();
@@ -45,6 +47,7 @@ public class MockDataSource implements DataSourceProvider {
     unavailabilities.clear();
     recurring.clear();
     agencyTemplates.clear();
+    docs.clear();
 
     var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
     var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence Sud");
@@ -139,6 +142,29 @@ public class MockDataSource implements DataSourceProvider {
             LocalTime.of(8, 0),
             LocalTime.of(10, 0),
             "Routine hebdo"));
+
+    List<Models.DocLine> quoteLines = List.of(new Models.DocLine("Heures grue", 2.0, 120.0, 20.0));
+    docs.add(
+        buildDoc(
+            UUID.randomUUID().toString(),
+            "QUOTE",
+            "DRAFT",
+            "DV-001",
+            "Levage chantier",
+            a1.id(),
+            clients.get(0).id(),
+            quoteLines));
+    List<Models.DocLine> invoiceLines = List.of(new Models.DocLine("Transport", 1.0, 80.0, 20.0));
+    docs.add(
+        buildDoc(
+            UUID.randomUUID().toString(),
+            "INVOICE",
+            "ISSUED",
+            "FA-2025-0001",
+            "Transport X",
+            a1.id(),
+            clients.get(1).id(),
+            invoiceLines));
   }
 
   @Override
@@ -431,6 +457,136 @@ public class MockDataSource implements DataSourceProvider {
     features.put("FEATURE_UNAVAILABILITIES_CSV", true);
     return features;
 
+  }
+
+  @Override
+  public java.util.List<Models.Doc> listDocs(String type, String clientId) {
+    return docs.stream()
+        .filter(d -> type == null || type.isBlank() || d.type().equals(type))
+        .filter(d -> clientId == null || clientId.isBlank() || d.clientId().equals(clientId))
+        .toList();
+  }
+
+  @Override
+  public Models.Doc createDoc(String type, String agencyId, String clientId, String title) {
+    Models.Doc created =
+        new Models.Doc(
+            java.util.UUID.randomUUID().toString(),
+            type,
+            "DRAFT",
+            null,
+            title,
+            agencyId,
+            clientId,
+            java.time.OffsetDateTime.now(),
+            0,
+            0,
+            0,
+            java.util.List.of());
+    docs.add(created);
+    return created;
+  }
+
+  @Override
+  public Models.Doc updateDoc(Models.Doc document) {
+    Models.Doc updated =
+        buildDoc(
+            document.id(),
+            document.type(),
+            document.status(),
+            document.reference(),
+            document.title(),
+            document.agencyId(),
+            document.clientId(),
+            document.date(),
+            document.lines());
+    replaceDoc(updated);
+    return updated;
+  }
+
+  @Override
+  public void deleteDoc(String id) {
+    docs.removeIf(d -> d.id().equals(id));
+  }
+
+  @Override
+  public Models.Doc transitionDoc(String id, String toType) {
+    Models.Doc source =
+        docs.stream()
+            .filter(d -> d.id().equals(id))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Document introuvable"));
+    String status = "INVOICE".equalsIgnoreCase(toType) ? "ISSUED" : "DRAFT";
+    Models.Doc copy =
+        buildDoc(
+            java.util.UUID.randomUUID().toString(),
+            toType,
+            status,
+            null,
+            source.title(),
+            source.agencyId(),
+            source.clientId(),
+            java.time.OffsetDateTime.now(),
+            source.lines());
+    docs.add(copy);
+    return copy;
+  }
+
+  @Override
+  public java.nio.file.Path downloadDocPdf(String id, java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export PDF docs indisponible en mode Mock (pas d'écriture disque).");
+  }
+
+  @Override
+  public void emailDoc(String id, String to, String subject, String message) {
+    // Simulation : aucun envoi réel en mode Mock.
+  }
+
+  private Models.Doc buildDoc(
+      String id,
+      String type,
+      String status,
+      String reference,
+      String title,
+      String agencyId,
+      String clientId,
+      java.time.OffsetDateTime date,
+      java.util.List<Models.DocLine> lines) {
+    double totalHt = 0;
+    double totalVat = 0;
+    for (Models.DocLine line : lines) {
+      double lineHt = line.quantity() * line.unitPrice();
+      totalHt += lineHt;
+      totalVat += lineHt * (line.vatRate() / 100.0);
+    }
+    return new Models.Doc(
+        id,
+        type,
+        status,
+        reference,
+        title,
+        agencyId,
+        clientId,
+        date != null ? date : java.time.OffsetDateTime.now(),
+        round2(totalHt),
+        round2(totalVat),
+        round2(totalHt + totalVat),
+        java.util.List.copyOf(lines));
+  }
+
+  private void replaceDoc(Models.Doc updated) {
+    for (int i = 0; i < docs.size(); i++) {
+      if (docs.get(i).id().equals(updated.id())) {
+        docs.set(i, updated);
+        return;
+      }
+    }
+    docs.add(updated);
+  }
+
+  private static double round2(double value) {
+    return Math.round(value * 100.0) / 100.0;
   }
 
   private static boolean overlaps(Instant start, Instant end, Instant from, Instant to) {

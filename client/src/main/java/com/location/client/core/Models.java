@@ -50,4 +50,20 @@ public final class Models {
       String reason) {}
 
   public record EmailTemplate(String subject, String body) {}
+
+  public record DocLine(String designation, double quantity, double unitPrice, double vatRate) {}
+
+  public record Doc(
+      String id,
+      String type,
+      String status,
+      String reference,
+      String title,
+      String agencyId,
+      String clientId,
+      java.time.OffsetDateTime date,
+      double totalHt,
+      double totalVat,
+      double totalTtc,
+      java.util.List<DocLine> lines) {}
 }
