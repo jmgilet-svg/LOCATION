@@ -7,10 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
+import com.location.server.domain.Driver;
 import com.location.server.domain.Intervention;
 import com.location.server.domain.Resource;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
+import com.location.server.repo.DriverRepository;
 import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
 import com.location.server.repo.UnavailabilityRepository;
@@ -32,11 +34,13 @@ class InterventionUpdateWebTest {
   @Autowired AgencyRepository agencyRepository;
   @Autowired ClientRepository clientRepository;
   @Autowired ResourceRepository resourceRepository;
+  @Autowired DriverRepository driverRepository;
   @Autowired InterventionRepository interventionRepository;
   @Autowired UnavailabilityRepository unavailabilityRepository;
   private String agencyId;
   private String clientId;
   private String resourceId;
+  private String driverId;
   private String interventionId;
 
   private final OffsetDateTime base = OffsetDateTime.of(2025, 1, 1, 8, 0, 0, 0, ZoneOffset.UTC);
@@ -52,12 +56,15 @@ class InterventionUpdateWebTest {
     Agency agency = agencyRepository.save(new Agency("A", "Agence"));
     Client client = clientRepository.save(new Client("C", "Client", "client@example.test"));
     Resource resource = resourceRepository.save(new Resource("R", "Ressource", "XX-000-YY", null, agency));
+    Driver driver = driverRepository.save(new Driver("D", "Driver", "driver@example.test"));
     Intervention intervention =
-        interventionRepository.save(new Intervention("I1", "Titre", base, base.plusHours(2), agency, resource, client));
+        interventionRepository.save(
+            new Intervention("I1", "Titre", base, base.plusHours(2), agency, resource, client, driver, null));
 
     agencyId = agency.getId();
     clientId = client.getId();
     resourceId = resource.getId();
+    driverId = driver.getId();
     interventionId = intervention.getId();
   }
 
@@ -65,9 +72,9 @@ class InterventionUpdateWebTest {
   void update_ok_then_delete_returns_204() throws Exception {
     String payload =
         """
-            {"agencyId":"%s","resourceId":"%s","clientId":"%s","title":"MAJ","start":"%s","end":"%s"}
+            {"agencyId":"%s","resourceId":"%s","clientId":"%s","driverId":"%s","title":"MAJ","start":"%s","end":"%s"}
             """
-            .formatted(agencyId, resourceId, clientId, base.plusHours(1), base.plusHours(3));
+            .formatted(agencyId, resourceId, clientId, driverId, base.plusHours(1), base.plusHours(3));
 
     mockMvc
         .perform(
@@ -85,15 +92,17 @@ class InterventionUpdateWebTest {
     Agency agency = agencyRepository.getReferenceById(agencyId);
     Resource resource = resourceRepository.getReferenceById(resourceId);
     Client client = clientRepository.getReferenceById(clientId);
+    Driver driver = driverRepository.getReferenceById(driverId);
 
     interventionRepository.save(
-        new Intervention("I2", "Autre", base.plusHours(2), base.plusHours(4), agency, resource, client));
+        new Intervention(
+            "I2", "Autre", base.plusHours(2), base.plusHours(4), agency, resource, client, driver, null));
 
     String payload =
         """
-            {"agencyId":"%s","resourceId":"%s","clientId":"%s","title":"MAJ","start":"%s","end":"%s"}
+            {"agencyId":"%s","resourceId":"%s","clientId":"%s","driverId":"%s","title":"MAJ","start":"%s","end":"%s"}
             """
-            .formatted(agencyId, resourceId, clientId, base.plusHours(1), base.plusHours(3));
+            .formatted(agencyId, resourceId, clientId, driverId, base.plusHours(1), base.plusHours(3));
 
     mockMvc
         .perform(

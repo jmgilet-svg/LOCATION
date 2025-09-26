@@ -53,6 +53,7 @@ public final class ApiV1Dtos {
       String title,
       String agencyId,
       String resourceId,
+      String driverId,
       String clientId,
       OffsetDateTime start,
       OffsetDateTime end,
@@ -63,6 +64,7 @@ public final class ApiV1Dtos {
           intervention.getTitle(),
           intervention.getAgency().getId(),
           intervention.getResource().getId(),
+          intervention.getDriver() == null ? null : intervention.getDriver().getId(),
           intervention.getClient().getId(),
           intervention.getStart(),
           intervention.getEnd(),
@@ -109,6 +111,7 @@ public final class ApiV1Dtos {
   public record CreateInterventionRequest(
       @NotBlank String agencyId,
       @NotBlank String resourceId,
+      String driverId,
       @NotBlank String clientId,
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,
@@ -118,6 +121,7 @@ public final class ApiV1Dtos {
   public record UpdateInterventionRequest(
       @NotBlank String agencyId,
       @NotBlank String resourceId,
+      String driverId,
       @NotBlank String clientId,
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,

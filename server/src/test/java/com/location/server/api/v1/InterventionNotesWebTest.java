@@ -6,10 +6,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
+import com.location.server.domain.Driver;
 import com.location.server.domain.Intervention;
 import com.location.server.domain.Resource;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
+import com.location.server.repo.DriverRepository;
 import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
 import com.location.server.repo.UnavailabilityRepository;
@@ -33,12 +35,14 @@ class InterventionNotesWebTest {
   @Autowired AgencyRepository agencyRepository;
   @Autowired ClientRepository clientRepository;
   @Autowired ResourceRepository resourceRepository;
+  @Autowired DriverRepository driverRepository;
   @Autowired InterventionRepository interventionRepository;
   @Autowired UnavailabilityRepository unavailabilityRepository;
 
   private OffsetDateTime start;
   private OffsetDateTime end;
   private String interventionId;
+  private String driverId;
 
   @BeforeEach
   void setUp() {
@@ -52,11 +56,13 @@ class InterventionNotesWebTest {
     Client client = clientRepository.save(new Client("C", "Client", "client@example.test"));
     Resource resource =
         resourceRepository.save(new Resource("R", "Ressource", "AB-123-CD", null, agency));
+    Driver driver = driverRepository.save(new Driver("D", "Driver", "driver@example.test"));
     start = OffsetDateTime.of(2025, 1, 10, 8, 0, 0, 0, ZoneOffset.UTC);
     end = start.plusHours(2);
     Intervention intervention =
-        new Intervention("I", "Titre", start, end, agency, resource, client, null);
+        new Intervention("I", "Titre", start, end, agency, resource, client, driver, null);
     interventionId = interventionRepository.save(intervention).getId();
+    driverId = driver.getId();
   }
 
   @Test
@@ -66,6 +72,7 @@ class InterventionNotesWebTest {
         "\"agencyId\":\"A\"," +
         "\"resourceId\":\"R\"," +
         "\"clientId\":\"C\"," +
+        "\"driverId\":\"" + driverId + "\"," +
         "\"title\":\"MAJ\"," +
         "\"start\":\"" + start.plusHours(1).toString() + "\"," +
         "\"end\":\"" + end.plusHours(1).toString() + "\"," +

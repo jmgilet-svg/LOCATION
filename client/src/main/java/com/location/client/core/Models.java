@@ -9,6 +9,8 @@ public final class Models {
 
   public record Client(String id, String name, String billingEmail) {}
 
+  public record Driver(String id, String name, String email) {}
+
   public record Resource(
       String id,
       String name,
@@ -28,6 +30,7 @@ public final class Models {
       String agencyId,
       String resourceId,
       String clientId,
+      String driverId,
       String title,
       Instant start,
       Instant end,

@@ -23,6 +23,7 @@ public class MockDataSource implements DataSourceProvider {
 
   private final List<Models.Agency> agencies = new ArrayList<>();
   private final List<Models.Client> clients = new ArrayList<>();
+  private final List<Models.Driver> drivers = new ArrayList<>();
   private String currentAgencyId;
   private final List<Models.Resource> resources = new ArrayList<>();
   private final List<Models.Intervention> interventions = new ArrayList<>();
@@ -62,6 +63,7 @@ public class MockDataSource implements DataSourceProvider {
   public void resetDemoData() {
     agencies.clear();
     clients.clear();
+    drivers.clear();
     resources.clear();
     interventions.clear();
     unavailabilities.clear();
@@ -105,6 +107,9 @@ public class MockDataSource implements DataSourceProvider {
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
 
+    drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Jean Dupont", "jean@loc.tld"));
+    drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Sophie Martin", "sophie@loc.tld"));
+
     resources.add(
         new Models.Resource(
             UUID.randomUUID().toString(),
@@ -140,6 +145,7 @@ public class MockDataSource implements DataSourceProvider {
         a1.id(),
         resources.get(0).id(),
         clients.get(0).id(),
+        drivers.get(0).id(),
         "Livraison chantier",
         base.plusDays(1).toInstant(),
         base.plusDays(1).plusHours(2).toInstant(),
@@ -148,6 +154,7 @@ public class MockDataSource implements DataSourceProvider {
         a1.id(),
         resources.get(1).id(),
         clients.get(1).id(),
+        drivers.get(1).id(),
         "Levage poutres",
         base.plusDays(1).plusHours(3).toInstant(),
         base.plusDays(1).plusHours(5).toInstant(),
@@ -156,6 +163,7 @@ public class MockDataSource implements DataSourceProvider {
         a2.id(),
         resources.get(2).id(),
         clients.get(1).id(),
+        null,
         "Transport matériel",
         base.plusDays(2).toInstant(),
         base.plusDays(2).plusHours(1).toInstant(),
@@ -255,9 +263,12 @@ public class MockDataSource implements DataSourceProvider {
         interventions.stream()
             .anyMatch(
                 i ->
-                    i.resourceId().equals(intervention.resourceId())
-                        && i.end().isAfter(intervention.start())
-                        && i.start().isBefore(intervention.end()));
+                    conflicts(
+                        i,
+                        intervention.resourceId(),
+                        intervention.driverId(),
+                        intervention.start(),
+                        intervention.end()));
     if (overlap) {
       throw new IllegalStateException("Conflit d'affectation (MOCK)");
     }
@@ -278,6 +289,7 @@ public class MockDataSource implements DataSourceProvider {
             intervention.agencyId(),
             intervention.resourceId(),
             intervention.clientId(),
+            intervention.driverId(),
             intervention.title(),
             intervention.start(),
             intervention.end(),
@@ -293,9 +305,12 @@ public class MockDataSource implements DataSourceProvider {
             .filter(i -> !i.id().equals(intervention.id()))
             .anyMatch(
                 i ->
-                    i.resourceId().equals(intervention.resourceId())
-                        && i.end().isAfter(intervention.start())
-                        && i.start().isBefore(intervention.end()));
+                    conflicts(
+                        i,
+                        intervention.resourceId(),
+                        intervention.driverId(),
+                        intervention.start(),
+                        intervention.end()));
     if (overlap) {
       throw new IllegalStateException("Conflit (MOCK) avec une autre intervention");
     }
@@ -724,17 +739,35 @@ public class MockDataSource implements DataSourceProvider {
     return end.isAfter(from) && start.isBefore(to);
   }
 
+  private boolean conflicts(
+      Models.Intervention existing,
+      String resourceId,
+      String driverId,
+      Instant start,
+      Instant end) {
+    if (!existing.end().isAfter(start) || !existing.start().isBefore(end)) {
+      return false;
+    }
+    boolean sameResource = existing.resourceId().equals(resourceId);
+    boolean sameDriver =
+        existing.driverId() != null
+            && driverId != null
+            && existing.driverId().equals(driverId);
+    return sameResource || sameDriver;
+  }
+
   private void addIntervention(
       String agencyId,
       String resourceId,
       String clientId,
+      String driverId,
       String title,
       Instant start,
       Instant end,
       String notes) {
     interventions.add(
         new Models.Intervention(
-            UUID.randomUUID().toString(), agencyId, resourceId, clientId, title, start, end, notes));
+            UUID.randomUUID().toString(), agencyId, resourceId, clientId, driverId, title, start, end, notes));
   }
 
   private void addUnavailability(String resourceId, String reason, Instant start, Instant end) {

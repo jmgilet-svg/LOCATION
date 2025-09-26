@@ -13,7 +13,8 @@ import java.time.OffsetDateTime;
 @Table(
     name = "intervention",
     indexes = {
-      @Index(name = "idx_intervention_resource_start_end", columnList = "resource_id,start_ts,end_ts")
+      @Index(name = "idx_intervention_resource_start_end", columnList = "resource_id,start_ts,end_ts"),
+      @Index(name = "idx_intervention_driver_start_end", columnList = "driver_id,start_ts,end_ts")
     })
 public class Intervention {
   @Id
@@ -37,6 +38,10 @@ public class Intervention {
   @JoinColumn(name = "resource_id")
   private Resource resource;
 
+  @ManyToOne(optional = true)
+  @JoinColumn(name = "driver_id")
+  private Driver driver;
+
   @ManyToOne(optional = false)
   @JoinColumn(name = "client_id")
   private Client client;
@@ -54,7 +59,7 @@ public class Intervention {
       Agency agency,
       Resource resource,
       Client client) {
-    this(id, title, start, end, agency, resource, client, null);
+    this(id, title, start, end, agency, resource, client, null, null);
   }
 
   public Intervention(
@@ -66,6 +71,19 @@ public class Intervention {
       Resource resource,
       Client client,
       String notes) {
+    this(id, title, start, end, agency, resource, client, null, notes);
+  }
+
+  public Intervention(
+      String id,
+      String title,
+      OffsetDateTime start,
+      OffsetDateTime end,
+      Agency agency,
+      Resource resource,
+      Client client,
+      Driver driver,
+      String notes) {
     this.id = id;
     this.title = title;
     this.start = start;
@@ -73,6 +91,7 @@ public class Intervention {
     this.agency = agency;
     this.resource = resource;
     this.client = client;
+    this.driver = driver;
     this.notes = notes;
   }
 
@@ -122,6 +141,14 @@ public class Intervention {
 
   public void setResource(Resource resource) {
     this.resource = resource;
+  }
+
+  public Driver getDriver() {
+    return driver;
+  }
+
+  public void setDriver(Driver driver) {
+    this.driver = driver;
   }
 
   public Client getClient() {

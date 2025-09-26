@@ -304,6 +304,7 @@ public class ApiV1Controller {
         interventionService.create(
             request.agencyId(),
             request.resourceId(),
+            request.driverId(),
             request.clientId(),
             request.title(),
             request.start(),
@@ -319,6 +320,7 @@ public class ApiV1Controller {
             id,
             request.agencyId(),
             request.resourceId(),
+            request.driverId(),
             request.clientId(),
             request.title(),
             request.start(),

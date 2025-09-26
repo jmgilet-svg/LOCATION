@@ -2,10 +2,12 @@ package com.location.server.service;
 
 import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
+import com.location.server.domain.Driver;
 import com.location.server.domain.Intervention;
 import com.location.server.domain.Resource;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
+import com.location.server.repo.DriverRepository;
 import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
 import com.location.server.repo.UnavailabilityRepository;
@@ -20,6 +22,7 @@ public class InterventionService {
   private final AgencyRepository agencyRepository;
   private final ResourceRepository resourceRepository;
   private final ClientRepository clientRepository;
+  private final DriverRepository driverRepository;
   private final UnavailabilityRepository unavailabilityRepository;
 
   public InterventionService(
@@ -27,11 +30,13 @@ public class InterventionService {
       AgencyRepository agencyRepository,
       ResourceRepository resourceRepository,
       ClientRepository clientRepository,
+      DriverRepository driverRepository,
       UnavailabilityRepository unavailabilityRepository) {
     this.interventionRepository = interventionRepository;
     this.agencyRepository = agencyRepository;
     this.resourceRepository = resourceRepository;
     this.clientRepository = clientRepository;
+    this.driverRepository = driverRepository;
     this.unavailabilityRepository = unavailabilityRepository;
   }
 
@@ -39,6 +44,7 @@ public class InterventionService {
   public Intervention create(
       String agencyId,
       String resourceId,
+      String driverId,
       String clientId,
       String title,
       OffsetDateTime start,
@@ -51,15 +57,23 @@ public class InterventionService {
       throw new AssignmentConflictException(
           "Intervention en conflit pour la ressource " + resourceId);
     }
+    if (driverId != null
+        && !driverId.isBlank()
+        && interventionRepository.existsDriverOverlap(driverId, start, end)) {
+      throw new AssignmentConflictException(
+          "Intervention en conflit pour le chauffeur " + driverId);
+    }
     if (unavailabilityRepository.existsOverlap(resourceId, start, end)) {
       throw new AssignmentConflictException("Ressource indisponible sur le créneau");
     }
     Agency agency = agencyRepository.findById(agencyId).orElseThrow();
     Resource resource = resourceRepository.findById(resourceId).orElseThrow();
     Client client = clientRepository.findById(clientId).orElseThrow();
+    Driver driver =
+        driverId == null || driverId.isBlank() ? null : driverRepository.findById(driverId).orElseThrow();
     Intervention intervention =
         new Intervention(
-            UUID.randomUUID().toString(), title, start, end, agency, resource, client, notes);
+            UUID.randomUUID().toString(), title, start, end, agency, resource, client, driver, notes);
     return interventionRepository.save(intervention);
   }
 
@@ -68,6 +82,7 @@ public class InterventionService {
       String id,
       String agencyId,
       String resourceId,
+      String driverId,
       String clientId,
       String title,
       OffsetDateTime start,
@@ -79,6 +94,12 @@ public class InterventionService {
     if (interventionRepository.existsOverlapExcluding(id, resourceId, start, end)) {
       throw new AssignmentConflictException(
           "Intervention en conflit pour la ressource " + resourceId);
+    }
+    if (driverId != null
+        && !driverId.isBlank()
+        && interventionRepository.existsDriverOverlapExcluding(id, driverId, start, end)) {
+      throw new AssignmentConflictException(
+          "Intervention en conflit pour le chauffeur " + driverId);
     }
     if (unavailabilityRepository.existsOverlap(resourceId, start, end)) {
       throw new AssignmentConflictException("Ressource indisponible sur le créneau");
@@ -92,6 +113,12 @@ public class InterventionService {
     }
     if (!intervention.getClient().getId().equals(clientId)) {
       intervention.setClient(clientRepository.findById(clientId).orElseThrow());
+    }
+    if (driverId == null || driverId.isBlank()) {
+      intervention.setDriver(null);
+    } else if (intervention.getDriver() == null
+        || !driverId.equals(intervention.getDriver().getId())) {
+      intervention.setDriver(driverRepository.findById(driverId).orElseThrow());
     }
     intervention.setTitle(title);
     intervention.setStart(start);

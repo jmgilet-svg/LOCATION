@@ -20,6 +20,7 @@ class NotesModelTest {
             first.agencyId(),
             first.resourceId(),
             first.clientId(),
+            first.driverId(),
             first.title(),
             first.start(),
             first.end(),
