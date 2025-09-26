@@ -2,6 +2,29 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## UX++ Tranche A+B — Design System (thèmes) & Navigation moderne
+
+### Ce que livre ce patch
+**A — Design System & Thèmes**
+- Gestion **thème clair/sombre** (FlatLaf) + tokens (espacements, radius, élévation).
+- Icônes SVG centralisées (`IconLoader`).
+- **Préférences** persistées (~/.location/app.properties) : dernier thème utilisé.
+- **Menu** Paramètres → Thème (Clair/Sombre) + `Ctrl+Alt+L` (clair), `Ctrl+Alt+D` (sombre).
+
+**B — Navigation moderne**
+- **Barre latérale** (Planning, Clients, Ressources, Chauffeurs, Documents, Indispos, Rapports).
+- **Command Palette** (Ctrl+K) avec navigation instantanée et recherche d’actions.
+- **Global Search** (Ctrl+F) agrégée (Clients/Ressources/Documents — simple et rapide côté client).
+
+### Build & run (client)
+```bash
+mvn -pl client -DskipTests package
+java -jar client/target/location-client.jar --datasource=mock   # ou --datasource=rest
+```
+
+### Notes
+- Pas de changement API backend requis pour cette tranche (la recherche globale s’appuie sur les providers existants).
+
 ## Étape 12 — Stabilisation finale : **SSE ping**, **résilience REST**, **accessibilité & raccourcis**, **indicateur d’état**
 
 ### Livré (Back/Front/Mock)

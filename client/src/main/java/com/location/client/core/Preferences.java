@@ -48,6 +48,18 @@ public class Preferences {
     props.setProperty("lastSource", value);
   }
 
+  public String getThemeMode() {
+    return props.getProperty("theme", "LIGHT");
+  }
+
+  public void setThemeMode(String value) {
+    if (value == null || value.isBlank()) {
+      props.remove("theme");
+    } else {
+      props.setProperty("theme", value);
+    }
+  }
+
   public String getBaseUrl() {
     return props.getProperty("baseUrl");
   }

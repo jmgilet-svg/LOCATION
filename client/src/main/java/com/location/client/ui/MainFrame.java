@@ -28,6 +28,7 @@ public class MainFrame extends JFrame {
   private final Preferences prefs;
   private final PlanningPanel planning;
   private final TopBar topBar;
+  private final Sidebar sidebar;
   private final JLabel connectionBadge = new JLabel();
   private final JLabel status = new JLabel();
   private final JLabel modeBadge = new JLabel();
@@ -43,6 +44,7 @@ public class MainFrame extends JFrame {
     this.prefs = prefs;
     this.planning = new PlanningPanel(dsp);
     this.topBar = new TopBar(planning, prefs);
+    this.sidebar = new Sidebar(this::handleNavigation);
 
     initializeCurrentAgency();
 
@@ -75,7 +77,9 @@ public class MainFrame extends JFrame {
 
     setJMenuBar(buildMenuBar());
     add(topBar, BorderLayout.NORTH);
+    add(sidebar, BorderLayout.WEST);
     add(planning, BorderLayout.CENTER);
+    sidebar.setSelected("planning");
     JPanel south = new JPanel(new BorderLayout());
     JPanel badges = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
     badges.add(connectionBadge);
@@ -219,6 +223,58 @@ public class MainFrame extends JFrame {
                 deleteSelected();
               }
             });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control K"), "commandPalette");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "commandPalette",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                openCommandPalette();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control F"), "globalSearch");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "globalSearch",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                openGlobalSearch();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control alt L"), "themeLight");
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control alt D"), "themeDark");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "themeLight",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.apply(Theme.Mode.LIGHT);
+              }
+            });
+    getRootPane()
+        .getActionMap()
+        .put(
+            "themeDark",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.apply(Theme.Mode.DARK);
+              }
+            });
   }
 
   private JMenuBar buildMenuBar() {
@@ -331,6 +387,22 @@ public class MainFrame extends JFrame {
     switchSrc.addActionListener(e -> switchSource());
     JMenuItem cfg = new JMenuItem("Configurer le backend (URL/Login)");
     cfg.addActionListener(e -> showBackendConfig());
+    JMenuItem themeLight =
+        new JMenuItem(
+            new AbstractAction("Thème clair (Ctrl+Alt+L)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.apply(Theme.Mode.LIGHT);
+              }
+            });
+    JMenuItem themeDark =
+        new JMenuItem(
+            new AbstractAction("Thème sombre (Ctrl+Alt+D)") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Theme.apply(Theme.Mode.DARK);
+              }
+            });
     JMenuItem tmpl = new JMenuItem("Modèle email (Agence)");
     tmpl.addActionListener(e -> editAgencyTemplate());
     JMenuItem loginItem =
@@ -359,6 +431,9 @@ public class MainFrame extends JFrame {
             });
     settings.add(switchSrc);
     settings.add(cfg);
+    settings.add(themeLight);
+    settings.add(themeDark);
+    settings.addSeparator();
     settings.add(loginItem);
     settings.add(tmpl);
     settings.add(docTmpl);
@@ -485,6 +560,92 @@ public class MainFrame extends JFrame {
     } else {
       connectionBadge.setText("🔴 REST déconnecté — reconnexion…");
     }
+  }
+
+  private void handleNavigation(String target) {
+    switch (target) {
+      case "planning" -> sidebar.setSelected("planning");
+      case "docs" -> {
+        openDocuments();
+        sidebar.setSelected("planning");
+      }
+      case "clients" -> {
+        showPlaceholder("Clients");
+        sidebar.setSelected("planning");
+      }
+      case "resources" -> {
+        showPlaceholder("Ressources");
+        sidebar.setSelected("planning");
+      }
+      case "drivers" -> {
+        showPlaceholder("Chauffeurs");
+        sidebar.setSelected("planning");
+      }
+      case "unav" -> {
+        showPlaceholder("Indisponibilités");
+        sidebar.setSelected("planning");
+      }
+      case "reports" -> {
+        showPlaceholder("Rapports");
+        sidebar.setSelected("planning");
+      }
+      default -> sidebar.setSelected("planning");
+    }
+  }
+
+  private void openCommandPalette() {
+    CommandPaletteDialog dialog =
+        new CommandPaletteDialog(this)
+            .commands(
+                new CommandPaletteDialog.Command(
+                    "planning", "Aller au planning", () -> handleNavigation("planning")),
+                new CommandPaletteDialog.Command(
+                    "docs", "Ouvrir les documents", () -> handleNavigation("docs")),
+                new CommandPaletteDialog.Command(
+                    "new-intervention",
+                    "Nouvelle intervention",
+                    this::createInterventionDialog),
+                new CommandPaletteDialog.Command(
+                    "global-search", "Recherche globale", this::openGlobalSearch),
+                new CommandPaletteDialog.Command(
+                    "theme-light", "Thème clair", () -> Theme.apply(Theme.Mode.LIGHT)),
+                new CommandPaletteDialog.Command(
+                    "theme-dark", "Thème sombre", () -> Theme.apply(Theme.Mode.DARK)));
+    dialog.setVisible(true);
+  }
+
+  private void openGlobalSearch() {
+    GlobalSearchDialog dialog =
+        new GlobalSearchDialog(this, dsp)
+            .onOpen(
+                row -> {
+                  switch (row.type()) {
+                    case "Document" -> {
+                      handleNavigation("docs");
+                      JOptionPane.showMessageDialog(
+                          this,
+                          "Document sélectionné : " + row.label() + " (#" + row.id() + ")",
+                          "Documents",
+                          JOptionPane.INFORMATION_MESSAGE);
+                    }
+                    case "Client" -> showPlaceholder("Client : " + row.label());
+                    case "Ressource" -> showPlaceholder("Ressource : " + row.label());
+                    default -> showPlaceholder(row.type() + " : " + row.label());
+                  }
+                });
+    dialog.setVisible(true);
+  }
+
+  private void openDocuments() {
+    new DocumentsFrame(dsp).setVisible(true);
+  }
+
+  private void showPlaceholder(String feature) {
+    JOptionPane.showMessageDialog(
+        this,
+        feature + " — module en préparation",
+        "Navigation",
+        JOptionPane.INFORMATION_MESSAGE);
   }
 
   private void exportCsv() {
