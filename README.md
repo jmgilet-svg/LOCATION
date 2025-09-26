@@ -2,6 +2,20 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## UX++ Tranche E+F — Édition inline + Raccourcis & actions rapides
+
+### Ce que livre ce patch (exécutable)
+**E — Éditeurs inline & validations**
+- **Double‑clic** sur une tuile du planning → **Édition rapide** (titre, heures, ressource) avec **validation immédiate** (fin > début).
+  (Si déjà livré par la tranche précédente, ici on consolide et câblons les actions globales.)
+
+**F — Raccourcis & actions rapides**
+- **Cheat‑sheet** clavier (F1) listant tous les raccourcis.
+- Raccourcis : `Ctrl+N` (nouvelle intervention), `Ctrl+D` (dupliquer), `Suppr` (supprimer), `Alt+←/→` (jour ±1).
+- **Barre d’actions contextuelle** qui apparaît quand une sélection multiple existe : **Dupliquer**, **Supprimer**, **±30 min**.
+
+> Tout est côté client ; aucune API supplémentaire n’est requise. Les suppressions utilisent le provider REST/Mock existant.
+
 ## UX++ Tranche D+E — Aide au placement (suggestions + heatmap) & Édition inline
 
 ### Ce que livre ce patch (exécutable)
