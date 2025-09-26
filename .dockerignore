@@ -1,0 +1,17 @@
+target
+*/target
+.git
+.github
+.idea
+.vscode
+*.iml
+*.log
+logs
+node_modules
+dist
+build
+.DS_Store
+*.patch
+*.zip
+*.tar.gz
+*.jar

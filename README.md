@@ -2,6 +2,39 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 4 — Qualité & Packaging (CI + Docker + Compose + Gzip)
+
+### Ce que cette étape livre
+- **CI GitHub Actions** : build Maven, tests, **Checkstyle** & **PMD** (qualité), build image Docker du **server**.
+- **Packaging Docker** :
+  - `server/Dockerfile` multi‑stage (build JAR puis image runtime légère).
+  - `docker-compose.yml` avec **Postgres** (prod), **Mailhog** (dev emails), et **server** attaché au réseau.
+- **Configs Spring** :
+  - `application.yml`: **compression gzip** activée pour les réponses HTTP.
+  - `application-prod.yml`: datasource **Postgres** via variables d’environnement.
+
+### Démarrage rapide (prod-like)
+```bash
+# 1) Construire le JAR
+mvn -B -ntp -DskipTests package
+
+# 2) Construire l'image serveur
+docker build -t location-server:latest ./server
+
+# 3) Lancer l'ensemble (Postgres + Mailhog + Server)
+docker compose up -d
+
+# Server: http://localhost:8080
+# Mailhog UI: http://localhost:8025
+```
+
+### Variables d’environnement (server)
+- `SPRING_PROFILES_ACTIVE=prod`
+- `DB_URL=jdbc:postgresql://db:5432/location`
+- `DB_USER=location`
+- `DB_PASS=location`
+- `JWT_SECRET` (obligatoire en prod)
+
 ## Étape 3 — Multi-agences opérationnel (enforcement `X-Agency-Id` + UI de bascule)
 
 ### Ce que cette étape apporte
