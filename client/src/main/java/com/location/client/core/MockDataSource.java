@@ -11,9 +11,11 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class MockDataSource implements DataSourceProvider {
 
@@ -23,6 +25,7 @@ public class MockDataSource implements DataSourceProvider {
   private final List<Models.Intervention> interventions = new ArrayList<>();
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
   private final List<Models.RecurringUnavailability> recurring = new ArrayList<>();
+  private final Map<String, Models.EmailTemplate> agencyTemplates = new HashMap<>();
 
   public MockDataSource() {
     resetDemoData();
@@ -41,11 +44,22 @@ public class MockDataSource implements DataSourceProvider {
     interventions.clear();
     unavailabilities.clear();
     recurring.clear();
+    agencyTemplates.clear();
 
     var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
     var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence Sud");
     agencies.add(a1);
     agencies.add(a2);
+    agencyTemplates.put(
+        a1.id(),
+        new Models.EmailTemplate(
+            "Intervention {{interventionTitle}}",
+            "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
+    agencyTemplates.put(
+        a2.id(),
+        new Models.EmailTemplate(
+            "Intervention {{interventionTitle}}",
+            "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
 
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
@@ -389,6 +403,22 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public void emailInterventionPdf(String interventionId, String to, String subject, String message) {
     // Simulation instantanée : pas d'envoi réel en mode Mock.
+  }
+
+  @Override
+  public Models.EmailTemplate getAgencyEmailTemplate(String agencyId) {
+    return agencyTemplates.getOrDefault(agencyId, new Models.EmailTemplate(null, null));
+  }
+
+  @Override
+  public Models.EmailTemplate updateAgencyEmailTemplate(String agencyId, Models.EmailTemplate template) {
+    agencyTemplates.put(agencyId, template);
+    return template;
+  }
+
+  @Override
+  public void emailBulk(List<String> ids, String toOverride) {
+    // Mode mock : rien à faire, considéré comme réussi.
   }
 
   private static boolean overlaps(Instant start, Instant end, Instant from, Instant to) {

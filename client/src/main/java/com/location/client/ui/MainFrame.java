@@ -184,6 +184,8 @@ public class MainFrame extends JFrame {
     JMenuItem editNotes = new JMenuItem("Éditer les notes (Ctrl+E)");
     editNotes.setAccelerator(KeyStroke.getKeyStroke("control E"));
     editNotes.addActionListener(e -> editNotes());
+    JMenuItem bulkEmail = new JMenuItem("Envoyer PDFs du jour (lot)");
+    bulkEmail.addActionListener(e -> sendBulkForDay());
     JMenuItem newUnav = new JMenuItem("Nouvelle indisponibilité");
     newUnav.addActionListener(e -> createUnavailabilityDialog());
     JMenuItem newRecurring = new JMenuItem("Nouvelle indisponibilité récurrente");
@@ -212,14 +214,18 @@ public class MainFrame extends JFrame {
     data.add(newRecurring);
     data.add(deleteIntervention);
     data.add(emailPdf);
+    data.add(bulkEmail);
 
     JMenu settings = new JMenu("Paramètres");
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
     switchSrc.addActionListener(e -> switchSource());
     JMenuItem cfg = new JMenuItem("Configurer le backend (URL/Login)");
     cfg.addActionListener(e -> showBackendConfig());
+    JMenuItem tmpl = new JMenuItem("Modèle email (Agence)");
+    tmpl.addActionListener(e -> editAgencyTemplate());
     settings.add(switchSrc);
     settings.add(cfg);
+    settings.add(tmpl);
 
     bar.add(file);
     bar.add(data);
@@ -608,6 +614,62 @@ public class MainFrame extends JFrame {
         rd.configure(prefs.getBaseUrl(), prefs.getRestUser(), prefs.getRestPass());
       }
       toast("Configuration enregistrée");
+    }
+  }
+
+  private void sendBulkForDay() {
+    List<Models.Intervention> items = planning.getInterventions();
+    if (items == null || items.isEmpty()) {
+      toast("Aucune intervention pour ce jour");
+      return;
+    }
+    String input = JOptionPane.showInputDialog(this, "Destinataire (optionnel) :", "Envoi groupé", JOptionPane.QUESTION_MESSAGE);
+    if (input == null) {
+      return;
+    }
+    String to = input.trim();
+    if (to.isEmpty()) {
+      to = null;
+    }
+    try {
+      dsp.emailBulk(items.stream().map(Models.Intervention::id).toList(), to);
+      toast("Envoi groupé demandé");
+    } catch (Exception ex) {
+      error("Échec envoi groupé : " + ex.getMessage());
+    }
+  }
+
+  private void editAgencyTemplate() {
+    List<Models.Agency> agencies = dsp.listAgencies();
+    if (agencies.isEmpty()) {
+      toast("Aucune agence");
+      return;
+    }
+    Models.Agency selected = (Models.Agency)
+        JOptionPane.showInputDialog(this, "Choisir l'agence", "Modèle email", JOptionPane.PLAIN_MESSAGE, null, agencies.toArray(), agencies.get(0));
+    if (selected == null) {
+      return;
+    }
+    Models.EmailTemplate template = dsp.getAgencyEmailTemplate(selected.id());
+    JTextField subjectField = new JTextField(template != null && template.subject() != null ? template.subject() : "Intervention {{interventionTitle}}");
+    JTextArea bodyField = new JTextArea(template != null && template.body() != null ? template.body() : "Bonjour {{clientName}},\nVeuillez trouver la fiche d'intervention.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}");
+    bodyField.setRows(10);
+    bodyField.setWrapStyleWord(true);
+    bodyField.setLineWrap(true);
+    JPanel panel = new JPanel(new BorderLayout(6, 6));
+    JPanel top = new JPanel(new BorderLayout(6, 6));
+    top.add(new JLabel("Sujet :"), BorderLayout.WEST);
+    top.add(subjectField, BorderLayout.CENTER);
+    panel.add(top, BorderLayout.NORTH);
+    panel.add(new JScrollPane(bodyField), BorderLayout.CENTER);
+    int ok = JOptionPane.showConfirmDialog(this, panel, "Modèle email — " + selected.name(), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+    if (ok == JOptionPane.OK_OPTION) {
+      try {
+        dsp.updateAgencyEmailTemplate(selected.id(), new Models.EmailTemplate(subjectField.getText(), bodyField.getText()));
+        toast("Modèle enregistré");
+      } catch (Exception ex) {
+        error("Échec sauvegarde : " + ex.getMessage());
+      }
     }
   }
 

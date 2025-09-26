@@ -36,4 +36,10 @@ public interface DataSourceProvider extends AutoCloseable {
   java.nio.file.Path downloadInterventionPdf(String interventionId, java.nio.file.Path target);
 
   void emailInterventionPdf(String interventionId, String to, String subject, String message);
+
+  Models.EmailTemplate getAgencyEmailTemplate(String agencyId);
+
+  Models.EmailTemplate updateAgencyEmailTemplate(String agencyId, Models.EmailTemplate template);
+
+  void emailBulk(List<String> ids, String toOverride);
 }

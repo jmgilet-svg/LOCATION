@@ -2,6 +2,7 @@ package com.location.client.core;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -468,6 +469,71 @@ public class RestDataSource implements DataSourceProvider {
                     ? ""
                     : new String(entity.getContent().readAllBytes(), StandardCharsets.UTF_8);
             throw new IOException("HTTP " + code + " → " + body);
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.EmailTemplate getAgencyEmailTemplate(String agencyId) {
+    try {
+      ensureLogin();
+      JsonNode node = executeForJson(new HttpGet(baseUrl + "/api/v1/agencies/" + encodeSegment(agencyId) + "/email-template"));
+      return new Models.EmailTemplate(node.path("subject").asText(null), node.path("body").asText(null));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.EmailTemplate updateAgencyEmailTemplate(String agencyId, Models.EmailTemplate template) {
+    try {
+      ensureLogin();
+      HttpPut put = new HttpPut(baseUrl + "/api/v1/agencies/" + encodeSegment(agencyId) + "/email-template");
+      ObjectNode payload = om.createObjectNode();
+      if (template.subject() == null) {
+        payload.putNull("subject");
+      } else {
+        payload.put("subject", template.subject());
+      }
+      if (template.body() == null) {
+        payload.putNull("body");
+      } else {
+        payload.put("body", template.body());
+      }
+      put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      JsonNode node = executeForJson(put);
+      return new Models.EmailTemplate(node.path("subject").asText(null), node.path("body").asText(null));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void emailBulk(List<String> ids, String toOverride) {
+    try {
+      ensureLogin();
+      HttpPost post = new HttpPost(baseUrl + "/api/v1/interventions/email-bulk");
+      ObjectNode payload = om.createObjectNode();
+      ArrayNode arr = payload.putArray("ids");
+      for (String id : ids) {
+        arr.add(id);
+      }
+      if (toOverride == null || toOverride.isBlank()) {
+        payload.putNull("toOverride");
+      } else {
+        payload.put("toOverride", toOverride);
+      }
+      post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+      http.execute(
+          post,
+          res -> {
+            int code = res.getCode();
+            if (code != 202) {
+              throw new IOException("Bulk email HTTP " + code);
+            }
+            return null;
           });
     } catch (IOException e) {
       throw new RuntimeException(e);

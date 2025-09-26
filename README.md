@@ -2,6 +2,37 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Sprint 11 — Modèles d’email par agence + Envoi groupé de PDFs d’interventions (Full, Mock-ready)
+
+### Ce que ça apporte
+**Backend**
+- **Modèle d’email par agence** (sujet + corps) avec variables de fusion :  
+  `{{agencyName}} {{clientName}} {{interventionTitle}} {{start}} {{end}}`
+  - `GET  /api/v1/agencies/{id}/email-template`
+  - `PUT  /api/v1/agencies/{id}/email-template`
+- **Envoi groupé** des PDFs d’interventions :  
+  `POST /api/v1/interventions/email-bulk` → 202 Accepted  
+  Body: `{ "ids":["I1","I2"], "toOverride":"dest@example.com" }` (si `toOverride` vide, utilise l’email de facturation du client).
+
+**Client (Swing)**
+- Menu **Paramètres → Modèle email (Agence)** : éditeur sujet/corps, sauvegarde côté backend ou en Mock.
+- Menu **Données → Envoyer PDFs du jour (lot)** : envoie toutes les interventions visibles du jour.
+- **Mode Mock** : stockage en mémoire des modèles, envoi simulé (aucune écriture disque).
+
+### Variables de fusion (exemples)
+- `{{agencyName}}` → “Agence Nord”
+- `{{clientName}}` → “Client Alpha”
+- `{{interventionTitle}}` → “Levage poutres”
+- `{{start}}` → “2025-10-02 08:00”
+- `{{end}}` → “2025-10-02 10:00”
+
+### Démarrage rapide
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+```
+
 ## Sprint 10 — Export PDF Intervention + Envoi Email (Full, REST) — Mock sûr (sans écriture disque)
 
 ### Nouveautés
