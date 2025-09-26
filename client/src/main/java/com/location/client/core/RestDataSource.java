@@ -1070,6 +1070,37 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public Models.Resource saveResource(Models.Resource resource) {
+    throw new RuntimeException("saveResource non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public java.util.List<Models.Unavailability> listUnavailability(String resourceId) {
+    throw new RuntimeException("listUnavailability non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public Models.Unavailability saveUnavailability(Models.Unavailability unavailability) {
+    throw new RuntimeException("saveUnavailability non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public void deleteUnavailability(String id) {
+    throw new RuntimeException("deleteUnavailability non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public Models.RecurringUnavailability saveRecurringUnavailability(
+      Models.RecurringUnavailability recurring) {
+    throw new RuntimeException("saveRecurringUnavailability non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public void deleteRecurringUnavailability(String id) {
+    throw new RuntimeException("deleteRecurringUnavailability non disponible sur ce backend (démo).");
+  }
+
   public Path downloadCsvInterventions(
       OffsetDateTime from,
       OffsetDateTime to,

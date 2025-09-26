@@ -470,6 +470,22 @@ public class MainFrame extends JFrame {
     newUnav.addActionListener(e -> createUnavailabilityDialog());
     JMenuItem newRecurring = new JMenuItem("Nouvelle indisponibilité récurrente");
     newRecurring.addActionListener(e -> createRecurringUnavailabilityDialog());
+    JMenuItem manageResources =
+        new JMenuItem(
+            new AbstractAction("Gérer les ressources…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new ResourceEditorFrame(dsp).setVisible(true);
+              }
+            });
+    JMenuItem manageUnav =
+        new JMenuItem(
+            new AbstractAction("Gérer les indisponibilités…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new UnavailabilityFrame(dsp).setVisible(true);
+              }
+            });
     JMenuItem deleteIntervention =
         new JMenuItem(
             new AbstractAction("Supprimer l'intervention sélectionnée (Suppr)") {
@@ -492,6 +508,8 @@ public class MainFrame extends JFrame {
     data.add(editNotes);
     data.add(newUnav);
     data.add(newRecurring);
+    data.add(manageResources);
+    data.add(manageUnav);
     data.add(deleteIntervention);
     data.add(emailPdf);
     data.add(bulkEmail);

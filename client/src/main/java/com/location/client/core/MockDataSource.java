@@ -257,6 +257,40 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Models.Resource saveResource(Models.Resource resource) {
+    String id = resource.id();
+    Models.Resource existing =
+        id == null
+            ? null
+            : resources.stream().filter(r -> r.id().equals(id)).findFirst().orElse(null);
+    if (existing == null && id == null) {
+      id = UUID.randomUUID().toString();
+    }
+    if (existing != null) {
+      resources.remove(existing);
+    }
+    String agencyId =
+        resource.agencyId() != null
+            ? resource.agencyId()
+            : existing != null ? existing.agencyId() : getCurrentAgencyId();
+    if ((agencyId == null || agencyId.isBlank()) && !agencies.isEmpty()) {
+      agencyId = agencies.get(0).id();
+    }
+    Integer color = resource.colorRgb() != null ? resource.colorRgb() : existing != null ? existing.colorRgb() : null;
+    Models.Resource saved =
+        new Models.Resource(
+            id,
+            resource.name(),
+            resource.licensePlate(),
+            color,
+            agencyId,
+            resource.tags(),
+            resource.capacityTons());
+    resources.add(saved);
+    return saved;
+  }
+
+  @Override
   public List<Models.Intervention> listInterventions(
       java.time.OffsetDateTime from, java.time.OffsetDateTime to, String resourceId) {
     Instant fromInstant = from != null ? from.toInstant() : null;
@@ -404,32 +438,37 @@ public class MockDataSource implements DataSourceProvider {
     return result;
   }
 
-  @Override
-  public Models.Unavailability createUnavailability(Models.Unavailability unavailability) {
+  private void validateUnavailabilityWindow(
+      String resourceId, Instant start, Instant end, String ignoreId) {
+    if (start == null || end == null || !end.isAfter(start)) {
+      throw new IllegalArgumentException("Plage horaire invalide (MOCK)");
+    }
+    List<Models.Unavailability> existing =
+        listUnavailabilities(start.atOffset(ZoneOffset.UTC), end.atOffset(ZoneOffset.UTC), resourceId);
     boolean overlapUnavailability =
-        listUnavailabilities(
-                unavailability.start().atOffset(ZoneOffset.UTC),
-                unavailability.end().atOffset(ZoneOffset.UTC),
-                unavailability.resourceId())
-            .stream()
-            .anyMatch(
-                u ->
-                    u.resourceId().equals(unavailability.resourceId())
-                        && u.end().isAfter(unavailability.start())
-                        && u.start().isBefore(unavailability.end()));
+        existing.stream()
+            .filter(u -> ignoreId == null || !ignoreId.equals(u.id()))
+            .anyMatch(u -> u.end().isAfter(start) && u.start().isBefore(end));
     if (overlapUnavailability) {
       throw new IllegalStateException("Chevauche une indisponibilité existante (MOCK)");
     }
     boolean overlapIntervention =
         interventions.stream()
+            .filter(i -> ignoreId == null || !ignoreId.equals(i.id()))
             .anyMatch(
                 i ->
-                    i.resourceId().equals(unavailability.resourceId())
-                        && i.end().isAfter(unavailability.start())
-                        && i.start().isBefore(unavailability.end()));
+                    i.resourceId().equals(resourceId)
+                        && i.end().isAfter(start)
+                        && i.start().isBefore(end));
     if (overlapIntervention) {
       throw new IllegalStateException("Chevauche une intervention existante (MOCK)");
     }
+  }
+
+  @Override
+  public Models.Unavailability createUnavailability(Models.Unavailability unavailability) {
+    validateUnavailabilityWindow(
+        unavailability.resourceId(), unavailability.start(), unavailability.end(), null);
     Models.Unavailability created =
         new Models.Unavailability(
             UUID.randomUUID().toString(),
@@ -440,6 +479,47 @@ public class MockDataSource implements DataSourceProvider {
             false);
     unavailabilities.add(created);
     return created;
+  }
+
+  @Override
+  public java.util.List<Models.Unavailability> listUnavailability(String resourceId) {
+    return unavailabilities.stream()
+        .filter(u -> resourceId == null || resourceId.equals(u.resourceId()))
+        .sorted(java.util.Comparator.comparing(Models.Unavailability::start))
+        .toList();
+  }
+
+  @Override
+  public Models.Unavailability saveUnavailability(Models.Unavailability unavailability) {
+    String id = unavailability.id();
+    if (id == null) {
+      return createUnavailability(unavailability);
+    }
+    validateUnavailabilityWindow(
+        unavailability.resourceId(), unavailability.start(), unavailability.end(), id);
+    Models.Unavailability existing =
+        unavailabilities.stream().filter(u -> u.id().equals(id)).findFirst().orElse(null);
+    if (existing != null) {
+      unavailabilities.remove(existing);
+    }
+    Models.Unavailability updated =
+        new Models.Unavailability(
+            id,
+            unavailability.resourceId(),
+            unavailability.reason(),
+            unavailability.start(),
+            unavailability.end(),
+            false);
+    unavailabilities.add(updated);
+    return updated;
+  }
+
+  @Override
+  public void deleteUnavailability(String id) {
+    if (id == null) {
+      return;
+    }
+    unavailabilities.removeIf(u -> u.id().equals(id));
   }
 
   @Override
@@ -468,6 +548,36 @@ public class MockDataSource implements DataSourceProvider {
             recurringUnavailability.reason());
     recurring.add(created);
     return created;
+  }
+
+  @Override
+  public Models.RecurringUnavailability saveRecurringUnavailability(
+      Models.RecurringUnavailability recurringUnavailability) {
+    if (recurringUnavailability.id() == null) {
+      return createRecurringUnavailability(recurringUnavailability);
+    }
+    if (!recurringUnavailability.start().isBefore(recurringUnavailability.end())) {
+      throw new IllegalArgumentException("Heure début < heure fin (MOCK)");
+    }
+    recurring.removeIf(r -> r.id().equals(recurringUnavailability.id()));
+    Models.RecurringUnavailability updated =
+        new Models.RecurringUnavailability(
+            recurringUnavailability.id(),
+            recurringUnavailability.resourceId(),
+            recurringUnavailability.dayOfWeek(),
+            recurringUnavailability.start(),
+            recurringUnavailability.end(),
+            recurringUnavailability.reason());
+    recurring.add(updated);
+    return updated;
+  }
+
+  @Override
+  public void deleteRecurringUnavailability(String id) {
+    if (id == null) {
+      return;
+    }
+    recurring.removeIf(r -> r.id().equals(id));
   }
 
   @Override
