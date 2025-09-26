@@ -32,4 +32,8 @@ public interface DataSourceProvider extends AutoCloseable {
   Models.RecurringUnavailability createRecurringUnavailability(Models.RecurringUnavailability recurring);
 
   java.nio.file.Path downloadResourcesCsv(String tags, java.nio.file.Path target);
+
+  java.nio.file.Path downloadInterventionPdf(String interventionId, java.nio.file.Path target);
+
+  void emailInterventionPdf(String interventionId, String to, String subject, String message);
 }

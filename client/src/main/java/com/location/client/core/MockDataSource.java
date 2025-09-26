@@ -376,6 +376,17 @@ public class MockDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public java.nio.file.Path downloadInterventionPdf(String interventionId, java.nio.file.Path target) {
+    throw new UnsupportedOperationException(
+        "Export PDF non disponible en mode Mock (aucune écriture disque).");
+  }
+
+  @Override
+  public void emailInterventionPdf(String interventionId, String to, String subject, String message) {
+    // Simulation instantanée : pas d'envoi réel en mode Mock.
+  }
+
   private static boolean overlaps(Instant start, Instant end, Instant from, Instant to) {
     if (from == null || to == null) {
       return true;

@@ -2,6 +2,36 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Sprint 10 — Export PDF Intervention + Envoi Email (Full, REST) — Mock sûr (sans écriture disque)
+
+### Nouveautés
+**Backend (Spring Boot)**
+- **PDF Intervention** : `GET /api/v1/interventions/{id}/pdf` → `application/pdf` (OpenPDF).
+- **Email PDF** : `POST /api/v1/interventions/{id}/email` avec `{ "to": "...", "subject": "...", "message": "..." }` → `202 Accepted` et envoi via `MailGateway` (pièce jointe PDF).
+- **Service PDF** : rendu simple (titre, client, ressource, dates).
+- **Tests WebMvc** : vérif `application/pdf` + email `202`.
+
+**Client (Swing)**
+- Menu **Fichier → Exporter Intervention (PDF)** (REST uniquement) : télécharge le PDF et l’ouvre.
+- Menu **Données → Envoyer PDF intervention par email** (REST & Mock) :
+  - En REST : appel direct de l’API d’envoi.
+  - En Mock : **simulation** (succès immédiat, aucune écriture disque conformément aux règles Mock).
+
+**Mode Mock**
+- Pas d’écriture fichier. L’envoi email est simulé côté client.
+
+### Utilisation
+1. Sélectionnez une intervention dans le planning.
+2. **Exporter PDF** pour obtenir le fichier (REST).
+3. **Envoyer PDF par email** pour expédier au destinataire (REST réel, Mock simulé).
+
+### Démarrage
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=rest
+```
+
 ## Sprint 8 — Indisponibilités récurrentes + Tags/Capacité ressources + Export CSV (Full, Mock-ready)
 
 ### Nouveautés

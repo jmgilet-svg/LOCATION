@@ -18,6 +18,7 @@ import com.location.server.repo.RecurringUnavailabilityRepository;
 import com.location.server.repo.UnavailabilityRepository;
 import com.location.server.service.InterventionService;
 import com.location.server.service.MailGateway;
+import com.location.server.service.PdfService;
 import com.location.server.service.UnavailabilityService;
 import com.location.server.service.UnavailabilityQueryService;
 import jakarta.validation.Valid;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -41,6 +43,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -55,6 +58,7 @@ public class ApiV1Controller {
   private final RecurringUnavailabilityRepository recurringUnavailabilityRepository;
   private final UnavailabilityQueryService unavailabilityQueryService;
   private final MailGateway mailGateway;
+  private final PdfService pdfService;
 
   public ApiV1Controller(
       AgencyRepository agencyRepository,
@@ -66,7 +70,8 @@ public class ApiV1Controller {
       UnavailabilityService unavailabilityService,
       RecurringUnavailabilityRepository recurringUnavailabilityRepository,
       UnavailabilityQueryService unavailabilityQueryService,
-      MailGateway mailGateway) {
+      MailGateway mailGateway,
+      PdfService pdfService) {
     this.agencyRepository = agencyRepository;
     this.clientRepository = clientRepository;
     this.resourceRepository = resourceRepository;
@@ -77,6 +82,7 @@ public class ApiV1Controller {
     this.recurringUnavailabilityRepository = recurringUnavailabilityRepository;
     this.unavailabilityQueryService = unavailabilityQueryService;
     this.mailGateway = mailGateway;
+    this.pdfService = pdfService;
   }
 
   @GetMapping("/agencies")
@@ -270,25 +276,42 @@ public class ApiV1Controller {
             request.reason()));
   }
 
-  @PostMapping(value = "/documents/{id}/export/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-  public ResponseEntity<byte[]> exportPdf(@PathVariable String id) {
-    byte[] pdf = "%PDF-1.4\n% stub\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  @GetMapping(value = "/interventions/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+  public ResponseEntity<byte[]> exportInterventionPdf(@PathVariable String id) {
+    var intervention =
+        interventionRepository
+            .findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    byte[] pdf = pdfService.buildInterventionPdf(intervention);
     return ResponseEntity.ok()
-        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"document-" + id + ".pdf\"")
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"intervention-" + intervention.getId() + ".pdf\"")
+        .contentType(MediaType.APPLICATION_PDF)
         .body(pdf);
   }
 
-  public record EmailDocumentRequest(@NotBlank @Email String to, String subject, String body) {}
+  public record EmailInterventionRequest(@NotBlank @Email String to, String subject, String message) {}
 
-  @PostMapping("/documents/{id}/email")
-  public ResponseEntity<Void> email(@PathVariable String id, @Valid @RequestBody EmailDocumentRequest request) {
-    byte[] pdf = "%PDF-1.4\n% stub\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    String subject = request.subject() == null || request.subject().isBlank() ? "Document" : request.subject();
+  @PostMapping("/interventions/{id}/email")
+  public ResponseEntity<Void> emailIntervention(
+      @PathVariable String id, @Valid @RequestBody EmailInterventionRequest request) {
+    var intervention =
+        interventionRepository
+            .findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    byte[] pdf = pdfService.buildInterventionPdf(intervention);
+    String subject =
+        request.subject() == null || request.subject().isBlank()
+            ? "Intervention " + sanitize(intervention.getTitle())
+            : request.subject();
     String body =
-        request.body() == null || request.body().isBlank()
-            ? "Veuillez trouver le document en pièce jointe."
-            : request.body();
-    mailGateway.send(new MailGateway.Mail(request.to(), subject, body, pdf, "document-" + id + ".pdf"));
+        request.message() == null || request.message().isBlank()
+            ? "Veuillez trouver l'intervention en pièce jointe."
+            : request.message();
+    mailGateway.send(
+        new MailGateway.Mail(
+            request.to(), subject, body, pdf, "intervention-" + intervention.getId() + ".pdf"));
     return ResponseEntity.accepted().build();
   }
 }
