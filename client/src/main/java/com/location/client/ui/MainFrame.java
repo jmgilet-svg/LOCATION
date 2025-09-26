@@ -31,6 +31,8 @@ public class MainFrame extends JFrame {
   private final PlanningMinimap minimap;
   private final TopBar topBar;
   private final Sidebar sidebar;
+  private final JToolBar selectionBar = new JToolBar();
+  private final JButton selectionInfo = new JButton();
   private final JLabel connectionBadge = new JLabel();
   private final JLabel status = new JLabel();
   private final JLabel modeBadge = new JLabel();
@@ -89,7 +91,66 @@ public class MainFrame extends JFrame {
     SuggestionPanel suggestionPanel = new SuggestionPanel(dsp);
     suggestionPanel.setHours(planning.getStartHour(), planning.getEndHour());
     suggestionPanel.setAfterApply(planning::reload);
-    planning.addSelectionListener((selection, dayItems) -> suggestionPanel.showFor(selection, dayItems));
+    selectionBar.setFloatable(false);
+    selectionInfo.setFocusable(false);
+    selectionInfo.setEnabled(false);
+    selectionInfo.setBorderPainted(false);
+    selectionInfo.setContentAreaFilled(false);
+    selectionInfo.setHorizontalAlignment(SwingConstants.LEFT);
+    selectionInfo.setText("Aucune sélection");
+    selectionBar.add(selectionInfo);
+    selectionBar.addSeparator();
+    selectionBar.add(
+        new JButton(
+            new AbstractAction("Dupliquer") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                if (planning.duplicateSelected()) {
+                  toast("Intervention dupliquée");
+                }
+              }
+            }));
+    selectionBar.add(
+        new JButton(
+            new AbstractAction("−30 min") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                if (planning.shiftSelection(Duration.ofMinutes(-30))) {
+                  toast("Intervention décalée");
+                }
+              }
+            }));
+    selectionBar.add(
+        new JButton(
+            new AbstractAction("+30 min") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                if (planning.shiftSelection(Duration.ofMinutes(30))) {
+                  toast("Intervention décalée");
+                }
+              }
+            }));
+    selectionBar.add(
+        new JButton(
+            new AbstractAction("Supprimer") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                deleteSelected();
+              }
+            }));
+    selectionBar.setVisible(false);
+    planning.addSelectionListener(
+        (selection, dayItems) -> {
+          suggestionPanel.showFor(selection, dayItems);
+          boolean hasSelection = !selection.isEmpty();
+          selectionBar.setVisible(hasSelection);
+          if (hasSelection) {
+            int count = selection.size();
+            selectionInfo.setText(count == 1 ? "1 sélectionnée" : count + " sélectionnées");
+          } else {
+            selectionInfo.setText("Aucune sélection");
+          }
+        });
     add(planningContainer, BorderLayout.CENTER);
     add(suggestionPanel, BorderLayout.EAST);
     sidebar.setSelected("planning");
@@ -103,7 +164,10 @@ public class MainFrame extends JFrame {
     south.add(badges, BorderLayout.WEST);
     status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
     south.add(status, BorderLayout.CENTER);
-    add(south, BorderLayout.SOUTH);
+    JPanel bottom = new JPanel(new BorderLayout());
+    bottom.add(selectionBar, BorderLayout.NORTH);
+    bottom.add(south, BorderLayout.SOUTH);
+    add(bottom, BorderLayout.SOUTH);
 
     refreshData();
 
@@ -114,6 +178,21 @@ public class MainFrame extends JFrame {
         createInterventionDialog();
       }
     });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control D"), "duplicate");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "duplicate",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                if (planning.duplicateSelected()) {
+                  toast("Intervention dupliquée");
+                }
+              }
+            });
     getRootPane()
         .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
         .put(KeyStroke.getKeyStroke("control E"), "exportDialog");
@@ -163,6 +242,32 @@ public class MainFrame extends JFrame {
         .getActionMap()
         .put(
             "nextDay",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                topBar.nextDay();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("alt LEFT"), "prevDayAlt");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "prevDayAlt",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                topBar.prevDay();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("alt RIGHT"), "nextDayAlt");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "nextDayAlt",
             new AbstractAction() {
               @Override
               public void actionPerformed(ActionEvent e) {
@@ -260,6 +365,19 @@ public class MainFrame extends JFrame {
               @Override
               public void actionPerformed(ActionEvent e) {
                 openGlobalSearch();
+              }
+            });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("F1"), "shortcutHelp");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "shortcutHelp",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                new CheatSheetDialog(MainFrame.this).setVisible(true);
               }
             });
     getRootPane()

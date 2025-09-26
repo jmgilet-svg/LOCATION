@@ -583,6 +583,87 @@ public class PlanningPanel extends JPanel {
     return selected == null ? null : selected.id();
   }
 
+  public boolean hasSelection() {
+    return selected != null;
+  }
+
+  public boolean duplicateSelected() {
+    if (selected == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return false;
+    }
+    Models.Intervention base = selected;
+    Instant start = base.start().plus(Duration.ofHours(1));
+    Instant end = base.end().plus(Duration.ofHours(1));
+    if (!end.isAfter(start)) {
+      Toolkit.getDefaultToolkit().beep();
+      return false;
+    }
+    Models.Intervention payload =
+        new Models.Intervention(
+            null,
+            base.agencyId(),
+            base.resourceId(),
+            base.clientId(),
+            base.driverId(),
+            base.title() + " (copie)",
+            start,
+            end,
+            base.notes());
+    try {
+      Models.Intervention created = dsp.createIntervention(payload);
+      selected = created;
+      reload();
+      return true;
+    } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible de dupliquer l'intervention: " + ex.getMessage(),
+          "Erreur",
+          JOptionPane.ERROR_MESSAGE);
+      return false;
+    }
+  }
+
+  public boolean shiftSelection(Duration delta) {
+    if (selected == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return false;
+    }
+    Instant start = selected.start().plus(delta);
+    Instant end = selected.end().plus(delta);
+    if (!end.isAfter(start)) {
+      Toolkit.getDefaultToolkit().beep();
+      return false;
+    }
+    Models.Intervention updated =
+        new Models.Intervention(
+            selected.id(),
+            selected.agencyId(),
+            selected.resourceId(),
+            selected.clientId(),
+            selected.driverId(),
+            selected.title(),
+            start,
+            end,
+            selected.notes());
+    try {
+      Models.Intervention persisted = dsp.updateIntervention(updated);
+      selected = persisted;
+      reload();
+      return true;
+    } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "Décalage impossible: " + ex.getMessage(),
+          "Erreur",
+          JOptionPane.ERROR_MESSAGE);
+      return false;
+    }
+  }
+
   public void clearSelection() {
     if (selected != null) {
       selected = null;
