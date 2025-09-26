@@ -2,6 +2,36 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Sprint 9 — Notes d’intervention (Full, Back + Front + Mock)
+
+### Objectif
+Permettre d’ajouter des **notes riches** (texte libre) sur chaque intervention, éditables côté client, visibles dans le planning, et **persistées** côté backend (DB + API). Le mode **Mock** conserve aussi les notes en mémoire pour des démos live sans réseau.
+
+### Backend
+- **Schéma** : colonne `notes` (TEXT) sur `intervention`. Migration Flyway `V6__intervention_notes.sql`.
+- **DTOs** : ajout du champ `notes` dans `InterventionDTO`, `CreateInterventionRequest`, `UpdateInterventionRequest`.
+- **Service** : création/mise à jour conservent les `notes` (validation de la durée inchangée).
+- **API** : `POST /api/v1/interventions` et `PUT /api/v1/interventions/{id}` acceptent/retournent `notes`.
+- **Tests WebMvc** : round-trip des notes via `PUT`.
+
+### Client Swing
+- **Modèle** : `Models.Intervention` enrichi avec `notes`.
+- **Planning** : les tuiles avec note affichent un **pictogramme** 📓 (coin supérieur droit).
+- **Édition** : `Ctrl+E` ou menu **Données → Éditer les notes** ouvre un éditeur multi‑lignes ; sauvegarde via **Mock** ou **REST** (PUT).
+- **Mock** : stockage des notes en mémoire ; mises à jour cohérentes avec conflits éventuels (inchangés).
+
+### Utilisation
+1. Sélectionner une tuile (clic).
+2. `Ctrl+E` → saisir les notes → **Enregistrer**.
+3. Les notes sont visibles (📓) et récupérées après rechargement.
+
+### Build
+```bash
+mvn -B -ntp verify
+mvn -pl server spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl client -DskipTests package && java -jar client/target/location-client.jar --datasource=mock
+```
+
 ## Sprint 8 — Indisponibilités récurrentes + Tags/Capacité ressources + Export CSV (Full, Mock-ready)
 
 ### Nouveautés

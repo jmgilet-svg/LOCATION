@@ -87,21 +87,24 @@ public class MockDataSource implements DataSourceProvider {
         clients.get(0).id(),
         "Livraison chantier",
         base.plusDays(1).toInstant(),
-        base.plusDays(1).plusHours(2).toInstant());
+        base.plusDays(1).plusHours(2).toInstant(),
+        "Site A – prévoir EPI");
     addIntervention(
         a1.id(),
         resources.get(1).id(),
         clients.get(1).id(),
         "Levage poutres",
         base.plusDays(1).plusHours(3).toInstant(),
-        base.plusDays(1).plusHours(5).toInstant());
+        base.plusDays(1).plusHours(5).toInstant(),
+        null);
     addIntervention(
         a2.id(),
         resources.get(2).id(),
         clients.get(1).id(),
         "Transport matériel",
         base.plusDays(2).toInstant(),
-        base.plusDays(2).plusHours(1).toInstant());
+        base.plusDays(2).plusHours(1).toInstant(),
+        "RDV à 7h30");
 
     addUnavailability(
         resources.get(0).id(),
@@ -184,7 +187,8 @@ public class MockDataSource implements DataSourceProvider {
             intervention.clientId(),
             intervention.title(),
             intervention.start(),
-            intervention.end());
+            intervention.end(),
+            intervention.notes());
     interventions.add(created);
     return created;
   }
@@ -384,10 +388,16 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   private void addIntervention(
-      String agencyId, String resourceId, String clientId, String title, Instant start, Instant end) {
+      String agencyId,
+      String resourceId,
+      String clientId,
+      String title,
+      Instant start,
+      Instant end,
+      String notes) {
     interventions.add(
         new Models.Intervention(
-            UUID.randomUUID().toString(), agencyId, resourceId, clientId, title, start, end));
+            UUID.randomUUID().toString(), agencyId, resourceId, clientId, title, start, end, notes));
   }
 
   private void addUnavailability(String resourceId, String reason, Instant start, Instant end) {

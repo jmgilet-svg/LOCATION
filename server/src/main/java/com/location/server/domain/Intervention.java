@@ -41,6 +41,9 @@ public class Intervention {
   @JoinColumn(name = "client_id")
   private Client client;
 
+  @Column(columnDefinition = "TEXT")
+  private String notes;
+
   protected Intervention() {}
 
   public Intervention(
@@ -51,6 +54,18 @@ public class Intervention {
       Agency agency,
       Resource resource,
       Client client) {
+    this(id, title, start, end, agency, resource, client, null);
+  }
+
+  public Intervention(
+      String id,
+      String title,
+      OffsetDateTime start,
+      OffsetDateTime end,
+      Agency agency,
+      Resource resource,
+      Client client,
+      String notes) {
     this.id = id;
     this.title = title;
     this.start = start;
@@ -58,6 +73,7 @@ public class Intervention {
     this.agency = agency;
     this.resource = resource;
     this.client = client;
+    this.notes = notes;
   }
 
   public String getId() {
@@ -114,5 +130,13 @@ public class Intervention {
 
   public void setClient(Client client) {
     this.client = client;
+  }
+
+  public String getNotes() {
+    return notes;
+  }
+
+  public void setNotes(String notes) {
+    this.notes = notes;
   }
 }
