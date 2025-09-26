@@ -2,6 +2,12 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## UX++ Tranche B+C — Navigation enrichie & aperçu planning
+
+### Ce qui change
+- **Minimap journalière** sous le planning : aperçu condensé des interventions avec un indicateur de viewport.
+- Rafraîchissement automatique après chaque rechargement du planning (filtres, changement de jour, etc.).
+
 ## UX++ Tranche A+B — Design System (thèmes) & Navigation moderne
 
 ### Ce que livre ce patch

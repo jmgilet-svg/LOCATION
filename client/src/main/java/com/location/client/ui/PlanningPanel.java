@@ -32,6 +32,7 @@ import java.time.ZonedDateTime;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -60,6 +61,7 @@ public class PlanningPanel extends JPanel {
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
   private List<Models.Unavailability> unavailabilities = List.of();
+  private final List<Runnable> reloadListeners = new ArrayList<>();
   private LocalDate day = LocalDate.now();
   private String filterAgencyId;
   private String filterResourceId;
@@ -402,7 +404,27 @@ public class PlanningPanel extends JPanel {
         resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
     unavailabilities =
         unav.stream().filter(u -> visibleResourceIds.contains(u.resourceId())).toList();
+    notifyReloadListeners();
     repaint();
+  }
+
+  public void addReloadListener(Runnable listener) {
+    if (listener != null) {
+      reloadListeners.add(listener);
+    }
+  }
+
+  private void notifyReloadListeners() {
+    if (reloadListeners.isEmpty()) {
+      return;
+    }
+    for (Runnable listener : new ArrayList<>(reloadListeners)) {
+      try {
+        listener.run();
+      } catch (RuntimeException ex) {
+        // On ignore les erreurs des listeners pour ne pas casser le rafraîchissement principal.
+      }
+    }
   }
 
   private String normalize(String value) {
@@ -424,6 +446,14 @@ public class PlanningPanel extends JPanel {
 
   public LocalDate getDay() {
     return day;
+  }
+
+  public int getStartHour() {
+    return START_HOUR;
+  }
+
+  public int getEndHour() {
+    return START_HOUR + HOURS;
   }
 
   public void setFilterAgency(String value) {

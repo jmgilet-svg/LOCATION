@@ -11,6 +11,7 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -27,6 +28,7 @@ public class MainFrame extends JFrame {
   private final DataSourceProvider dsp;
   private final Preferences prefs;
   private final PlanningPanel planning;
+  private final PlanningMinimap minimap;
   private final TopBar topBar;
   private final Sidebar sidebar;
   private final JLabel connectionBadge = new JLabel();
@@ -43,8 +45,11 @@ public class MainFrame extends JFrame {
     this.dsp = dsp;
     this.prefs = prefs;
     this.planning = new PlanningPanel(dsp);
+    this.minimap = new PlanningMinimap();
     this.topBar = new TopBar(planning, prefs);
     this.sidebar = new Sidebar(this::handleNavigation);
+    minimap.setWorkingHours(planning.getStartHour(), planning.getEndHour());
+    planning.addReloadListener(this::updateMinimap);
 
     initializeCurrentAgency();
 
@@ -78,7 +83,10 @@ public class MainFrame extends JFrame {
     setJMenuBar(buildMenuBar());
     add(topBar, BorderLayout.NORTH);
     add(sidebar, BorderLayout.WEST);
-    add(planning, BorderLayout.CENTER);
+    JPanel planningContainer = new JPanel(new BorderLayout());
+    planningContainer.add(planning, BorderLayout.CENTER);
+    planningContainer.add(minimap, BorderLayout.SOUTH);
+    add(planningContainer, BorderLayout.CENTER);
     sidebar.setSelected("planning");
     JPanel south = new JPanel(new BorderLayout());
     JPanel badges = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
@@ -478,6 +486,16 @@ public class MainFrame extends JFrame {
     updateBadges();
     prefs.setCurrentAgencyId(dsp.getCurrentAgencyId());
     prefs.save();
+    updateMinimap();
+  }
+
+  private void updateMinimap() {
+    if (minimap == null) {
+      return;
+    }
+    minimap.setWorkingHours(planning.getStartHour(), planning.getEndHour());
+    minimap.setInterventions(planning.getInterventions());
+    minimap.setViewportRatio(new Rectangle2D.Double(0, 0, 1, 1));
   }
 
   private void populateAgencyMenu(List<Models.Agency> agencies) {
