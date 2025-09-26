@@ -86,7 +86,12 @@ public class MainFrame extends JFrame {
     JPanel planningContainer = new JPanel(new BorderLayout());
     planningContainer.add(planning, BorderLayout.CENTER);
     planningContainer.add(minimap, BorderLayout.SOUTH);
+    SuggestionPanel suggestionPanel = new SuggestionPanel(dsp);
+    suggestionPanel.setHours(planning.getStartHour(), planning.getEndHour());
+    suggestionPanel.setAfterApply(planning::reload);
+    planning.addSelectionListener((selection, dayItems) -> suggestionPanel.showFor(selection, dayItems));
     add(planningContainer, BorderLayout.CENTER);
+    add(suggestionPanel, BorderLayout.EAST);
     sidebar.setSelected("planning");
     JPanel south = new JPanel(new BorderLayout());
     JPanel badges = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
