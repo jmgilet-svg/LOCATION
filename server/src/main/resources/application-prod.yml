@@ -1,16 +1,28 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
+    open-in-view: false
   flyway:
     enabled: true
     locations: classpath:db/migration
-server:
-  port: ${SERVER_PORT:8080}
+
 app:
   jwt:
     secret: ${JWT_SECRET}
+
+location:
+  mail:
+    host: mailhog
+    port: 1025
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
