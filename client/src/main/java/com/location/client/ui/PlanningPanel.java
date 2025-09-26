@@ -299,6 +299,7 @@ public class PlanningPanel extends JPanel {
             end,
             null);
     try {
+      ensureAvailability(resource.id(), start, end);
       Models.Intervention created = dsp.createIntervention(payload);
       selected = created;
       reload();
@@ -615,6 +616,7 @@ public class PlanningPanel extends JPanel {
             end,
             base.notes());
     try {
+      ensureAvailability(base.resourceId(), start, end);
       Models.Intervention created = dsp.createIntervention(payload);
       selected = created;
       reload();
@@ -656,6 +658,7 @@ public class PlanningPanel extends JPanel {
             end,
             selected.notes());
     try {
+      ensureAvailability(selected.resourceId(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
@@ -1086,6 +1089,7 @@ public class PlanningPanel extends JPanel {
             newEnd,
             selected.notes());
     try {
+      ensureAvailability(resource.id(), newStart, newEnd);
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
@@ -1124,6 +1128,7 @@ public class PlanningPanel extends JPanel {
             selected.end(),
             selected.notes());
     try {
+      ensureAvailability(resource.id(), selected.start(), selected.end());
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
@@ -1239,6 +1244,7 @@ public class PlanningPanel extends JPanel {
             end,
             original.notes());
     try {
+      ensureAvailability(resource.id(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
       selected = persisted;
       reload();
@@ -1458,6 +1464,35 @@ public class PlanningPanel extends JPanel {
       Toast.success(window, message);
     }
     ActivityCenter.log(activity);
+  }
+
+  private void ensureAvailability(String resourceId, Instant start, Instant end) {
+    if (resourceId == null || start == null || end == null) {
+      return;
+    }
+    try {
+      List<Models.Unavailability> unavailabilityList =
+          dsp.listUnavailabilities(
+              OffsetDateTime.ofInstant(start, ZoneOffset.UTC),
+              OffsetDateTime.ofInstant(end, ZoneOffset.UTC),
+              resourceId);
+      for (Models.Unavailability unavailability : unavailabilityList) {
+        if (!resourceId.equals(unavailability.resourceId())) {
+          continue;
+        }
+        if (unavailability.end().isAfter(start) && unavailability.start().isBefore(end)) {
+          String reason = unavailability.reason();
+          String detail = (reason == null || reason.isBlank()) ? "" : " : " + reason;
+          throw new IllegalStateException("Chevauche une indisponibilité" + detail);
+        }
+      }
+    } catch (RuntimeException ex) {
+      String message = ex.getMessage();
+      if (message != null && message.toLowerCase(Locale.ROOT).contains("non disponible")) {
+        return;
+      }
+      throw ex;
+    }
   }
 
   private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {

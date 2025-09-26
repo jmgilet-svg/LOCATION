@@ -83,4 +83,34 @@ public interface DataSourceProvider extends AutoCloseable {
   Models.DocTemplate saveDocTemplate(String docType, String html);
 
   void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message);
+
+  default Models.Resource saveResource(Models.Resource resource) {
+    throw new UnsupportedOperationException("saveResource non disponible dans " + getLabel());
+  }
+
+  default java.util.List<Models.Unavailability> listUnavailability(String resourceId) {
+    throw new UnsupportedOperationException("listUnavailability non disponible dans " + getLabel());
+  }
+
+  default Models.Unavailability saveUnavailability(Models.Unavailability unavailability) {
+    throw new UnsupportedOperationException("saveUnavailability non disponible dans " + getLabel());
+  }
+
+  default void deleteUnavailability(String id) {
+    throw new UnsupportedOperationException("deleteUnavailability non disponible dans " + getLabel());
+  }
+
+  default java.util.List<Models.RecurringUnavailability> listRecurringUnavailability(String resourceId) {
+    return listRecurringUnavailabilities(resourceId);
+  }
+
+  default Models.RecurringUnavailability saveRecurringUnavailability(
+      Models.RecurringUnavailability recurring) {
+    return createRecurringUnavailability(recurring);
+  }
+
+  default void deleteRecurringUnavailability(String id) {
+    throw new UnsupportedOperationException(
+        "deleteRecurringUnavailability non disponible dans " + getLabel());
+  }
 }
