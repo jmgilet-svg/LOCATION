@@ -102,6 +102,19 @@ public class MainFrame extends JFrame {
                 topBar.nextDay();
               }
             });
+    getRootPane()
+        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+        .put(KeyStroke.getKeyStroke("control I"), "newUnav");
+    getRootPane()
+        .getActionMap()
+        .put(
+            "newUnav",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                createUnavailabilityDialog();
+              }
+            });
   }
 
   private JMenuBar buildMenuBar() {
@@ -127,8 +140,11 @@ public class MainFrame extends JFrame {
     });
     JMenuItem create = new JMenuItem("Nouvelle intervention");
     create.addActionListener(e -> createInterventionDialog());
+    JMenuItem newUnav = new JMenuItem("Nouvelle indisponibilité");
+    newUnav.addActionListener(e -> createUnavailabilityDialog());
     data.add(create);
     data.add(reset);
+    data.add(newUnav);
 
     JMenu settings = new JMenu("Paramètres");
     JMenuItem switchSrc = new JMenuItem("Changer de source (Mock/REST)");
@@ -260,6 +276,50 @@ public class MainFrame extends JFrame {
                 Instant.parse(tfStart.getText()),
                 Instant.parse(tfEnd.getText())));
         toast("Intervention créée");
+        refreshData();
+      } catch (Exception ex) {
+        error(ex.getMessage());
+      }
+    }
+  }
+
+  private void createUnavailabilityDialog() {
+    List<Models.Resource> resources = planning.getResources();
+    if (resources.isEmpty()) {
+      toast("Aucune ressource");
+      return;
+    }
+    JComboBox<Models.Resource> cbR = new JComboBox<>(resources.toArray(new Models.Resource[0]));
+    JTextField tfReason = new JTextField("Maintenance");
+    Instant start = Instant.now().plus(Duration.ofHours(1));
+    JTextField tfStart = new JTextField(start.toString());
+    JTextField tfEnd = new JTextField(start.plus(Duration.ofHours(2)).toString());
+    JPanel panel = new JPanel(new GridLayout(0, 1, 6, 6));
+    panel.add(new JLabel("Ressource:"));
+    panel.add(cbR);
+    panel.add(new JLabel("Raison:"));
+    panel.add(tfReason);
+    panel.add(new JLabel("Début (ISO):"));
+    panel.add(tfStart);
+    panel.add(new JLabel("Fin (ISO):"));
+    panel.add(tfEnd);
+    int result =
+        JOptionPane.showConfirmDialog(this, panel, "Créer une indisponibilité", JOptionPane.OK_CANCEL_OPTION);
+    if (result == JOptionPane.OK_OPTION) {
+      Models.Resource resource = (Models.Resource) cbR.getSelectedItem();
+      if (resource == null) {
+        error("Sélection invalide");
+        return;
+      }
+      try {
+        dsp.createUnavailability(
+            new Models.Unavailability(
+                null,
+                resource.id(),
+                tfReason.getText(),
+                Instant.parse(tfStart.getText()),
+                Instant.parse(tfEnd.getText())));
+        toast("Indisponibilité créée");
         refreshData();
       } catch (Exception ex) {
         error(ex.getMessage());

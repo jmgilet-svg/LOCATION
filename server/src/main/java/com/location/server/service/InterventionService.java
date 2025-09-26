@@ -8,6 +8,7 @@ import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
 import com.location.server.repo.InterventionRepository;
 import com.location.server.repo.ResourceRepository;
+import com.location.server.repo.UnavailabilityRepository;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -19,16 +20,19 @@ public class InterventionService {
   private final AgencyRepository agencyRepository;
   private final ResourceRepository resourceRepository;
   private final ClientRepository clientRepository;
+  private final UnavailabilityRepository unavailabilityRepository;
 
   public InterventionService(
       InterventionRepository interventionRepository,
       AgencyRepository agencyRepository,
       ResourceRepository resourceRepository,
-      ClientRepository clientRepository) {
+      ClientRepository clientRepository,
+      UnavailabilityRepository unavailabilityRepository) {
     this.interventionRepository = interventionRepository;
     this.agencyRepository = agencyRepository;
     this.resourceRepository = resourceRepository;
     this.clientRepository = clientRepository;
+    this.unavailabilityRepository = unavailabilityRepository;
   }
 
   @Transactional
@@ -45,6 +49,9 @@ public class InterventionService {
     if (interventionRepository.existsOverlap(resourceId, start, end)) {
       throw new AssignmentConflictException(
           "Intervention en conflit pour la ressource " + resourceId);
+    }
+    if (unavailabilityRepository.existsOverlap(resourceId, start, end)) {
+      throw new AssignmentConflictException("Ressource indisponible sur le créneau");
     }
     Agency agency = agencyRepository.findById(agencyId).orElseThrow();
     Resource resource = resourceRepository.findById(resourceId).orElseThrow();

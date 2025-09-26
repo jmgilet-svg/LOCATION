@@ -4,6 +4,7 @@ import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
 import com.location.server.domain.Intervention;
 import com.location.server.domain.Resource;
+import com.location.server.domain.Unavailability;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -56,6 +57,18 @@ public final class ApiV1Dtos {
     }
   }
 
+  public record UnavailabilityDto(
+      String id, String resourceId, OffsetDateTime start, OffsetDateTime end, String reason) {
+    public static UnavailabilityDto of(Unavailability unavailability) {
+      return new UnavailabilityDto(
+          unavailability.getId(),
+          unavailability.getResource().getId(),
+          unavailability.getStart(),
+          unavailability.getEnd(),
+          unavailability.getReason());
+    }
+  }
+
   public record CreateInterventionRequest(
       @NotBlank String agencyId,
       @NotBlank String resourceId,
@@ -63,4 +76,10 @@ public final class ApiV1Dtos {
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end) {}
+
+  public record CreateUnavailabilityRequest(
+      @NotBlank String resourceId,
+      @NotNull OffsetDateTime start,
+      @NotNull OffsetDateTime end,
+      @NotBlank @Size(max = 140) String reason) {}
 }
