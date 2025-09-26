@@ -6,6 +6,7 @@ import com.location.client.core.Preferences;
 import com.location.client.core.RestDataSource;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
+import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
@@ -18,6 +19,7 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
+import java.util.Enumeration;
 import java.util.List;
 import javax.swing.*;
 
@@ -27,6 +29,11 @@ public class MainFrame extends JFrame {
   private final PlanningPanel planning;
   private final TopBar topBar;
   private final JLabel status = new JLabel();
+  private final JLabel modeBadge = new JLabel();
+  private final JLabel agencyBadge = new JLabel();
+  private final JMenu agencyMenu = new JMenu("Agence");
+  private ButtonGroup agencyGroup = new ButtonGroup();
+  private boolean updatingAgencyMenu;
 
   public MainFrame(DataSourceProvider dsp, Preferences prefs) {
     super("LOCATION — Planning");
@@ -34,6 +41,8 @@ public class MainFrame extends JFrame {
     this.prefs = prefs;
     this.planning = new PlanningPanel(dsp);
     this.topBar = new TopBar(planning, prefs);
+
+    initializeCurrentAgency();
 
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
     addWindowListener(new WindowAdapter() {
@@ -51,11 +60,17 @@ public class MainFrame extends JFrame {
     setJMenuBar(buildMenuBar());
     add(topBar, BorderLayout.NORTH);
     add(planning, BorderLayout.CENTER);
+    JPanel south = new JPanel(new BorderLayout());
+    JPanel badges = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+    badges.add(modeBadge);
+    badges.add(new JLabel("|"));
+    badges.add(agencyBadge);
+    south.add(badges, BorderLayout.WEST);
     status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-    add(status, BorderLayout.SOUTH);
+    south.add(status, BorderLayout.CENTER);
+    add(south, BorderLayout.SOUTH);
 
     refreshData();
-    status.setText("Source: " + dsp.getLabel());
 
     getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("control N"), "new");
     getRootPane().getActionMap().put("new", new AbstractAction() {
@@ -289,19 +304,102 @@ public class MainFrame extends JFrame {
     about.addActionListener(e -> showAbout());
     help.add(about);
 
+    JMenu context = new JMenu("Contexte");
+    context.add(agencyMenu);
+
     bar.add(file);
     bar.add(data);
     bar.add(documents);
     bar.add(view);
+    bar.add(context);
     bar.add(settings);
     bar.add(help);
     return bar;
   }
 
+  private void initializeCurrentAgency() {
+    String saved = prefs.getCurrentAgencyId();
+    if (saved != null && !saved.isBlank()) {
+      dsp.setCurrentAgencyId(saved);
+    } else {
+      String defaultId = System.getenv().getOrDefault("LOCATION_DEFAULT_AGENCY_ID", "A1");
+      if (defaultId != null && !defaultId.isBlank()) {
+        dsp.setCurrentAgencyId(defaultId);
+      }
+    }
+  }
+
   private void refreshData() {
     planning.reload();
+    populateAgencyMenu(planning.getAgencies());
     planning.repaint();
     topBar.refreshCombos();
+    updateBadges();
+    prefs.setCurrentAgencyId(dsp.getCurrentAgencyId());
+    prefs.save();
+  }
+
+  private void populateAgencyMenu(List<Models.Agency> agencies) {
+    updatingAgencyMenu = true;
+    try {
+      agencyMenu.removeAll();
+      agencyGroup = new ButtonGroup();
+      String current = dsp.getCurrentAgencyId();
+      boolean found = false;
+      for (Models.Agency agency : agencies) {
+        String agencyId = agency.id();
+        JRadioButtonMenuItem item =
+            new JRadioButtonMenuItem(agency.name() + " (" + agencyId + ")");
+        item.setActionCommand(agencyId);
+        item.addActionListener(e -> onAgencyMenuSelected(agencyId));
+        agencyGroup.add(item);
+        agencyMenu.add(item);
+        if (agencyId != null && agencyId.equals(current)) {
+          item.setSelected(true);
+          found = true;
+        }
+      }
+      if (!found && !agencies.isEmpty()) {
+        Models.Agency first = agencies.get(0);
+        dsp.setCurrentAgencyId(first.id());
+        current = first.id();
+        prefs.setCurrentAgencyId(current);
+        prefs.save();
+        selectAgencyButton(current);
+      }
+    } finally {
+      updatingAgencyMenu = false;
+    }
+  }
+
+  private void selectAgencyButton(String agencyId) {
+    if (agencyId == null) {
+      return;
+    }
+    Enumeration<AbstractButton> buttons = agencyGroup.getElements();
+    while (buttons.hasMoreElements()) {
+      AbstractButton button = buttons.nextElement();
+      if (agencyId.equals(button.getActionCommand())) {
+        button.setSelected(true);
+        break;
+      }
+    }
+  }
+
+  private void onAgencyMenuSelected(String agencyId) {
+    if (updatingAgencyMenu || agencyId == null || agencyId.isBlank()) {
+      return;
+    }
+    dsp.setCurrentAgencyId(agencyId);
+    prefs.setCurrentAgencyId(agencyId);
+    prefs.save();
+    refreshData();
+  }
+
+  private void updateBadges() {
+    modeBadge.setText(dsp instanceof RestDataSource ? "Backend REST" : "Mode Démo (Mock)");
+    String agencyId = dsp.getCurrentAgencyId();
+    agencyBadge.setText("Agence: " + (agencyId == null || agencyId.isBlank() ? "—" : agencyId));
   }
 
   private void exportCsv() {

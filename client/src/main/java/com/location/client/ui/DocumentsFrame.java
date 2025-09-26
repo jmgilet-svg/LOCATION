@@ -204,7 +204,16 @@ public class DocumentsFrame extends JFrame {
     if (title == null || title.isBlank()) {
       return;
     }
-    Models.Doc doc = dataSource.createDoc(type, agencies.get(0).id(), client.id(), title.trim());
+    String agencyId = dataSource.getCurrentAgencyId();
+    if (agencyId == null || agencyId.isBlank()) {
+      JOptionPane.showMessageDialog(
+          this,
+          "Aucune agence active n'est sélectionnée.",
+          "Agence requise",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    Models.Doc doc = dataSource.createDoc(type, agencyId, client.id(), title.trim());
     tableModel.add(doc);
     SwingUtilities.invokeLater(() -> {
       int row = table.convertRowIndexToView(tableModel.indexOf(doc));

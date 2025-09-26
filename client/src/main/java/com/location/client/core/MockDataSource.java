@@ -22,6 +22,7 @@ public class MockDataSource implements DataSourceProvider {
 
   private final List<Models.Agency> agencies = new ArrayList<>();
   private final List<Models.Client> clients = new ArrayList<>();
+  private String currentAgencyId;
   private final List<Models.Resource> resources = new ArrayList<>();
   private final List<Models.Intervention> interventions = new ArrayList<>();
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
@@ -31,6 +32,21 @@ public class MockDataSource implements DataSourceProvider {
 
   public MockDataSource() {
     resetDemoData();
+  }
+
+  private boolean matchesCurrentAgency(String agencyId) {
+    if (currentAgencyId == null || currentAgencyId.isBlank()) {
+      return true;
+    }
+    return agencyId != null && agencyId.equals(currentAgencyId);
+  }
+
+  private List<Models.Resource> resourcesForCurrentAgency() {
+    return resources.stream().filter(r -> matchesCurrentAgency(r.agencyId())).toList();
+  }
+
+  private Set<String> resourceIdsForCurrentAgency() {
+    return resourcesForCurrentAgency().stream().map(Models.Resource::id).collect(Collectors.toSet());
   }
 
   @Override
@@ -53,6 +69,7 @@ public class MockDataSource implements DataSourceProvider {
     var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence Sud");
     agencies.add(a1);
     agencies.add(a2);
+    currentAgencyId = a1.id();
     agencyTemplates.put(
         a1.id(),
         new Models.EmailTemplate(
@@ -178,8 +195,18 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public String getCurrentAgencyId() {
+    return currentAgencyId;
+  }
+
+  @Override
+  public void setCurrentAgencyId(String agencyId) {
+    this.currentAgencyId = agencyId;
+  }
+
+  @Override
   public List<Models.Resource> listResources() {
-    return List.copyOf(resources);
+    return resourcesForCurrentAgency();
   }
 
   @Override
@@ -188,6 +215,7 @@ public class MockDataSource implements DataSourceProvider {
     Instant fromInstant = from != null ? from.toInstant() : null;
     Instant toInstant = to != null ? to.toInstant() : null;
     return interventions.stream()
+        .filter(i -> matchesCurrentAgency(i.agencyId()))
         .filter(i -> resourceId == null || resourceId.equals(i.resourceId()))
         .filter(
             i ->
@@ -277,7 +305,12 @@ public class MockDataSource implements DataSourceProvider {
     Instant fromInstant = from != null ? from.toInstant() : null;
     Instant toInstant = to != null ? to.toInstant() : null;
     List<Models.Unavailability> result = new ArrayList<>();
+    Set<String> allowedResources = resourceIdsForCurrentAgency();
+    boolean enforceAgency = currentAgencyId != null && !currentAgencyId.isBlank();
     for (Models.Unavailability u : unavailabilities) {
+      if (enforceAgency && !allowedResources.contains(u.resourceId())) {
+        continue;
+      }
       if ((resourceId == null || resourceId.equals(u.resourceId()))
           && overlaps(u.start(), u.end(), fromInstant, toInstant)) {
         result.add(u);
@@ -288,6 +321,9 @@ public class MockDataSource implements DataSourceProvider {
       LocalDate end = toInstant.atZone(ZoneOffset.UTC).toLocalDate();
       while (!day.isAfter(end)) {
         for (Models.RecurringUnavailability ru : recurring) {
+          if (enforceAgency && !allowedResources.contains(ru.resourceId())) {
+            continue;
+          }
           if (resourceId != null && !resourceId.equals(ru.resourceId())) {
             continue;
           }
@@ -354,7 +390,10 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public List<Models.RecurringUnavailability> listRecurringUnavailabilities(String resourceId) {
+    Set<String> allowedResources = resourceIdsForCurrentAgency();
+    boolean enforceAgency = currentAgencyId != null && !currentAgencyId.isBlank();
     return recurring.stream()
+        .filter(r -> !enforceAgency || allowedResources.contains(r.resourceId()))
         .filter(r -> resourceId == null || resourceId.equals(r.resourceId()))
         .toList();
   }
@@ -380,7 +419,7 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public Path downloadResourcesCsv(String tags, Path target) {
     try {
-      List<Models.Resource> data = new ArrayList<>(resources);
+      List<Models.Resource> data = new ArrayList<>(resourcesForCurrentAgency());
       if (tags != null && !tags.isBlank()) {
         Set<String> requested =
             java.util.Arrays.stream(tags.toLowerCase().split("\\s*,\\s*"))
@@ -462,6 +501,7 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public java.util.List<Models.Doc> listDocs(String type, String clientId) {
     return docs.stream()
+        .filter(d -> matchesCurrentAgency(d.agencyId()))
         .filter(d -> type == null || type.isBlank() || d.type().equals(type))
         .filter(d -> clientId == null || clientId.isBlank() || d.clientId().equals(clientId))
         .toList();

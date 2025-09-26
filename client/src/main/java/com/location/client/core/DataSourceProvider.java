@@ -11,6 +11,10 @@ public interface DataSourceProvider extends AutoCloseable {
 
   List<Models.Client> listClients();
 
+  String getCurrentAgencyId();
+
+  void setCurrentAgencyId(String agencyId);
+
   List<Models.Resource> listResources();
 
   List<Models.Intervention> listInterventions(

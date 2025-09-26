@@ -20,12 +20,15 @@ import org.apache.hc.client5.http.classic.methods.HttpPut;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 
 public class RestDataSource implements DataSourceProvider {
+  private static final String DEFAULT_AGENCY_ID =
+      System.getenv().getOrDefault("LOCATION_DEFAULT_AGENCY_ID", "A1");
   private final CloseableHttpClient http = HttpClients.createDefault();
   private final ObjectMapper om = new ObjectMapper();
   private final AtomicReference<String> bearer = new AtomicReference<>();
@@ -33,6 +36,7 @@ public class RestDataSource implements DataSourceProvider {
   private String baseUrl;
   private String username;
   private String password;
+  private volatile String currentAgencyId = DEFAULT_AGENCY_ID;
 
   public RestDataSource(String baseUrl) {
     this(baseUrl, System.getenv().getOrDefault("LOCATION_DEMO_USER", "demo"), System.getenv().getOrDefault("LOCATION_DEMO_PASSWORD", "demo"));
@@ -98,6 +102,16 @@ public class RestDataSource implements DataSourceProvider {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  @Override
+  public String getCurrentAgencyId() {
+    return currentAgencyId;
+  }
+
+  @Override
+  public void setCurrentAgencyId(String agencyId) {
+    this.currentAgencyId = agencyId;
   }
 
   @Override
@@ -240,6 +254,7 @@ public class RestDataSource implements DataSourceProvider {
     try {
       ensureLogin();
       HttpDelete delete = new HttpDelete(baseUrl + "/api/v1/interventions/" + encodeSegment(id));
+      applyHeaders(delete);
       http.execute(
           delete,
           res -> {
@@ -382,9 +397,7 @@ public class RestDataSource implements DataSourceProvider {
         url += "?tags=" + encode(tags);
       }
       HttpGet get = new HttpGet(url);
-      if (bearer.get() != null) {
-        get.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(get);
       return http.execute(
           get,
           res -> {
@@ -411,9 +424,7 @@ public class RestDataSource implements DataSourceProvider {
     try {
       ensureLogin();
       HttpGet get = new HttpGet(baseUrl + "/api/v1/clients/csv");
-      if (bearer.get() != null) {
-        get.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(get);
       return http.execute(
           get,
           res -> {
@@ -455,9 +466,7 @@ public class RestDataSource implements DataSourceProvider {
         url.append('?').append(String.join("&", params));
       }
       HttpGet get = new HttpGet(url.toString());
-      if (bearer.get() != null) {
-        get.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(get);
       return http.execute(
           get,
           res -> {
@@ -484,9 +493,7 @@ public class RestDataSource implements DataSourceProvider {
     try {
       ensureLogin();
       HttpGet get = new HttpGet(baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/pdf");
-      if (bearer.get() != null) {
-        get.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(get);
       return http.execute(
           get,
           response -> {
@@ -517,9 +524,7 @@ public class RestDataSource implements DataSourceProvider {
       }
       HttpPost post =
           new HttpPost(baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/email");
-      if (bearer.get() != null) {
-        post.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(post);
       ObjectNode payload = om.createObjectNode();
       payload.put("to", to);
       if (subject != null) {
@@ -553,9 +558,7 @@ public class RestDataSource implements DataSourceProvider {
     try {
       ensureLogin();
       HttpGet get = new HttpGet(baseUrl + "/api/v1/system/features");
-      if (bearer.get() != null) {
-        get.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(get);
       return http.execute(
           get,
           res -> {
@@ -660,7 +663,9 @@ public class RestDataSource implements DataSourceProvider {
   public void deleteDoc(String id) {
     try {
       ensureLogin();
-      http.execute(new HttpDelete(baseUrl + "/api/v1/docs/" + encodeSegment(id)), res -> null);
+      HttpDelete delete = new HttpDelete(baseUrl + "/api/v1/docs/" + encodeSegment(id));
+      applyHeaders(delete);
+      http.execute(delete, res -> null);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -684,6 +689,7 @@ public class RestDataSource implements DataSourceProvider {
     try {
       ensureLogin();
       HttpGet get = new HttpGet(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/pdf");
+      applyHeaders(get);
       return http.execute(
           get,
           res -> {
@@ -704,6 +710,7 @@ public class RestDataSource implements DataSourceProvider {
     try {
       ensureLogin();
       HttpPost post = new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/email");
+      applyHeaders(post);
       ObjectNode payload = om.createObjectNode();
       payload.put("to", to);
       if (subject == null || subject.isBlank()) {
@@ -760,9 +767,7 @@ public class RestDataSource implements DataSourceProvider {
         url.append('?').append(String.join("&", params));
       }
       HttpGet get = new HttpGet(url.toString());
-      if (bearer.get() != null) {
-        get.addHeader("Authorization", "Bearer " + bearer.get());
-      }
+      applyHeaders(get);
       return http.execute(
           get,
           response -> {
@@ -781,6 +786,16 @@ public class RestDataSource implements DataSourceProvider {
           });
     } catch (IOException e) {
       throw new RuntimeException(e);
+    }
+  }
+
+  private void applyHeaders(ClassicHttpRequest request) {
+    String token = bearer.get();
+    if (token != null && !token.isBlank()) {
+      request.addHeader("Authorization", "Bearer " + token);
+    }
+    if (currentAgencyId != null && !currentAgencyId.isBlank()) {
+      request.addHeader("X-Agency-Id", currentAgencyId);
     }
   }
 
@@ -803,7 +818,7 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   private JsonNode executeForJson(HttpUriRequestBase req) throws IOException {
-    if (bearer.get() != null) req.addHeader("Authorization", "Bearer " + bearer.get());
+    applyHeaders(req);
     return http.execute(req, res -> {
       int sc = res.getCode();
       HttpEntity entity = res.getEntity();

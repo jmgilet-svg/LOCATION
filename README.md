@@ -2,6 +2,27 @@
 
 Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 
+## Étape 3 — Multi-agences opérationnel (enforcement `X-Agency-Id` + UI de bascule)
+
+### Ce que cette étape apporte
+- **Backend**
+  - Intercepteur global qui **exige** l’en-tête `X-Agency-Id` sur **toutes** les routes `/api/v1/**`.
+  - Contexte requête `AgencyContext` (ThreadLocal) pour accéder à l’agence courante dans les contrôleurs/services.
+  - Requêtes **scopées** par agence (exemple livré : `/api/v1/docs` inclut un filtre `agencyId`).
+  - Réponse **400** si l’en-tête est absent, **403** si l’agence n’existe pas.
+
+- **Client Swing**
+  - **Sélecteur d’agence** (menu **Contexte** → **Agence**).
+  - **Badge** d’état indiquant **Mock/REST** + **Agence**.
+  - Le client **envoie** `X-Agency-Id` à chaque appel REST.
+
+- **Mock**
+  - Contexte agence côté client respecté ; les listes sont **filtrées** sur l’agence courante.
+
+### Utilisation
+1) Choisir l’agence via **Contexte → Agence**.  
+2) En mode REST, toutes les requêtes porteront `X-Agency-Id` et seront filtrées côté serveur.
+
 ## Étape 2 — Cycle Devis → Commande → BL → Facture (Full, Back + Front + Mock)
 
 ### Objectif

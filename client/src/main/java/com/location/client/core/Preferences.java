@@ -80,6 +80,18 @@ public class Preferences {
     props.setProperty("lastEmailTo", value == null ? "" : value);
   }
 
+  public String getCurrentAgencyId() {
+    return props.getProperty("currentAgencyId");
+  }
+
+  public void setCurrentAgencyId(String value) {
+    if (value == null || value.isBlank()) {
+      props.remove("currentAgencyId");
+    } else {
+      props.setProperty("currentAgencyId", value);
+    }
+  }
+
   public String getFilterAgencyId() {
     return props.getProperty("filterAgencyId");
   }
