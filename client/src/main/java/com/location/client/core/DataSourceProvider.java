@@ -46,4 +46,5 @@ public interface DataSourceProvider extends AutoCloseable {
       java.nio.file.Path target);
 
   java.util.Map<String, Boolean> getServerFeatures();
+
 }

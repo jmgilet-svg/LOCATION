@@ -48,4 +48,6 @@ public final class Models {
       java.time.LocalTime start,
       java.time.LocalTime end,
       String reason) {}
+
+  public record EmailTemplate(String subject, String body) {}
 }

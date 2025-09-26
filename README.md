@@ -23,6 +23,7 @@ Dernier sprint d’endurcissement et de “petits plus” utiles.
 ### Tests
 - WebMvc : entêtes et content-type pour `clients/csv` et `unavailabilities/csv`.
 
+
 ### Démarrage rapide
 ```bash
 mvn -B -ntp verify
