@@ -40,6 +40,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JComboBox;
@@ -62,6 +63,7 @@ public class PlanningPanel extends JPanel {
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
   private List<Models.Unavailability> unavailabilities = List.of();
+  private List<ConflictUtil.Conflict> conflicts = List.of();
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
   public interface SelectionListener {
@@ -76,6 +78,7 @@ public class PlanningPanel extends JPanel {
   private String filterClientId;
   private String filterQuery = "";
   private String filterTags = "";
+  private boolean filterNoConflicts;
 
   private static final int HEADER_H = 28;
   private static final int ROW_H = 60;
@@ -418,6 +421,20 @@ public class PlanningPanel extends JPanel {
       Set<String> visibleIds = resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
       data = data.stream().filter(i -> visibleIds.contains(i.resourceId())).toList();
     }
+    List<ConflictUtil.Conflict> computedConflicts = ConflictUtil.computeConflicts(data);
+    if (filterNoConflicts && !computedConflicts.isEmpty()) {
+      Set<String> conflictIds =
+          computedConflicts.stream()
+              .flatMap(c -> Stream.of(c.a().id(), c.b().id()))
+              .filter(id -> id != null && !id.isBlank())
+              .collect(Collectors.toSet());
+      data =
+          data.stream()
+              .filter(i -> i.id() == null || !conflictIds.contains(i.id()))
+              .toList();
+      computedConflicts = ConflictUtil.computeConflicts(data);
+    }
+    conflicts = computedConflicts;
     interventions = data;
     if (selectedId != null) {
       selected =
@@ -552,6 +569,15 @@ public class PlanningPanel extends JPanel {
     repaint();
   }
 
+  public void setFilterNoConflicts(boolean value) {
+    if (filterNoConflicts == value) {
+      return;
+    }
+    filterNoConflicts = value;
+    reload();
+    repaint();
+  }
+
   public String getFilterAgencyId() {
     return filterAgencyId;
   }
@@ -570,6 +596,10 @@ public class PlanningPanel extends JPanel {
 
   public String getFilterTags() {
     return filterTags;
+  }
+
+  public boolean isFilterNoConflicts() {
+    return filterNoConflicts;
   }
 
   public List<Models.Resource> getResources() {
@@ -595,6 +625,10 @@ public class PlanningPanel extends JPanel {
 
   public List<Models.Unavailability> getUnavailabilities() {
     return unavailabilities;
+  }
+
+  public List<ConflictUtil.Conflict> getConflicts() {
+    return List.copyOf(conflicts);
   }
 
   public Models.Intervention getSelected() {
@@ -1026,6 +1060,17 @@ public class PlanningPanel extends JPanel {
   }
 
   private boolean hasConflict(Tile t) {
+    if (!conflicts.isEmpty() && t != null && t.i != null && t.i.id() != null) {
+      String id = t.i.id();
+      String resourceId = t.i.resourceId();
+      for (ConflictUtil.Conflict conflict : conflicts) {
+        if ((id.equals(conflict.a().id()) || id.equals(conflict.b().id()))
+            && (conflict.resourceId() == null
+                || conflict.resourceId().equals(resourceId))) {
+          return true;
+        }
+      }
+    }
     Instant s = instantForX(Math.min(t.x1, t.x2));
     Instant e = instantForX(Math.max(t.x1, t.x2));
     String rId = resources.get(Math.max(0, Math.min(resources.size() - 1, t.row))).id();

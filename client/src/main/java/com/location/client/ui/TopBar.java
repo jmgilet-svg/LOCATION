@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.function.Function;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -30,6 +31,7 @@ public class TopBar extends JPanel {
   private final JComboBox<Models.Client> cbClient = new JComboBox<>();
   private final JTextField tfQuery = new JTextField();
   private final JTextField tfTags = new JTextField();
+  private final JCheckBox cbNoConflicts = new JCheckBox("Sans conflit");
   private final JSpinner spDate = new JSpinner(new SpinnerDateModel());
   private boolean updating = false;
 
@@ -129,6 +131,15 @@ public class TopBar extends JPanel {
           preferences.save();
         });
 
+    cbNoConflicts.setFocusable(false);
+    cbNoConflicts.addActionListener(
+        e -> {
+          if (updating) {
+            return;
+          }
+          planning.setFilterNoConflicts(cbNoConflicts.isSelected());
+        });
+
     right.add(new JLabel("Agence:"));
     right.add(cbAgency);
     right.add(new JLabel("Ressource:"));
@@ -139,6 +150,7 @@ public class TopBar extends JPanel {
     right.add(tfQuery);
     right.add(new JLabel("Tags:"));
     right.add(tfTags);
+    right.add(cbNoConflicts);
 
     add(left, BorderLayout.WEST);
     add(right, BorderLayout.EAST);
@@ -155,6 +167,12 @@ public class TopBar extends JPanel {
     String savedTags = preferences.getFilterTags();
     tfTags.setText(savedTags);
     planning.setFilterTags(savedTags);
+    updating = true;
+    try {
+      cbNoConflicts.setSelected(planning.isFilterNoConflicts());
+    } finally {
+      updating = false;
+    }
     refreshCombos();
     selectById(cbAgency, Models.Agency::id, preferences.getFilterAgencyId());
     selectById(cbResource, Models.Resource::id, preferences.getFilterResourceId());
