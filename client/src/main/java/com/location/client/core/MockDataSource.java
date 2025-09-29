@@ -23,6 +23,7 @@ public class MockDataSource implements DataSourceProvider {
 
   private final List<Models.Agency> agencies = new ArrayList<>();
   private final List<Models.Client> clients = new ArrayList<>();
+  private final List<Models.Contact> contacts = new ArrayList<>();
   private final List<Models.Driver> drivers = new ArrayList<>();
   private String currentAgencyId;
   private final List<Models.Resource> resources = new ArrayList<>();
@@ -67,6 +68,7 @@ public class MockDataSource implements DataSourceProvider {
   public void resetDemoData() {
     agencies.clear();
     clients.clear();
+    contacts.clear();
     drivers.clear();
     resources.clear();
     resourceTypes.clear();
@@ -151,26 +153,47 @@ public class MockDataSource implements DataSourceProvider {
     Models.ResourceType typeChauffeur =
         saveResourceType(new Models.ResourceType(null, "CHAUFFEUR", "driver.svg"));
 
-    clients.add(
+    var clientAlpha =
         new Models.Client(
             UUID.randomUUID().toString(),
             "Chantier Alpha",
             "alpha@chantier.test",
+            "+33 1 02 03 04 05",
             "1 rue du Test",
             "75001",
             "Paris",
             "FRXX999999999",
-            "FR7630004000500060007000890"));
-    clients.add(
+            "FR7630004000500060007000890");
+    var clientBeta =
         new Models.Client(
             UUID.randomUUID().toString(),
             "Chantier Beta",
             "beta@chantier.test",
+            "+33 4 05 06 07 08",
             "42 avenue de la Démo",
             "69000",
             "Lyon",
             "FRYY888888888",
-            "FR1420001000200030004000505"));
+            "FR1420001000200030004000505");
+    clients.add(clientAlpha);
+    clients.add(clientBeta);
+
+    contacts.add(
+        new Models.Contact(
+            UUID.randomUUID().toString(),
+            clientAlpha.id(),
+            "Claire",
+            "Dupont",
+            "claire.alpha@chantier.test",
+            "+33 6 11 22 33 44"));
+    contacts.add(
+        new Models.Contact(
+            UUID.randomUUID().toString(),
+            clientBeta.id(),
+            "Louis",
+            "Martin",
+            "louis.beta@chantier.test",
+            "+33 7 12 34 56 78"));
 
     drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Jean Routier", "jean@loc.tld"));
     drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Alice Grutier", "alice@loc.tld"));
@@ -406,6 +429,108 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public List<Models.Client> listClients() {
     return List.copyOf(clients);
+  }
+
+  @Override
+  public Models.Client saveClient(Models.Client client) {
+    if (client == null) {
+      throw new IllegalArgumentException("Client requis");
+    }
+    if (client.name() == null || client.name().isBlank()) {
+      throw new IllegalArgumentException("Nom du client requis");
+    }
+    String id = client.id();
+    if (id == null || id.isBlank()) {
+      id = UUID.randomUUID().toString();
+    }
+    Models.Client stored =
+        new Models.Client(
+            id,
+            client.name(),
+            client.email(),
+            client.phone(),
+            client.address(),
+            client.zip(),
+            client.city(),
+            client.vatNumber(),
+            client.iban());
+    boolean replaced = false;
+    for (int i = 0; i < clients.size(); i++) {
+      if (clients.get(i).id().equals(id)) {
+        clients.set(i, stored);
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      clients.add(stored);
+    }
+    return stored;
+  }
+
+  @Override
+  public void deleteClient(String clientId) {
+    if (clientId == null || clientId.isBlank()) {
+      return;
+    }
+    clients.removeIf(client -> clientId.equals(client.id()));
+    contacts.removeIf(contact -> clientId.equals(contact.clientId()));
+  }
+
+  @Override
+  public List<Models.Contact> listContacts(String clientId) {
+    if (clientId == null || clientId.isBlank()) {
+      return List.of();
+    }
+    return contacts.stream()
+        .filter(contact -> clientId.equals(contact.clientId()))
+        .sorted(
+            Comparator.comparing(Models.Contact::lastName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                .thenComparing(
+                    Models.Contact::firstName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+        .toList();
+  }
+
+  @Override
+  public Models.Contact saveContact(Models.Contact contact) {
+    if (contact == null) {
+      throw new IllegalArgumentException("Contact requis");
+    }
+    if (contact.clientId() == null || contact.clientId().isBlank()) {
+      throw new IllegalArgumentException("Client requis pour le contact");
+    }
+    String id = contact.id();
+    if (id == null || id.isBlank()) {
+      id = UUID.randomUUID().toString();
+    }
+    Models.Contact stored =
+        new Models.Contact(
+            id,
+            contact.clientId(),
+            contact.firstName(),
+            contact.lastName(),
+            contact.email(),
+            contact.phone());
+    boolean replaced = false;
+    for (int i = 0; i < contacts.size(); i++) {
+      if (contacts.get(i).id().equals(id)) {
+        contacts.set(i, stored);
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      contacts.add(stored);
+    }
+    return stored;
+  }
+
+  @Override
+  public void deleteContact(String contactId) {
+    if (contactId == null || contactId.isBlank()) {
+      return;
+    }
+    contacts.removeIf(contact -> contactId.equals(contact.id()));
   }
 
   @Override

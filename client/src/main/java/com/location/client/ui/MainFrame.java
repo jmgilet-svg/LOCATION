@@ -959,7 +959,7 @@ public class MainFrame extends JFrame {
         sidebar.setSelected("planning");
       }
       case "clients" -> {
-        showPlaceholder("Clients");
+        new ClientsAdminFrame(dsp).setVisible(true);
         sidebar.setSelected("planning");
       }
       case "resources" -> {

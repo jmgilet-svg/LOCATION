@@ -2,6 +2,7 @@ package com.location.server.api.v1.dto;
 
 import com.location.server.domain.Agency;
 import com.location.server.domain.Client;
+import com.location.server.domain.ClientContact;
 import com.location.server.domain.Intervention;
 import com.location.server.domain.RecurringUnavailability;
 import com.location.server.domain.Resource;
@@ -36,24 +37,63 @@ public final class ApiV1Dtos {
   public record ClientDto(
       String id,
       String name,
-      String billingEmail,
-      String billingAddress,
-      String billingZip,
-      String billingCity,
+      String email,
+      String phone,
+      String address,
+      String zip,
+      String city,
       String vatNumber,
       String iban) {
     public static ClientDto of(Client client) {
       return new ClientDto(
           client.getId(),
           client.getName(),
-          client.getBillingEmail(),
-          client.getBillingAddress(),
-          client.getBillingZip(),
-          client.getBillingCity(),
+          client.getEmail(),
+          client.getPhone(),
+          client.getAddress(),
+          client.getZip(),
+          client.getCity(),
           client.getVatNumber(),
           client.getIban());
     }
   }
+
+  public record SaveClientRequest(
+      String id,
+      @NotBlank @Size(max = 128) String name,
+      @Size(max = 160) String email,
+      @Size(max = 50) String phone,
+      @Size(max = 200) String address,
+      @Size(max = 16) String zip,
+      @Size(max = 120) String city,
+      @Size(max = 32) String vatNumber,
+      @Size(max = 34) String iban) {}
+
+  public record ContactDto(
+      String id,
+      String clientId,
+      String firstName,
+      String lastName,
+      String email,
+      String phone) {
+    public static ContactDto of(ClientContact contact) {
+      return new ContactDto(
+          contact.getId(),
+          contact.getClient().getId(),
+          contact.getFirstName(),
+          contact.getLastName(),
+          contact.getEmail(),
+          contact.getPhone());
+    }
+  }
+
+  public record SaveContactRequest(
+      String id,
+      @NotBlank String clientId,
+      @Size(max = 60) String firstName,
+      @Size(max = 60) String lastName,
+      @Size(max = 200) String email,
+      @Size(max = 50) String phone) {}
 
   public record ResourceDto(
       String id,

@@ -329,19 +329,189 @@ public class RestDataSource implements DataSourceProvider {
       List<Models.Client> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode client : node) {
-          result.add(
-              new Models.Client(
-                  client.path("id").asText(),
-                  client.path("name").asText(),
-                  textOrNull(client, "billingEmail"),
-                  textOrNull(client, "billingAddress"),
-                  textOrNull(client, "billingZip"),
-                  textOrNull(client, "billingCity"),
-                  textOrNull(client, "vatNumber"),
-                  textOrNull(client, "iban")));
+          Models.Client parsed = readClient(client);
+          if (parsed != null) {
+            result.add(parsed);
+          }
         }
       }
       return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Client saveClient(Models.Client client) {
+    if (client == null) {
+      throw new IllegalArgumentException("Client requis");
+    }
+    if (client.name() == null || client.name().isBlank()) {
+      throw new IllegalArgumentException("Nom du client requis");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      if (client.id() != null && !client.id().isBlank()) {
+        payload.put("id", client.id());
+      }
+      payload.put("name", client.name());
+      if (client.email() != null) {
+        payload.put("email", client.email());
+      }
+      if (client.phone() != null) {
+        payload.put("phone", client.phone());
+      }
+      if (client.address() != null) {
+        payload.put("address", client.address());
+      }
+      if (client.zip() != null) {
+        payload.put("zip", client.zip());
+      }
+      if (client.city() != null) {
+        payload.put("city", client.city());
+      }
+      if (client.vatNumber() != null) {
+        payload.put("vatNumber", client.vatNumber());
+      }
+      if (client.iban() != null) {
+        payload.put("iban", client.iban());
+      }
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/clients");
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
+      Models.Client saved = readClient(node);
+      if (saved == null) {
+        throw new RuntimeException("Réponse invalide lors de l'enregistrement du client");
+      }
+      return saved;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteClient(String clientId) {
+    if (clientId == null || clientId.isBlank()) {
+      return;
+    }
+    try {
+      ensureLogin();
+      execute(
+          () -> new HttpDelete(baseUrl + "/api/v1/clients/" + encodeSegment(clientId)),
+          res -> {
+            int code = res.getCode();
+            EntityUtils.consumeQuietly(res.getEntity());
+            if (code < 200 || code >= 300) {
+              throw httpError(code, "Suppression client HTTP " + code);
+            }
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public List<Models.Contact> listContacts(String clientId) {
+    if (clientId == null || clientId.isBlank()) {
+      return List.of();
+    }
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(
+              () ->
+                  new HttpGet(
+                      baseUrl
+                          + "/api/v1/clients/"
+                          + encodeSegment(clientId)
+                          + "/contacts"));
+      List<Models.Contact> result = new ArrayList<>();
+      if (node.isArray()) {
+        for (JsonNode contact : node) {
+          Models.Contact parsed = readContact(contact);
+          if (parsed != null) {
+            result.add(parsed);
+          }
+        }
+      }
+      return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Contact saveContact(Models.Contact contact) {
+    if (contact == null) {
+      throw new IllegalArgumentException("Contact requis");
+    }
+    if (contact.clientId() == null || contact.clientId().isBlank()) {
+      throw new IllegalArgumentException("Client requis pour le contact");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      if (contact.id() != null && !contact.id().isBlank()) {
+        payload.put("id", contact.id());
+      }
+      payload.put("clientId", contact.clientId());
+      if (contact.firstName() != null) {
+        payload.put("firstName", contact.firstName());
+      }
+      if (contact.lastName() != null) {
+        payload.put("lastName", contact.lastName());
+      }
+      if (contact.email() != null) {
+        payload.put("email", contact.email());
+      }
+      if (contact.phone() != null) {
+        payload.put("phone", contact.phone());
+      }
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post =
+                    new HttpPost(
+                        baseUrl
+                            + "/api/v1/clients/"
+                            + encodeSegment(contact.clientId())
+                            + "/contacts");
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
+      Models.Contact saved = readContact(node);
+      if (saved == null) {
+        throw new RuntimeException("Réponse invalide lors de l'enregistrement du contact");
+      }
+      return saved;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteContact(String contactId) {
+    if (contactId == null || contactId.isBlank()) {
+      return;
+    }
+    try {
+      ensureLogin();
+      execute(
+          () -> new HttpDelete(baseUrl + "/api/v1/contacts/" + encodeSegment(contactId)),
+          res -> {
+            int code = res.getCode();
+            EntityUtils.consumeQuietly(res.getEntity());
+            if (code < 200 || code >= 300) {
+              throw httpError(code, "Suppression contact HTTP " + code);
+            }
+            return null;
+          });
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -747,6 +917,35 @@ public class RestDataSource implements DataSourceProvider {
       }
     }
     return resources;
+  }
+
+  private Models.Client readClient(JsonNode node) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return null;
+    }
+    return new Models.Client(
+        textOrNull(node, "id"),
+        textOrNull(node, "name"),
+        textOrNull(node, "email"),
+        textOrNull(node, "phone"),
+        textOrNull(node, "address"),
+        textOrNull(node, "zip"),
+        textOrNull(node, "city"),
+        textOrNull(node, "vatNumber"),
+        textOrNull(node, "iban"));
+  }
+
+  private Models.Contact readContact(JsonNode node) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return null;
+    }
+    return new Models.Contact(
+        textOrNull(node, "id"),
+        textOrNull(node, "clientId"),
+        textOrNull(node, "firstName"),
+        textOrNull(node, "lastName"),
+        textOrNull(node, "email"),
+        textOrNull(node, "phone"));
   }
 
   @Override
@@ -1772,7 +1971,11 @@ public class RestDataSource implements DataSourceProvider {
 
   private static String textOrNull(JsonNode node, String field) {
     JsonNode value = node.get(field);
-    return value == null || value.isNull() ? null : value.asText();
+    if (value == null || value.isNull()) {
+      return null;
+    }
+    String text = value.asText();
+    return text == null || text.isBlank() ? null : text;
   }
 
   private static void putNullable(ObjectNode node, String field, String value) {

@@ -15,12 +15,21 @@ public final class Models {
   public record Client(
       String id,
       String name,
-      String billingEmail,
-      String billingAddress,
-      String billingZip,
-      String billingCity,
+      String email,
+      String phone,
+      String address,
+      String zip,
+      String city,
       String vatNumber,
       String iban) {}
+
+  public record Contact(
+      String id,
+      String clientId,
+      String firstName,
+      String lastName,
+      String email,
+      String phone) {}
 
   public record Driver(String id, String name, String email) {}
 

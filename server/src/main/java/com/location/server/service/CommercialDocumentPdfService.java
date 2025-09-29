@@ -39,9 +39,9 @@ public class CommercialDocumentPdfService {
       metadata.setWidthPercentage(100);
       addRow(metadata, "Agence", document.getAgency().getName(), normal);
       addRow(metadata, "Client", document.getClient().getName(), normal);
-      if (hasText(document.getClient().getBillingAddress())
-          || hasText(document.getClient().getBillingZip())
-          || hasText(document.getClient().getBillingCity())) {
+      if (hasText(document.getClient().getAddress())
+          || hasText(document.getClient().getZip())
+          || hasText(document.getClient().getCity())) {
         addRow(metadata, "Adresse client", formatClientAddress(document), normal);
       }
       if (hasText(document.getClient().getVatNumber())) {
@@ -199,9 +199,9 @@ public class CommercialDocumentPdfService {
   }
 
   private static String formatClientAddress(CommercialDocument document) {
-    String address = document.getClient().getBillingAddress();
-    String zip = document.getClient().getBillingZip();
-    String city = document.getClient().getBillingCity();
+    String address = document.getClient().getAddress();
+    String zip = document.getClient().getZip();
+    String city = document.getClient().getCity();
     return joinNonBlank(
         ", ",
         address,

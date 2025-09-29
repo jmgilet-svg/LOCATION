@@ -46,20 +46,22 @@ public final class CsvUtil {
   public static void exportClients(DataSourceProvider dsp, Path target) throws IOException {
     List<Models.Client> clients = dsp.listClients();
     try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-      writer.write("id;name;email;address;zip;city;vatNumber;iban\n");
+      writer.write("id;name;email;phone;address;zip;city;vatNumber;iban\n");
       for (Models.Client client : clients) {
         writer.write(
             escape(client.id())
                 + ';'
                 + escape(client.name())
                 + ';'
-                + escape(client.billingEmail())
+                + escape(client.email())
                 + ';'
-                + escape(client.billingAddress())
+                + escape(client.phone())
                 + ';'
-                + escape(client.billingZip())
+                + escape(client.address())
                 + ';'
-                + escape(client.billingCity())
+                + escape(client.zip())
+                + ';'
+                + escape(client.city())
                 + ';'
                 + escape(client.vatNumber())
                 + ';'

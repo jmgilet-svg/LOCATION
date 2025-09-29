@@ -1,7 +1,6 @@
 package com.location.server.api.v1;
 
 import com.location.server.api.v1.dto.ApiV1Dtos.AgencyDto;
-import com.location.server.api.v1.dto.ApiV1Dtos.ClientDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.CreateInterventionRequest;
 import com.location.server.api.v1.dto.ApiV1Dtos.CreateRecurringUnavailabilityRequest;
 import com.location.server.api.v1.dto.ApiV1Dtos.CreateUnavailabilityRequest;
@@ -147,15 +146,10 @@ public class ApiV1Controller {
     return AgencyDto.of(agency);
   }
 
-  @GetMapping("/clients")
-  public List<ClientDto> clients() {
-    return clientRepository.findAll().stream().map(ClientDto::of).collect(Collectors.toList());
-  }
-
   @GetMapping(value = "/clients/csv", produces = "text/csv")
   public ResponseEntity<byte[]> exportClientsCsv() {
     StringBuilder csv =
-        new StringBuilder("id;name;billingEmail;billingAddress;billingZip;billingCity;vatNumber;iban\n");
+        new StringBuilder("id;name;email;phone;address;zip;city;vatNumber;iban\n");
     clientRepository
         .findAll()
         .forEach(
@@ -164,13 +158,15 @@ public class ApiV1Controller {
                     .append(';')
                     .append(sanitize(client.getName()))
                     .append(';')
-                    .append(client.getBillingEmail() == null ? "" : client.getBillingEmail())
+                    .append(client.getEmail() == null ? "" : client.getEmail())
                     .append(';')
-                    .append(client.getBillingAddress() == null ? "" : sanitize(client.getBillingAddress()))
+                    .append(client.getPhone() == null ? "" : sanitize(client.getPhone()))
                     .append(';')
-                    .append(client.getBillingZip() == null ? "" : sanitize(client.getBillingZip()))
+                    .append(client.getAddress() == null ? "" : sanitize(client.getAddress()))
                     .append(';')
-                    .append(client.getBillingCity() == null ? "" : sanitize(client.getBillingCity()))
+                    .append(client.getZip() == null ? "" : sanitize(client.getZip()))
+                    .append(';')
+                    .append(client.getCity() == null ? "" : sanitize(client.getCity()))
                     .append(';')
                     .append(client.getVatNumber() == null ? "" : sanitize(client.getVatNumber()))
                     .append(';')
@@ -484,7 +480,7 @@ public class ApiV1Controller {
       String recipient =
           request.toOverride() != null && !request.toOverride().isBlank()
               ? request.toOverride()
-              : nullToEmpty(intervention.getClient().getBillingEmail());
+              : nullToEmpty(intervention.getClient().getEmail());
       if (recipient.isBlank()) {
         continue;
       }

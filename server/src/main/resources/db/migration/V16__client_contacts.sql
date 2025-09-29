@@ -1,0 +1,11 @@
+ALTER TABLE client ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+ALTER TABLE client ALTER COLUMN billing_email DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS client_contact (
+  id VARCHAR(36) PRIMARY KEY,
+  client_id VARCHAR(36) NOT NULL REFERENCES client(id) ON DELETE CASCADE,
+  first_name VARCHAR(60),
+  last_name VARCHAR(60),
+  email VARCHAR(200),
+  phone VARCHAR(50)
+);
