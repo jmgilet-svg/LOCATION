@@ -24,7 +24,8 @@ class NotesModelTest {
             first.title(),
             first.start(),
             first.end(),
-            "HELLO");
+            "HELLO",
+            first.price());
     Models.Intervention saved = ds.updateIntervention(withNotes);
     assertEquals("HELLO", saved.notes());
   }

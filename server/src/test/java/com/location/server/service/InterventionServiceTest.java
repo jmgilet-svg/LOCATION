@@ -48,7 +48,8 @@ class InterventionServiceTest {
   @Test
   void conflictDetectionThrowsException() {
     OffsetDateTime start = OffsetDateTime.of(2025, 1, 1, 8, 0, 0, 0, ZoneOffset.UTC);
-    service.create(AGENCY_ID, RESOURCE_ID, DRIVER_ID, CLIENT_ID, "OK", start, start.plusHours(2), null);
+    service.create(
+        AGENCY_ID, RESOURCE_ID, DRIVER_ID, CLIENT_ID, "OK", start, start.plusHours(2), null, null);
 
     assertThrows(
         AssignmentConflictException.class,
@@ -61,6 +62,7 @@ class InterventionServiceTest {
                 "KO",
                 start.plusHours(1),
                 start.plusHours(3),
+                null,
                 null));
   }
 
@@ -86,13 +88,15 @@ class InterventionServiceTest {
                 "KO",
                 start.plusHours(1),
                 start.plusHours(3),
+                null,
                 null));
   }
 
   @Test
   void conflictOnDriverTriggersException() {
     OffsetDateTime start = OffsetDateTime.of(2025, 1, 1, 8, 0, 0, 0, ZoneOffset.UTC);
-    service.create(AGENCY_ID, RESOURCE_ID, DRIVER_ID, CLIENT_ID, "OK", start, start.plusHours(2), null);
+    service.create(
+        AGENCY_ID, RESOURCE_ID, DRIVER_ID, CLIENT_ID, "OK", start, start.plusHours(2), null, null);
 
     resourceRepository.save(
         new Resource(
@@ -109,6 +113,7 @@ class InterventionServiceTest {
                 "Driver conflict",
                 start.plusHours(1),
                 start.plusHours(3),
+                null,
                 null));
   }
 }

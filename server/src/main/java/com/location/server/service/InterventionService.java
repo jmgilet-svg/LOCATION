@@ -49,7 +49,8 @@ public class InterventionService {
       String title,
       OffsetDateTime start,
       OffsetDateTime end,
-      String notes) {
+      String notes,
+      Double price) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
     }
@@ -73,7 +74,16 @@ public class InterventionService {
         driverId == null || driverId.isBlank() ? null : driverRepository.findById(driverId).orElseThrow();
     Intervention intervention =
         new Intervention(
-            UUID.randomUUID().toString(), title, start, end, agency, resource, client, driver, notes);
+            UUID.randomUUID().toString(),
+            title,
+            start,
+            end,
+            agency,
+            resource,
+            client,
+            driver,
+            notes,
+            price);
     return interventionRepository.save(intervention);
   }
 
@@ -87,7 +97,8 @@ public class InterventionService {
       String title,
       OffsetDateTime start,
       OffsetDateTime end,
-      String notes) {
+      String notes,
+      Double price) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
     }
@@ -124,6 +135,7 @@ public class InterventionService {
     intervention.setStart(start);
     intervention.setEnd(end);
     intervention.setNotes(notes);
+    intervention.setPrice(price);
     return interventionRepository.save(intervention);
   }
 

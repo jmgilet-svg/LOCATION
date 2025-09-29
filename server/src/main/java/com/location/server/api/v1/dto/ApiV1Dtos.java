@@ -7,6 +7,7 @@ import com.location.server.domain.RecurringUnavailability;
 import com.location.server.domain.Resource;
 import com.location.server.domain.ResourceType;
 import com.location.server.domain.Unavailability;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -70,7 +71,8 @@ public final class ApiV1Dtos {
       String clientId,
       OffsetDateTime start,
       OffsetDateTime end,
-      String notes) {
+      String notes,
+      Double price) {
     public static InterventionDto of(Intervention intervention) {
       return new InterventionDto(
           intervention.getId(),
@@ -81,7 +83,8 @@ public final class ApiV1Dtos {
           intervention.getClient().getId(),
           intervention.getStart(),
           intervention.getEnd(),
-          intervention.getNotes());
+          intervention.getNotes(),
+          intervention.getPrice());
     }
   }
 
@@ -129,7 +132,8 @@ public final class ApiV1Dtos {
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end,
-      @Size(max = 4000) String notes) {}
+      @Size(max = 4000) String notes,
+      @DecimalMin(value = "0.0", inclusive = true) Double price) {}
 
   public record UpdateInterventionRequest(
       @NotBlank String agencyId,
@@ -139,7 +143,8 @@ public final class ApiV1Dtos {
       @NotBlank @Size(max = 140) String title,
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end,
-      @Size(max = 4000) String notes) {}
+      @Size(max = 4000) String notes,
+      @DecimalMin(value = "0.0", inclusive = true) Double price) {}
 
   public record CreateUnavailabilityRequest(
       @NotBlank String resourceId,

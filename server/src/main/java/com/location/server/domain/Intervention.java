@@ -49,6 +49,9 @@ public class Intervention {
   @Column(columnDefinition = "TEXT")
   private String notes;
 
+  @Column(name = "price_eur")
+  private Double price;
+
   protected Intervention() {}
 
   public Intervention(
@@ -59,7 +62,7 @@ public class Intervention {
       Agency agency,
       Resource resource,
       Client client) {
-    this(id, title, start, end, agency, resource, client, null, null);
+    this(id, title, start, end, agency, resource, client, null, null, null);
   }
 
   public Intervention(
@@ -71,7 +74,7 @@ public class Intervention {
       Resource resource,
       Client client,
       String notes) {
-    this(id, title, start, end, agency, resource, client, null, notes);
+    this(id, title, start, end, agency, resource, client, null, notes, null);
   }
 
   public Intervention(
@@ -83,7 +86,8 @@ public class Intervention {
       Resource resource,
       Client client,
       Driver driver,
-      String notes) {
+      String notes,
+      Double price) {
     this.id = id;
     this.title = title;
     this.start = start;
@@ -93,6 +97,7 @@ public class Intervention {
     this.client = client;
     this.driver = driver;
     this.notes = notes;
+    this.price = price;
   }
 
   public String getId() {
@@ -165,5 +170,13 @@ public class Intervention {
 
   public void setNotes(String notes) {
     this.notes = notes;
+  }
+
+  public Double getPrice() {
+    return price;
+  }
+
+  public void setPrice(Double price) {
+    this.price = price;
   }
 }

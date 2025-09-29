@@ -130,7 +130,8 @@ public class SuggestionPanel extends JPanel {
                   it.title(),
                   it.start().plus(delta),
                   it.end().plus(delta),
-                  it.notes());
+                  it.notes(),
+                  it.price());
           dsp.updateIntervention(updated);
         }
         notifySuccess("Déplacement appliqué.");
@@ -190,7 +191,8 @@ public class SuggestionPanel extends JPanel {
                   it.title(),
                   it.start(),
                   it.end(),
-                  it.notes());
+                  it.notes(),
+                  it.price());
           dsp.updateIntervention(updated);
         }
         notifySuccess("Ressource remplacée.");

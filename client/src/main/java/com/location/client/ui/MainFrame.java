@@ -1299,7 +1299,8 @@ public class MainFrame extends JFrame {
               sel.title(),
               sel.start(),
               sel.end(),
-              ta.getText());
+              ta.getText(),
+              sel.price());
       try {
         dsp.updateIntervention(updated);
         toastSuccess("Notes enregistrées");
@@ -1362,29 +1363,57 @@ public class MainFrame extends JFrame {
     Models.Resource defaultResource = resources.get(0);
     Models.Client defaultClient = clients.get(0);
     Instant start = Instant.now().plus(Duration.ofHours(1));
-    Instant end = start.plus(Duration.ofHours(2));
-    Models.Intervention base =
-        new Models.Intervention(
-            null,
-            defaultResource.agencyId(),
-            defaultResource.id(),
-            defaultClient.id(),
-            null,
-            "Nouvelle intervention",
-            start,
-            end,
-            null);
-    new InterventionEditorDialog(
-            this,
-            dsp,
-            base,
-            saved -> {
-              if (saved != null) {
-                planning.rememberCreation(saved, "Création");
-                refreshData();
-              }
-            })
-        .setVisible(true);
+    JTextField tfStart = new JTextField(start.toString());
+    JTextField tfEnd = new JTextField(start.plus(Duration.ofHours(2)).toString());
+    JTextField tfPrice = new JTextField();
+    JPanel panel = new JPanel(new GridLayout(0, 1, 6, 6));
+    panel.add(new JLabel("Ressource:"));
+    panel.add(cbR);
+    panel.add(new JLabel("Client:"));
+    panel.add(cbC);
+    panel.add(new JLabel("Titre:"));
+    panel.add(tfTitle);
+    panel.add(new JLabel("Début (ISO):"));
+    panel.add(tfStart);
+    panel.add(new JLabel("Fin (ISO):"));
+    panel.add(tfEnd);
+    panel.add(new JLabel("Prix (€):"));
+    panel.add(tfPrice);
+    int result = JOptionPane.showConfirmDialog(this, panel, "Créer une intervention", JOptionPane.OK_CANCEL_OPTION);
+    if (result == JOptionPane.OK_OPTION) {
+      Models.Resource resource = (Models.Resource) cbR.getSelectedItem();
+      Models.Client client = (Models.Client) cbC.getSelectedItem();
+      if (resource == null || client == null) {
+        error("Sélection invalide");
+        return;
+      }
+      try {
+        Double price = null;
+        String priceText = tfPrice.getText().trim();
+        if (!priceText.isBlank()) {
+          price = Double.parseDouble(priceText);
+        }
+        Models.Intervention created =
+            dsp.createIntervention(
+                new Models.Intervention(
+                    null,
+                    resource.agencyId(),
+                    resource.id(),
+                    client.id(),
+                    null,
+                    tfTitle.getText(),
+                    Instant.parse(tfStart.getText()),
+                    Instant.parse(tfEnd.getText()),
+                    null,
+                    price));
+        toastSuccess("Intervention créée");
+        ActivityCenter.log("Création intervention " + created.id());
+        planning.rememberCreation(created, "Création");
+        refreshData();
+      } catch (Exception ex) {
+        error(ex.getMessage());
+      }
+    }
   }
 
   private void createUnavailabilityDialog() {

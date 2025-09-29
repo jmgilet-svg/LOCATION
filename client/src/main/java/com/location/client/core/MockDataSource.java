@@ -443,7 +443,8 @@ public class MockDataSource implements DataSourceProvider {
             intervention.title(),
             intervention.start(),
             intervention.end(),
-            intervention.notes());
+            intervention.notes(),
+            intervention.price());
     interventions.add(created);
     return created;
   }
@@ -1062,9 +1063,19 @@ public class MockDataSource implements DataSourceProvider {
       Instant start,
       Instant end,
       String notes) {
+    Double price = resourceDailyRates.getOrDefault(resourceId, 0.0);
     interventions.add(
         new Models.Intervention(
-            UUID.randomUUID().toString(), agencyId, resourceId, clientId, driverId, title, start, end, notes));
+            UUID.randomUUID().toString(),
+            agencyId,
+            resourceId,
+            clientId,
+            driverId,
+            title,
+            start,
+            end,
+            notes,
+            price));
   }
 
   private void addUnavailability(String resourceId, String reason, Instant start, Instant end) {

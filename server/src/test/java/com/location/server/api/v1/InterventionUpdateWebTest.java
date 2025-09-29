@@ -59,7 +59,8 @@ class InterventionUpdateWebTest {
     Driver driver = driverRepository.save(new Driver("D", "Driver", "driver@example.test"));
     Intervention intervention =
         interventionRepository.save(
-            new Intervention("I1", "Titre", base, base.plusHours(2), agency, resource, client, driver, null));
+            new Intervention(
+                "I1", "Titre", base, base.plusHours(2), agency, resource, client, driver, null, 120.0));
 
     agencyId = agency.getId();
     clientId = client.getId();
@@ -72,7 +73,7 @@ class InterventionUpdateWebTest {
   void update_ok_then_delete_returns_204() throws Exception {
     String payload =
         """
-            {"agencyId":"%s","resourceId":"%s","clientId":"%s","driverId":"%s","title":"MAJ","start":"%s","end":"%s"}
+            {"agencyId":"%s","resourceId":"%s","clientId":"%s","driverId":"%s","title":"MAJ","start":"%s","end":"%s","price":150.5}
             """
             .formatted(agencyId, resourceId, clientId, driverId, base.plusHours(1), base.plusHours(3));
 
@@ -82,7 +83,8 @@ class InterventionUpdateWebTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.title").value("MAJ"));
+        .andExpect(jsonPath("$.title").value("MAJ"))
+        .andExpect(jsonPath("$.price").value(150.5));
 
     mockMvc.perform(delete("/api/v1/interventions/" + interventionId)).andExpect(status().isNoContent());
   }
@@ -96,11 +98,20 @@ class InterventionUpdateWebTest {
 
     interventionRepository.save(
         new Intervention(
-            "I2", "Autre", base.plusHours(2), base.plusHours(4), agency, resource, client, driver, null));
+            "I2",
+            "Autre",
+            base.plusHours(2),
+            base.plusHours(4),
+            agency,
+            resource,
+            client,
+            driver,
+            null,
+            90.0));
 
     String payload =
         """
-            {"agencyId":"%s","resourceId":"%s","clientId":"%s","driverId":"%s","title":"MAJ","start":"%s","end":"%s"}
+            {"agencyId":"%s","resourceId":"%s","clientId":"%s","driverId":"%s","title":"MAJ","start":"%s","end":"%s","price":200.0}
             """
             .formatted(agencyId, resourceId, clientId, driverId, base.plusHours(1), base.plusHours(3));
 
