@@ -25,6 +25,8 @@ public class DocumentsBrowserFrame extends JFrame {
 
     Map<String, Long> counts = Collections.emptyMap();
     long total = 0L;
+    long deliveriesPending = 0L;
+    long invoicesUnpaid = 0L;
     try {
       List<Models.Doc> docs = dataSourceProvider.listDocs(null, null);
       if (docs != null) {
@@ -32,6 +34,10 @@ public class DocumentsBrowserFrame extends JFrame {
         counts =
             docs.stream()
                 .collect(Collectors.groupingBy(Models.Doc::type, Collectors.counting()));
+        deliveriesPending =
+            docs.stream().filter(d -> "DELIVERY".equals(d.type()) && !d.delivered()).count();
+        invoicesUnpaid =
+            docs.stream().filter(d -> "INVOICE".equals(d.type()) && !d.paid()).count();
       }
     } catch (Exception ignored) {
     }
@@ -42,10 +48,16 @@ public class DocumentsBrowserFrame extends JFrame {
     panel.add(createButton(withCount("Tous les documents", total), null));
     panel.add(createButton(withCount("Devis", counts.getOrDefault("QUOTE", 0L)), "QUOTE"));
     panel.add(createButton(withCount("Bons de commande", counts.getOrDefault("ORDER", 0L)), "ORDER"));
-    panel.add(
-        createButton(
-            withCount("Bons de livraison", counts.getOrDefault("DELIVERY", 0L)), "DELIVERY"));
-    panel.add(createButton(withCount("Factures", counts.getOrDefault("INVOICE", 0L)), "INVOICE"));
+    String deliveriesLabel = withCount("Bons de livraison", counts.getOrDefault("DELIVERY", 0L));
+    if (deliveriesPending > 0) {
+      deliveriesLabel += " — en attente: " + deliveriesPending;
+    }
+    panel.add(createButton(deliveriesLabel, "DELIVERY"));
+    String invoicesLabel = withCount("Factures", counts.getOrDefault("INVOICE", 0L));
+    if (invoicesUnpaid > 0) {
+      invoicesLabel += " — impayées: " + invoicesUnpaid;
+    }
+    panel.add(createButton(invoicesLabel, "INVOICE"));
 
     add(panel, BorderLayout.CENTER);
     pack();

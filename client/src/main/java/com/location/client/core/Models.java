@@ -163,6 +163,8 @@ public final class Models {
       double totalHt,
       double totalVat,
       double totalTtc,
+      boolean delivered,
+      boolean paid,
       java.util.List<DocLine> lines) {}
 
   public record ResourceType(String id, String name, String iconName) {}

@@ -1018,11 +1018,28 @@ public class MainFrame extends JFrame {
                   long deliveries =
                       docs.stream().filter(d -> "DELIVERY".equals(d.type())).count();
                   long invoices = docs.stream().filter(d -> "INVOICE".equals(d.type())).count();
+                  long pendingDeliveries =
+                      docs.stream()
+                          .filter(d -> "DELIVERY".equals(d.type()) && !d.delivered())
+                          .count();
+                  long unpaidInvoices =
+                      docs.stream()
+                          .filter(d -> "INVOICE".equals(d.type()) && !d.paid())
+                          .count();
                   String text =
                       "Q" + quotes +
                       " BC" + orders +
                       " BL" + deliveries +
                       " F" + invoices;
+                  if (pendingDeliveries > 0 || unpaidInvoices > 0) {
+                    text += " |";
+                    if (pendingDeliveries > 0) {
+                      text += " BL!" + pendingDeliveries;
+                    }
+                    if (unpaidInvoices > 0) {
+                      text += " F!" + unpaidInvoices;
+                    }
+                  }
                   sidebar.setBadgeText("docs", text);
                 }
               } catch (Exception ignored) {

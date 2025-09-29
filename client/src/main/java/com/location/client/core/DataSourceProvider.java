@@ -194,6 +194,8 @@ public interface DataSourceProvider extends AutoCloseable {
             doc.totalHt(),
             doc.totalVat(),
             doc.totalTtc(),
+            doc.delivered(),
+            doc.paid(),
             lines);
     return updateDoc(docWithLines);
   }

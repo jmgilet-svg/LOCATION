@@ -336,6 +336,8 @@ public class MockDataSource implements DataSourceProvider {
             a1.id(),
             clients.get(0).id(),
             quoteDate,
+            false,
+            false,
             quoteLines));
     List<Models.DocLine> invoiceLines = List.of(new Models.DocLine("Transport", 1.0, 80.0, 20.0));
     java.time.OffsetDateTime invoiceDate = java.time.OffsetDateTime.now().minusDays(2);
@@ -349,6 +351,8 @@ public class MockDataSource implements DataSourceProvider {
             a1.id(),
             clients.get(1).id(),
             invoiceDate,
+            true,
+            false,
             invoiceLines));
   }
 
@@ -912,6 +916,8 @@ public class MockDataSource implements DataSourceProvider {
             0,
             0,
             0,
+            false,
+            false,
             java.util.List.of());
     docs.add(created);
     return created;
@@ -929,6 +935,8 @@ public class MockDataSource implements DataSourceProvider {
             document.agencyId(),
             document.clientId(),
             document.date(),
+            document.delivered(),
+            document.paid(),
             document.lines());
     replaceDoc(updated);
     return updated;
@@ -958,6 +966,8 @@ public class MockDataSource implements DataSourceProvider {
             source.agencyId(),
             source.clientId(),
             date,
+            false,
+            false,
             source.lines());
     docs.add(copy);
     return copy;
@@ -1060,6 +1070,8 @@ public class MockDataSource implements DataSourceProvider {
       String agencyId,
       String clientId,
       java.time.OffsetDateTime date,
+      boolean delivered,
+      boolean paid,
       java.util.List<Models.DocLine> lines) {
       double totalHt = 0;
       double totalVat = 0;
@@ -1081,6 +1093,8 @@ public class MockDataSource implements DataSourceProvider {
             round2(totalHt),
             round2(totalVat),
             round2(totalHt + totalVat),
+            delivered,
+            paid,
             java.util.List.copyOf(lines));
     recordReference(agencyId, type, reference, doc.date());
     return doc;
