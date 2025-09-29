@@ -8,7 +8,9 @@ public interface MailGateway {
   class DevMailGateway implements MailGateway {
     @Override
     public void send(Mail mail) {
-      System.out.println("[DEV MAIL] to=" + mail.to() + " subject=" + mail.subject() + " attachment=" + mail.filename());
+      String attachment = mail.filename() == null ? "(aucune pièce jointe)" : mail.filename();
+      System.out.println(
+          "[DEV MAIL] to=" + mail.to() + " subject=" + mail.subject() + " attachment=" + attachment);
     }
   }
 }

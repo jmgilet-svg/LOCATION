@@ -125,7 +125,8 @@ public class ApiV1Controller {
 
   @GetMapping(value = "/clients/csv", produces = "text/csv")
   public ResponseEntity<byte[]> exportClientsCsv() {
-    StringBuilder csv = new StringBuilder("id;name;billingEmail\n");
+    StringBuilder csv =
+        new StringBuilder("id;name;billingEmail;billingAddress;billingZip;billingCity;vatNumber;iban\n");
     clientRepository
         .findAll()
         .forEach(
@@ -135,6 +136,16 @@ public class ApiV1Controller {
                     .append(sanitize(client.getName()))
                     .append(';')
                     .append(client.getBillingEmail() == null ? "" : client.getBillingEmail())
+                    .append(';')
+                    .append(client.getBillingAddress() == null ? "" : sanitize(client.getBillingAddress()))
+                    .append(';')
+                    .append(client.getBillingZip() == null ? "" : sanitize(client.getBillingZip()))
+                    .append(';')
+                    .append(client.getBillingCity() == null ? "" : sanitize(client.getBillingCity()))
+                    .append(';')
+                    .append(client.getVatNumber() == null ? "" : sanitize(client.getVatNumber()))
+                    .append(';')
+                    .append(client.getIban() == null ? "" : sanitize(client.getIban()))
                     .append('\n'));
     byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
     return ResponseEntity.ok()

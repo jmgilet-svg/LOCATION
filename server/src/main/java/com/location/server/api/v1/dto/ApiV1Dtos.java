@@ -24,9 +24,25 @@ public final class ApiV1Dtos {
     }
   }
 
-  public record ClientDto(String id, String name, String billingEmail) {
+  public record ClientDto(
+      String id,
+      String name,
+      String billingEmail,
+      String billingAddress,
+      String billingZip,
+      String billingCity,
+      String vatNumber,
+      String iban) {
     public static ClientDto of(Client client) {
-      return new ClientDto(client.getId(), client.getName(), client.getBillingEmail());
+      return new ClientDto(
+          client.getId(),
+          client.getName(),
+          client.getBillingEmail(),
+          client.getBillingAddress(),
+          client.getBillingZip(),
+          client.getBillingCity(),
+          client.getVatNumber(),
+          client.getIban());
     }
   }
 

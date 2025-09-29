@@ -261,7 +261,16 @@ public class RestDataSource implements DataSourceProvider {
       List<Models.Client> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode client : node) {
-          result.add(new Models.Client(client.path("id").asText(), client.path("name").asText(), client.path("billingEmail").asText()));
+          result.add(
+              new Models.Client(
+                  client.path("id").asText(),
+                  client.path("name").asText(),
+                  textOrNull(client, "billingEmail"),
+                  textOrNull(client, "billingAddress"),
+                  textOrNull(client, "billingZip"),
+                  textOrNull(client, "billingCity"),
+                  textOrNull(client, "vatNumber"),
+                  textOrNull(client, "iban")));
         }
       }
       return result;
@@ -1218,7 +1227,7 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
-  public void emailDoc(String id, String to, String subject, String message) {
+  public void emailDoc(String id, String to, String subject, String message, boolean attachPdf) {
     try {
       ensureLogin();
       execute(
@@ -1226,6 +1235,7 @@ public class RestDataSource implements DataSourceProvider {
             HttpPost post = new HttpPost(baseUrl + "/api/v1/docs/" + encodeSegment(id) + "/email");
             ObjectNode payload = om.createObjectNode();
             payload.put("to", to);
+            payload.put("attachPdf", attachPdf);
             if (subject == null || subject.isBlank()) {
               payload.putNull("subject");
             } else {
@@ -1356,7 +1366,8 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
-  public void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message) {
+  public void emailDocsBatch(
+      java.util.List<String> ids, String to, String subject, String message, boolean attachPdf) {
     try {
       ensureLogin();
       execute(
@@ -1366,6 +1377,7 @@ public class RestDataSource implements DataSourceProvider {
             ArrayNode arr = payload.putArray("ids");
             ids.forEach(arr::add);
             payload.put("to", to);
+            payload.put("attachPdf", attachPdf);
             if (subject == null || subject.isBlank()) {
               payload.putNull("subject");
             } else {
@@ -1676,6 +1688,11 @@ public class RestDataSource implements DataSourceProvider {
         node.path("totalVat").asDouble(),
         node.path("totalTtc").asDouble(),
         java.util.List.copyOf(lines));
+  }
+
+  private static String textOrNull(JsonNode node, String field) {
+    JsonNode value = node.get(field);
+    return value == null || value.isNull() ? null : value.asText();
   }
 
   private static String encodeSegment(String value) {

@@ -141,10 +141,24 @@ public class MockDataSource implements DataSourceProvider {
 
     clients.add(
         new Models.Client(
-            UUID.randomUUID().toString(), "Chantier Alpha", "alpha@chantier.test"));
+            UUID.randomUUID().toString(),
+            "Chantier Alpha",
+            "alpha@chantier.test",
+            "1 rue du Test",
+            "75001",
+            "Paris",
+            "FRXX999999999",
+            "FR7630004000500060007000890"));
     clients.add(
         new Models.Client(
-            UUID.randomUUID().toString(), "Chantier Beta", "beta@chantier.test"));
+            UUID.randomUUID().toString(),
+            "Chantier Beta",
+            "beta@chantier.test",
+            "42 avenue de la Démo",
+            "69000",
+            "Lyon",
+            "FRYY888888888",
+            "FR1420001000200030004000505"));
 
     drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Jean Routier", "jean@loc.tld"));
     drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Alice Grutier", "alice@loc.tld"));
@@ -943,12 +957,13 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
-  public void emailDoc(String id, String to, String subject, String message) {
+  public void emailDoc(String id, String to, String subject, String message, boolean attachPdf) {
     // Simulation : aucun envoi réel en mode Mock.
   }
 
   @Override
-  public void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message) {
+  public void emailDocsBatch(
+      java.util.List<String> ids, String to, String subject, String message, boolean attachPdf) {
     // Simulation : aucun envoi réel en mode Mock.
   }
 
