@@ -1,6 +1,7 @@
 package com.location.client.core;
 
 import java.time.Instant;
+import java.util.List;
 
 public final class Models {
   private Models() {}
@@ -28,13 +29,49 @@ public final class Models {
   public record Intervention(
       String id,
       String agencyId,
-      String resourceId,
+      List<String> resourceIds,
       String clientId,
       String driverId,
       String title,
       Instant start,
       Instant end,
-      String notes) {}
+      String notes) {
+    public Intervention {
+      this.resourceIds = resourceIds == null ? List.of() : List.copyOf(resourceIds);
+    }
+
+    public Intervention(
+        String id,
+        String agencyId,
+        String resourceId,
+        String clientId,
+        String driverId,
+        String title,
+        Instant start,
+        Instant end,
+        String notes) {
+      this(
+          id,
+          agencyId,
+          resourceId == null || resourceId.isBlank() ? List.of() : List.of(resourceId),
+          clientId,
+          driverId,
+          title,
+          start,
+          end,
+          notes);
+    }
+
+    public String resourceId() {
+      return resourceIds.isEmpty() ? null : resourceIds.get(0);
+    }
+
+    public Intervention withResourceIds(List<String> newResourceIds) {
+      return new Intervention(
+          id, agencyId, newResourceIds == null ? List.of() : List.copyOf(newResourceIds), clientId,
+          driverId, title, start, end, notes);
+    }
+  }
 
   public record Unavailability(
       String id,
