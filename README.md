@@ -48,6 +48,37 @@ Base **Spring Boot (Java 17)** + **Swing (FlatLaf)** prête :
 > REST : les méthodes existent mais renvoient une erreur explicite si non implémentées côté backend ; tout fonctionne en **Mock**.
 
 
+## Backend Spring Boot — Ressource Types persistés
+
+### Démarrer le backend (profil **dev** H2 + Flyway)
+```bash
+mvn -pl server -DskipTests spring-boot:run
+```
+Le backend écoute sur `http://localhost:8080` et expose notamment :
+- `GET /api/v1/resource-types`
+- `POST /api/v1/resource-types` (création/mise à jour)
+- `DELETE /api/v1/resource-types/{id}`
+- `GET /api/v1/resources/{id}/type`
+- `PUT /api/v1/resources/{id}/type`
+- `DELETE /api/v1/resources/{id}/type`
+
+### Production (PostgreSQL)
+Configurer les variables d’environnement puis lancer le jar :
+```bash
+export DB_URL='jdbc:postgresql://host:5432/location'
+export DB_USER='location'
+export DB_PASS='***'
+mvn -pl server -DskipTests package
+java -Dspring.profiles.active=prod -jar server/target/location-server.jar
+```
+
+### Client en mode REST
+Dans le client, choisissez **Mode Connecté (Backend)** au démarrage ou lancez :
+```bash
+java -jar client/target/location-client.jar --datasource=rest
+```
+Le client consommera les *Resource Types* depuis le backend.
+
 ### Build & run (client)
 ```bash
 mvn -pl client -DskipTests package
