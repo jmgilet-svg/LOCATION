@@ -50,6 +50,7 @@ public class MainFrame extends JFrame {
   private ButtonGroup agencyGroup = new ButtonGroup();
   private boolean updatingAgencyMenu;
   private final Timer heartbeat;
+  private Timer badgeTimer;
   private JDialog activityDialog;
   private GuidedTour guidedTour;
   private boolean restoringGeometry;
@@ -107,6 +108,9 @@ public class MainFrame extends JFrame {
           @Override
           public void windowClosed(WindowEvent e) {
             heartbeat.stop();
+            if (badgeTimer != null) {
+              badgeTimer.stop();
+            }
             try {
               dsp.close();
             } catch (Exception ignored) {
@@ -182,6 +186,8 @@ public class MainFrame extends JFrame {
     add(planningContainer, BorderLayout.CENTER);
     add(suggestionPanel, BorderLayout.EAST);
     sidebar.setSelected("planning");
+    registerNavigationShortcuts();
+    startBadgeTimer();
     JPanel south = new JPanel(new BorderLayout());
     JPanel badges = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
     badges.add(connectionBadge);
@@ -968,12 +974,47 @@ public class MainFrame extends JFrame {
         showPlaceholder("Indisponibilités");
         sidebar.setSelected("planning");
       }
-      case "reports" -> {
-        showPlaceholder("Rapports");
-        sidebar.setSelected("planning");
-      }
       default -> sidebar.setSelected("planning");
     }
+  }
+
+  private void registerNavigationShortcuts() {
+    InputMap inputMap = getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    ActionMap actionMap = getRootPane().getActionMap();
+    for (int i = 0; i < sidebar.entryCount(); i++) {
+      final int index = i;
+      String actionKey = "nav-" + i;
+      inputMap.put(KeyStroke.getKeyStroke("alt " + (i + 1)), actionKey);
+      actionMap.put(
+          actionKey,
+          new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+              String target = sidebar.idAt(index);
+              if (target != null) {
+                handleNavigation(target);
+              }
+            }
+          });
+    }
+  }
+
+  private void startBadgeTimer() {
+    if (badgeTimer != null) {
+      badgeTimer.stop();
+    }
+    badgeTimer =
+        new Timer(
+            2000,
+            e -> {
+              sidebar.setBadge("planning", planning.conflictCount());
+              try {
+                List<Models.Doc> docs = dsp.listDocs("QUOTE", null);
+                sidebar.setBadge("docs", docs == null ? 0 : docs.size());
+              } catch (Exception ignored) {
+              }
+            });
+    badgeTimer.start();
   }
 
   private void openCommandPalette() {
