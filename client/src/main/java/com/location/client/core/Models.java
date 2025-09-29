@@ -78,4 +78,6 @@ public final class Models {
       double totalVat,
       double totalTtc,
       java.util.List<DocLine> lines) {}
+
+  public record ResourceType(String id, String name, String iconName) {}
 }

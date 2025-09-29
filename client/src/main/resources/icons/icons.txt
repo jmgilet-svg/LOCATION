@@ -1,0 +1,6 @@
+crane.svg
+truck.svg
+trailer.svg
+forklift.svg
+excavator.svg
+hook.svg

@@ -13,6 +13,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -26,6 +27,9 @@ public class MockDataSource implements DataSourceProvider {
   private final List<Models.Driver> drivers = new ArrayList<>();
   private String currentAgencyId;
   private final List<Models.Resource> resources = new ArrayList<>();
+  private final List<Models.ResourceType> resourceTypes = new ArrayList<>();
+  private final Map<String, String> resourceTypeAssignments = new HashMap<>();
+  private final Map<String, Double> resourceDailyRates = new HashMap<>();
   private final List<Models.Intervention> interventions = new ArrayList<>();
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
   private final List<Models.RecurringUnavailability> recurring = new ArrayList<>();
@@ -66,6 +70,9 @@ public class MockDataSource implements DataSourceProvider {
     clients.clear();
     drivers.clear();
     resources.clear();
+    resourceTypes.clear();
+    resourceTypeAssignments.clear();
+    resourceDailyRates.clear();
     interventions.clear();
     unavailabilities.clear();
     recurring.clear();
@@ -122,13 +129,20 @@ public class MockDataSource implements DataSourceProvider {
         .computeIfAbsent(a1.id(), k -> new HashMap<>())
         .put("INVOICE", new Models.DocTemplate("<h1>Facture {{docRef}}</h1>"));
 
+    Models.ResourceType typeGrue =
+        saveResourceType(new Models.ResourceType(null, "Grue", "crane.svg"));
+    Models.ResourceType typeCamion =
+        saveResourceType(new Models.ResourceType(null, "Camion", "truck.svg"));
+    Models.ResourceType typeRemorque =
+        saveResourceType(new Models.ResourceType(null, "Remorque", "trailer.svg"));
+
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
     clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
 
     drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Jean Dupont", "jean@loc.tld"));
     drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Sophie Martin", "sophie@loc.tld"));
 
-    resources.add(
+    Models.Resource resGrue =
         new Models.Resource(
             UUID.randomUUID().toString(),
             "Grue X",
@@ -136,8 +150,8 @@ public class MockDataSource implements DataSourceProvider {
             0xFF4444,
             a1.id(),
             "grue,90t",
-            90));
-    resources.add(
+            90);
+    Models.Resource resCamion =
         new Models.Resource(
             UUID.randomUUID().toString(),
             "Camion Y",
@@ -145,8 +159,8 @@ public class MockDataSource implements DataSourceProvider {
             0x44AA44,
             a1.id(),
             "camion,benne",
-            18));
-    resources.add(
+            18);
+    Models.Resource resRemorque =
         new Models.Resource(
             UUID.randomUUID().toString(),
             "Remorque Z",
@@ -154,7 +168,17 @@ public class MockDataSource implements DataSourceProvider {
             0x4444FF,
             a2.id(),
             "remorque,plateau",
-            10));
+            10);
+    resources.add(resGrue);
+    resources.add(resCamion);
+    resources.add(resRemorque);
+
+    resourceTypeAssignments.put(resGrue.id(), typeGrue.id());
+    resourceTypeAssignments.put(resCamion.id(), typeCamion.id());
+    resourceTypeAssignments.put(resRemorque.id(), typeRemorque.id());
+    resourceDailyRates.put(resGrue.id(), 950.0);
+    resourceDailyRates.put(resCamion.id(), 520.0);
+    resourceDailyRates.put(resRemorque.id(), 310.0);
 
     ZonedDateTime base =
         ZonedDateTime.now(ZoneId.systemDefault()).withHour(9).withMinute(0).withSecond(0).withNano(0);
@@ -263,6 +287,68 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public List<Models.Resource> listResources() {
     return resourcesForCurrentAgency();
+  }
+
+  @Override
+  public List<Models.ResourceType> listResourceTypes() {
+    return resourceTypes.stream()
+        .sorted(Comparator.comparing(Models.ResourceType::name, String.CASE_INSENSITIVE_ORDER))
+        .toList();
+  }
+
+  @Override
+  public Models.ResourceType saveResourceType(Models.ResourceType resourceType) {
+    if (resourceType == null || resourceType.name() == null || resourceType.name().isBlank()) {
+      throw new IllegalArgumentException("Nom de type requis");
+    }
+    String id =
+        resourceType.id() == null || resourceType.id().isBlank()
+            ? UUID.randomUUID().toString()
+            : resourceType.id();
+    String icon = resourceType.iconName() == null ? "hook.svg" : resourceType.iconName();
+    Models.ResourceType updated = new Models.ResourceType(id, resourceType.name().trim(), icon);
+    resourceTypes.removeIf(t -> t.id().equals(id));
+    resourceTypes.add(updated);
+    resourceTypes.sort(Comparator.comparing(Models.ResourceType::name, String.CASE_INSENSITIVE_ORDER));
+    return updated;
+  }
+
+  @Override
+  public void deleteResourceType(String id) {
+    if (id == null) {
+      return;
+    }
+    resourceTypes.removeIf(t -> t.id().equals(id));
+    resourceTypeAssignments.entrySet().removeIf(e -> id.equals(e.getValue()));
+  }
+
+  @Override
+  public String getResourceTypeForResource(String resourceId) {
+    return resourceTypeAssignments.get(resourceId);
+  }
+
+  @Override
+  public void setResourceTypeForResource(String resourceId, String resourceTypeId) {
+    if (resourceTypeId == null || resourceTypeId.isBlank()) {
+      resourceTypeAssignments.remove(resourceId);
+      return;
+    }
+    boolean exists = resourceTypes.stream().anyMatch(t -> t.id().equals(resourceTypeId));
+    if (!exists) {
+      throw new IllegalArgumentException("Type de ressource inconnu");
+    }
+    resourceTypeAssignments.put(resourceId, resourceTypeId);
+  }
+
+  @Override
+  public double getResourceDailyRate(String resourceId) {
+    return resourceDailyRates.getOrDefault(resourceId, 0.0);
+  }
+
+  @Override
+  public void setResourceDailyRate(String resourceId, double rate) {
+    double sanitized = Double.isNaN(rate) || rate < 0 ? 0.0 : rate;
+    resourceDailyRates.put(resourceId, sanitized);
   }
 
   @Override

@@ -21,6 +21,34 @@ public interface DataSourceProvider extends AutoCloseable {
 
   List<Models.Resource> listResources();
 
+  default List<Models.ResourceType> listResourceTypes() {
+    return java.util.List.of();
+  }
+
+  default Models.ResourceType saveResourceType(Models.ResourceType resourceType) {
+    throw new UnsupportedOperationException("saveResourceType non disponible dans " + getLabel());
+  }
+
+  default void deleteResourceType(String id) {
+    throw new UnsupportedOperationException("deleteResourceType non disponible dans " + getLabel());
+  }
+
+  default String getResourceTypeForResource(String resourceId) {
+    return null;
+  }
+
+  default void setResourceTypeForResource(String resourceId, String resourceTypeId) {
+    throw new UnsupportedOperationException("setResourceTypeForResource non disponible dans " + getLabel());
+  }
+
+  default double getResourceDailyRate(String resourceId) {
+    return 0.0;
+  }
+
+  default void setResourceDailyRate(String resourceId, double rate) {
+    throw new UnsupportedOperationException("setResourceDailyRate non disponible dans " + getLabel());
+  }
+
   List<Models.Intervention> listInterventions(
       java.time.OffsetDateTime from, java.time.OffsetDateTime to, String resourceId);
 
