@@ -51,7 +51,7 @@ public class ResourceExplorerFrame extends JFrame {
   private final JComboBox<String> cbFilter = new JComboBox<>();
   private final JPanel accordion = new JPanel();
   private final JPanel detailPanel = new JPanel(new BorderLayout());
-  private final Models.ResourceType fallbackType = new Models.ResourceType(null, "Sans type", "hook.svg");
+  private final static Models.ResourceType fallbackType = new Models.ResourceType(null, "Sans type", "hook.svg");
   private List<Models.ResourceType> availableTypes = new ArrayList<>();
   private boolean typeSupport = true;
 

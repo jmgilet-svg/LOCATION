@@ -46,7 +46,7 @@ public final class Models {
       String notes,
       Double price) {
     public Intervention {
-      this.resourceIds = resourceIds == null ? List.of() : List.copyOf(resourceIds);
+      resourceIds = resourceIds == null ? List.of() : List.copyOf(resourceIds);
     }
 
     public Intervention(
