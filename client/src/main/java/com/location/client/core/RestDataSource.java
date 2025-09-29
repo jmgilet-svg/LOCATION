@@ -112,6 +112,22 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Models.EmailTemplate getAgencyEmailTemplate(String agencyId, String templateKey) {
+    throw new RuntimeException("getAgencyEmailTemplate non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public Models.EmailTemplate updateAgencyEmailTemplate(
+      String agencyId, String templateKey, String subject, String html) {
+    throw new RuntimeException("updateAgencyEmailTemplate non disponible sur ce backend (démo).");
+  }
+
+  @Override
+  public void emailBulk(java.util.List<String> recipients, String subject, String html) {
+    throw new RuntimeException("emailBulk non disponible sur ce backend (démo).");
+  }
+
+  @Override
   public List<Models.Agency> listAgencies() {
     try {
       ensureLogin();
@@ -963,9 +979,10 @@ public class RestDataSource implements DataSourceProvider {
       JsonNode node =
           executeForJson(() -> new HttpGet(baseUrl + "/api/v1/templates/" + encodeSegment(docType)));
       if (node.isNull() || node.isMissingNode()) {
-        return new Models.EmailTemplate("", "");
+        return new Models.EmailTemplate(docType, "", "");
       }
-      return new Models.EmailTemplate(node.path("subject").asText(""), node.path("body").asText(""));
+      return new Models.EmailTemplate(
+          docType, node.path("subject").asText(""), node.path("body").asText(""));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -986,7 +1003,8 @@ public class RestDataSource implements DataSourceProvider {
                 put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
                 return put;
               });
-      return new Models.EmailTemplate(node.path("subject").asText(""), node.path("body").asText(""));
+      return new Models.EmailTemplate(
+          docType, node.path("subject").asText(""), node.path("body").asText(""));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

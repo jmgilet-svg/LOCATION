@@ -84,6 +84,30 @@ public interface DataSourceProvider extends AutoCloseable {
 
   void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message);
 
+  default Models.EmailTemplate getAgencyEmailTemplate(String agencyId) {
+    return getAgencyEmailTemplate(agencyId, normalizeTemplateKey(null));
+  }
+
+  Models.EmailTemplate getAgencyEmailTemplate(String agencyId, String templateKey);
+
+  default Models.EmailTemplate updateAgencyEmailTemplate(
+      String agencyId, Models.EmailTemplate template) {
+    if (template == null) {
+      throw new IllegalArgumentException("Template e-mail requis");
+    }
+    String key = normalizeTemplateKey(template.key());
+    return updateAgencyEmailTemplate(agencyId, key, template.subject(), template.html());
+  }
+
+  Models.EmailTemplate updateAgencyEmailTemplate(
+      String agencyId, String templateKey, String subject, String html);
+
+  default void emailBulk(java.util.List<String> ids, String toOverride) {
+    throw new UnsupportedOperationException("emailBulk(ids,to) non disponible dans " + getLabel());
+  }
+
+  void emailBulk(java.util.List<String> recipients, String subject, String html);
+
   default Models.Resource saveResource(Models.Resource resource) {
     throw new UnsupportedOperationException("saveResource non disponible dans " + getLabel());
   }
@@ -112,5 +136,9 @@ public interface DataSourceProvider extends AutoCloseable {
   default void deleteRecurringUnavailability(String id) {
     throw new UnsupportedOperationException(
         "deleteRecurringUnavailability non disponible dans " + getLabel());
+  }
+
+  static String normalizeTemplateKey(String templateKey) {
+    return (templateKey == null || templateKey.isBlank()) ? "default" : templateKey;
   }
 }

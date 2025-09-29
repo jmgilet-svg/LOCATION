@@ -29,7 +29,7 @@ public class MockDataSource implements DataSourceProvider {
   private final List<Models.Intervention> interventions = new ArrayList<>();
   private final List<Models.Unavailability> unavailabilities = new ArrayList<>();
   private final List<Models.RecurringUnavailability> recurring = new ArrayList<>();
-  private final Map<String, Models.EmailTemplate> agencyTemplates = new HashMap<>();
+  private final Map<String, Map<String, Models.EmailTemplate>> agencyTemplates = new HashMap<>();
   private final Map<String, Map<String, Integer>> docSequences = new HashMap<>();
   private final Map<String, Map<String, Models.EmailTemplate>> docTemplates = new HashMap<>();
   private final Map<String, Map<String, Models.DocTemplate>> docHtmlTemplates = new HashMap<>();
@@ -80,22 +80,30 @@ public class MockDataSource implements DataSourceProvider {
     agencies.add(a1);
     agencies.add(a2);
     currentAgencyId = a1.id();
-    agencyTemplates.put(
-        a1.id(),
-        new Models.EmailTemplate(
-            "Intervention {{interventionTitle}}",
-            "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
-    agencyTemplates.put(
-        a2.id(),
-        new Models.EmailTemplate(
-            "Intervention {{interventionTitle}}",
-            "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
+    String defaultKey = DataSourceProvider.normalizeTemplateKey(null);
+    agencyTemplates
+        .computeIfAbsent(a1.id(), k -> new HashMap<>())
+        .put(
+            defaultKey,
+            new Models.EmailTemplate(
+                defaultKey,
+                "Intervention {{interventionTitle}}",
+                "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
+    agencyTemplates
+        .computeIfAbsent(a2.id(), k -> new HashMap<>())
+        .put(
+            defaultKey,
+            new Models.EmailTemplate(
+                defaultKey,
+                "Intervention {{interventionTitle}}",
+                "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
 
     docTemplates
         .computeIfAbsent(a1.id(), k -> new HashMap<>())
         .put(
             "QUOTE",
             new Models.EmailTemplate(
+                "QUOTE",
                 "Devis {{docRef}}",
                 "Bonjour {{clientName}},\nVeuillez trouver le devis {{docRef}} concernant {{docTitle}}."));
     docTemplates
@@ -103,6 +111,7 @@ public class MockDataSource implements DataSourceProvider {
         .put(
             "INVOICE",
             new Models.EmailTemplate(
+                "INVOICE",
                 "Facture {{docRef}}",
                 "Bonjour {{clientName}},\nVeuillez trouver votre facture {{docRef}} (montant TTC : {{totalTtc}} €)."));
 
@@ -755,7 +764,8 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public Models.EmailTemplate getEmailTemplate(String docType) {
     var templates = docTemplates.getOrDefault(currentAgencyId, java.util.Map.of());
-    return templates.getOrDefault(docType, new Models.EmailTemplate("", ""));
+    String key = DataSourceProvider.normalizeTemplateKey(docType);
+    return templates.getOrDefault(docType, new Models.EmailTemplate(key, "", ""));
   }
 
   @Override
@@ -763,7 +773,8 @@ public class MockDataSource implements DataSourceProvider {
     if (currentAgencyId == null || currentAgencyId.isBlank()) {
       throw new IllegalStateException("Agence courante non définie (Mock)");
     }
-    Models.EmailTemplate template = new Models.EmailTemplate(subject, body);
+    String key = DataSourceProvider.normalizeTemplateKey(docType);
+    Models.EmailTemplate template = new Models.EmailTemplate(key, subject, body);
     docTemplates.computeIfAbsent(currentAgencyId, k -> new HashMap<>()).put(docType, template);
     return template;
   }
@@ -797,6 +808,37 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message) {
+    // Simulation : aucun envoi réel en mode Mock.
+  }
+
+  @Override
+  public Models.EmailTemplate getAgencyEmailTemplate(String agencyId, String templateKey) {
+    String key = DataSourceProvider.normalizeTemplateKey(templateKey);
+    var templates = agencyTemplates.getOrDefault(agencyId, java.util.Map.of());
+    Models.EmailTemplate template = templates.get(key);
+    if (template != null) {
+      return template;
+    }
+    return new Models.EmailTemplate(
+        key, "[LOCATION] " + key, "<p>Bonjour,</p><p>Veuillez trouver le document en PJ.</p>");
+  }
+
+  @Override
+  public Models.EmailTemplate updateAgencyEmailTemplate(
+      String agencyId, String templateKey, String subject, String html) {
+    String key = DataSourceProvider.normalizeTemplateKey(templateKey);
+    Models.EmailTemplate template = new Models.EmailTemplate(key, subject, html);
+    agencyTemplates.computeIfAbsent(agencyId, k -> new HashMap<>()).put(key, template);
+    return template;
+  }
+
+  @Override
+  public void emailBulk(java.util.List<String> recipients, String subject, String html) {
+    // Simulation : aucun envoi réel en mode Mock.
+  }
+
+  @Override
+  public void emailBulk(java.util.List<String> ids, String toOverride) {
     // Simulation : aucun envoi réel en mode Mock.
   }
 
