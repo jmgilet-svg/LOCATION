@@ -77,6 +77,15 @@ public final class SvgIconLoader {
   }
 
   private static List<String> defaultIcons() {
-    return List.of("crane.svg", "truck.svg", "trailer.svg", "forklift.svg", "excavator.svg", "hook.svg");
+    return List.of(
+        "crane.svg",
+        "truck.svg",
+        "trailer.svg",
+        "forklift.svg",
+        "excavator.svg",
+        "hook.svg",
+        "driver.svg",
+        "nacelle.svg",
+        "conflict.svg");
   }
 }
