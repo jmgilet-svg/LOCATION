@@ -244,10 +244,78 @@ public class RestDataSource implements DataSourceProvider {
       List<Models.Agency> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode agency : node) {
-          result.add(new Models.Agency(agency.path("id").asText(), agency.path("name").asText()));
+          result.add(
+              new Models.Agency(
+                  agency.path("id").asText(),
+                  agency.path("name").asText(),
+                  textOrNull(agency, "legalFooter"),
+                  textOrNull(agency, "iban"),
+                  textOrNull(agency, "logoDataUri")));
         }
       }
       return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Agency getAgency(String id) {
+    if (id == null || id.isBlank()) {
+      return null;
+    }
+    try {
+      ensureLogin();
+      JsonNode node = executeForJson(() -> new HttpGet(baseUrl + "/api/v1/agencies/" + encodeSegment(id)));
+      return new Models.Agency(
+          node.path("id").asText(),
+          node.path("name").asText(),
+          textOrNull(node, "legalFooter"),
+          textOrNull(node, "iban"),
+          textOrNull(node, "logoDataUri"));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Agency saveAgency(Models.Agency agency) {
+    if (agency == null) {
+      throw new IllegalArgumentException("Agence requise");
+    }
+    String name = agency.name();
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Nom de l'agence requis");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      if (agency.id() != null && !agency.id().isBlank()) {
+        payload.put("id", agency.id());
+      }
+      payload.put("name", name);
+      if (agency.legalFooter() != null) {
+        payload.put("legalFooter", agency.legalFooter());
+      }
+      if (agency.iban() != null) {
+        payload.put("iban", agency.iban());
+      }
+      if (agency.logoDataUri() != null) {
+        payload.put("logoDataUri", agency.logoDataUri());
+      }
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/agencies");
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
+      return new Models.Agency(
+          node.path("id").asText(),
+          node.path("name").asText(),
+          textOrNull(node, "legalFooter"),
+          textOrNull(node, "iban"),
+          textOrNull(node, "logoDataUri"));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

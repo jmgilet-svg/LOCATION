@@ -351,6 +351,47 @@ public class MockDataSource implements DataSourceProvider {
   }
 
   @Override
+  public Models.Agency getAgency(String id) {
+    if (id == null || id.isBlank()) {
+      return null;
+    }
+    return agencies.stream().filter(agency -> id.equals(agency.id())).findFirst().orElse(null);
+  }
+
+  @Override
+  public Models.Agency saveAgency(Models.Agency agency) {
+    if (agency == null) {
+      throw new IllegalArgumentException("Agence requise");
+    }
+    String name = agency.name();
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Nom de l'agence requis");
+    }
+    String id = agency.id();
+    if (id == null || id.isBlank()) {
+      id = UUID.randomUUID().toString();
+    }
+    Models.Agency stored =
+        new Models.Agency(id, name, agency.legalFooter(), agency.iban(), agency.logoDataUri());
+    boolean replaced = false;
+    for (int i = 0; i < agencies.size(); i++) {
+      if (agencies.get(i).id().equals(id)) {
+        agencies.set(i, stored);
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      agencies.add(stored);
+    }
+    agencyTemplates.computeIfAbsent(id, k -> new HashMap<>());
+    docSequences.computeIfAbsent(id, k -> new HashMap<>());
+    docTemplates.computeIfAbsent(id, k -> new HashMap<>());
+    docHtmlTemplates.computeIfAbsent(id, k -> new HashMap<>());
+    return stored;
+  }
+
+  @Override
   public List<Models.Client> listClients() {
     return List.copyOf(clients);
   }

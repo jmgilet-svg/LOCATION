@@ -18,11 +18,18 @@ import java.time.LocalTime;
 public final class ApiV1Dtos {
   private ApiV1Dtos() {}
 
-  public record AgencyDto(String id, String name) {
+  public record AgencyDto(String id, String name, String legalFooter, String iban, String logoDataUri) {
     public static AgencyDto of(Agency agency) {
-      return new AgencyDto(agency.getId(), agency.getName());
+      return new AgencyDto(agency.getId(), agency.getName(), null, null, null);
     }
   }
+
+  public record SaveAgencyRequest(
+      String id,
+      @NotBlank @Size(max = 128) String name,
+      String legalFooter,
+      String iban,
+      String logoDataUri) {}
 
   public record ClientDto(
       String id,

@@ -10,6 +10,8 @@ import com.location.server.api.v1.dto.ApiV1Dtos.ResourceDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.RecurringUnavailabilityDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.UnavailabilityDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.UpdateInterventionRequest;
+import com.location.server.api.v1.dto.ApiV1Dtos.SaveAgencyRequest;
+import com.location.server.domain.Agency;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
 import com.location.server.repo.InterventionRepository;
@@ -29,6 +31,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -116,6 +119,31 @@ public class ApiV1Controller {
   @GetMapping("/agencies")
   public List<AgencyDto> agencies() {
     return agencyRepository.findAll().stream().map(AgencyDto::of).collect(Collectors.toList());
+  }
+
+  @GetMapping("/agencies/{id}")
+  public AgencyDto agency(@PathVariable String id) {
+    return agencyRepository
+        .findById(id)
+        .map(AgencyDto::of)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agence introuvable"));
+  }
+
+  @PostMapping("/agencies")
+  public AgencyDto saveAgency(@Valid @RequestBody SaveAgencyRequest request) {
+    Agency agency;
+    if (request.id() != null && !request.id().isBlank()) {
+      agency =
+          agencyRepository
+              .findById(request.id())
+              .orElseThrow(
+                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agence introuvable"));
+      agency.setName(request.name());
+    } else {
+      agency = new Agency(UUID.randomUUID().toString(), request.name());
+    }
+    agencyRepository.save(agency);
+    return AgencyDto.of(agency);
   }
 
   @GetMapping("/clients")
