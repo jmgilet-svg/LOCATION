@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -66,6 +67,13 @@ public class Sidebar extends JPanel {
     }
   }
 
+  public void setBadgeText(String id, String text) {
+    IconBadgeButton button = items.get(id);
+    if (button != null) {
+      button.setBadgeText(text);
+    }
+  }
+
   public int indexOf(String id) {
     for (int i = 0; i < entries.size(); i++) {
       if (entries.get(i).id().equals(id)) {
@@ -88,6 +96,7 @@ public class Sidebar extends JPanel {
 
   private static class IconBadgeButton extends JButton {
     private int badgeCount;
+    private String badgeText;
 
     IconBadgeButton(String text, Icon icon) {
       super(text, icon);
@@ -99,8 +108,17 @@ public class Sidebar extends JPanel {
     }
 
     void setBadgeCount(int badgeCount) {
-      if (this.badgeCount != badgeCount) {
+      if (this.badgeCount != badgeCount || badgeText != null) {
         this.badgeCount = badgeCount;
+        this.badgeText = null;
+        repaint();
+      }
+    }
+
+    void setBadgeText(String badgeText) {
+      String normalized = badgeText != null && !badgeText.isBlank() ? badgeText : null;
+      if (!Objects.equals(this.badgeText, normalized)) {
+        this.badgeText = normalized;
         repaint();
       }
     }
@@ -108,22 +126,25 @@ public class Sidebar extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
       super.paintComponent(g);
-      if (badgeCount <= 0) {
+      String text = badgeText != null ? badgeText : (badgeCount > 0 ? String.valueOf(badgeCount) : null);
+      if (text == null) {
         return;
       }
       Graphics2D g2 = (Graphics2D) g.create();
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      int radius = 16;
-      int x = getWidth() - radius - 8;
+      g2.setFont(g2.getFont().deriveFont(java.awt.Font.BOLD, 11f));
+      java.awt.FontMetrics fm = g2.getFontMetrics();
+      int paddingX = 8;
+      int paddingY = 4;
+      int width = fm.stringWidth(text) + paddingX * 2;
+      int height = fm.getHeight() + paddingY;
+      int x = getWidth() - width - 8;
       int y = 6;
       g2.setColor(new Color(220, 30, 35));
-      g2.fillOval(x, y, radius, radius);
+      g2.fillRoundRect(x, y, width, height, height, height);
       g2.setColor(Color.WHITE);
-      g2.setFont(g2.getFont().deriveFont(java.awt.Font.BOLD, 11f));
-      String text = String.valueOf(badgeCount);
-      java.awt.FontMetrics fm = g2.getFontMetrics();
-      int textX = x + (radius - fm.stringWidth(text)) / 2;
-      int textY = y + (radius + fm.getAscent() - fm.getDescent()) / 2 - 1;
+      int textX = x + (width - fm.stringWidth(text)) / 2;
+      int textY = y + (height + fm.getAscent() - fm.getDescent()) / 2 - 1;
       g2.drawString(text, textX, textY);
       g2.dispose();
     }
