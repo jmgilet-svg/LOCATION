@@ -741,11 +741,14 @@ public class MainFrame extends JFrame {
     resourceColors.addActionListener(e -> new ResourceColorDialog(MainFrame.this, dsp, planning).setVisible(true));
     JMenuItem conflictInspector = new JMenuItem("Alerte conflits…");
     conflictInspector.addActionListener(e -> new ConflictInspectorFrame(dsp, planning).setVisible(true));
+    JMenuItem agencySettings = new JMenuItem("Paramètres agence…");
+    agencySettings.addActionListener(e -> openAgencySettings());
     tools.add(newIntervention);
     tools.addSeparator();
     tools.add(generateData);
     tools.add(resourceColors);
     tools.add(conflictInspector);
+    tools.add(agencySettings);
 
     JMenu help = new JMenu(Language.tr("menu.help"));
     help.setMnemonic(Language.isEnglish() ? 'H' : 'A');
@@ -780,6 +783,19 @@ public class MainFrame extends JFrame {
     }
     activityDialog.setLocationRelativeTo(this);
     activityDialog.setVisible(true);
+  }
+
+  private void openAgencySettings() {
+    try {
+      java.util.List<Models.Agency> agencies = dsp.listAgencies();
+      Models.Agency first =
+          agencies.isEmpty()
+              ? new Models.Agency(null, "Nouvelle agence", null, null, null)
+              : agencies.get(0);
+      new AgencySettingsFrame(dsp, first).setVisible(true);
+    } catch (RuntimeException ex) {
+      Toast.error(this, "Paramètres agence indisponibles: " + ex.getMessage());
+    }
   }
 
   private void initializeCurrentAgency() {

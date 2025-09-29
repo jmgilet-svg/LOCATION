@@ -81,8 +81,20 @@ public class MockDataSource implements DataSourceProvider {
     docHtmlTemplates.clear();
     docs.clear();
 
-    var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
-    var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence Sud");
+    var a1 =
+        new Models.Agency(
+            UUID.randomUUID().toString(),
+            "Agence Nord",
+            "Agence Nord — 10 rue du Test, 75000 Paris",
+            "FR76 1234 5678 9012 3456 7890 123",
+            null);
+    var a2 =
+        new Models.Agency(
+            UUID.randomUUID().toString(),
+            "Agence Sud",
+            "Agence Sud — 5 avenue de la Démo, 34000 Montpellier",
+            "FR76 9876 5432 1098 7654 3210 987",
+            null);
     agencies.add(a1);
     agencies.add(a2);
     currentAgencyId = a1.id();

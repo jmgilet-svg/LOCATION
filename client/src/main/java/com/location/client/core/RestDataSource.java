@@ -1726,6 +1726,18 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  private Models.Agency parseAgency(JsonNode node) {
+    if (node == null || node.isNull()) {
+      return null;
+    }
+    return new Models.Agency(
+        textOrNull(node, "id"),
+        textOrNull(node, "name"),
+        textOrNull(node, "legalFooter"),
+        textOrNull(node, "iban"),
+        textOrNull(node, "logoDataUri"));
+  }
+
   private Models.Doc docFrom(JsonNode node) {
     java.util.List<Models.DocLine> lines = new java.util.ArrayList<>();
     JsonNode arr = node.path("lines");
@@ -1761,6 +1773,14 @@ public class RestDataSource implements DataSourceProvider {
   private static String textOrNull(JsonNode node, String field) {
     JsonNode value = node.get(field);
     return value == null || value.isNull() ? null : value.asText();
+  }
+
+  private static void putNullable(ObjectNode node, String field, String value) {
+    if (value == null || value.isBlank()) {
+      node.putNull(field);
+    } else {
+      node.put(field, value);
+    }
   }
 
   private static String encodeSegment(String value) {

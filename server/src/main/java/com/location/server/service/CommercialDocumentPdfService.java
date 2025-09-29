@@ -1,5 +1,6 @@
 package com.location.server.service;
 
+import com.location.server.domain.Agency;
 import com.location.server.domain.CommercialDocument;
 import com.location.server.domain.CommercialDocumentLine;
 import com.lowagie.text.Document;
@@ -29,7 +30,7 @@ public class CommercialDocumentPdfService {
 
       Font titleFont = new Font(Font.HELVETICA, 18, Font.BOLD);
       Font normal = new Font(Font.HELVETICA, 11);
-      addHeader(pdf, titleFont);
+      addHeader(pdf, document, titleFont);
       Paragraph title = new Paragraph(titleFor(document), titleFont);
       title.setSpacingAfter(8f);
       pdf.add(title);
@@ -84,6 +85,8 @@ public class CommercialDocumentPdfService {
       addRow(totals, "Total TTC", number.format(document.getTotalTtc()), normal);
       pdf.add(totals);
 
+      addAgencyFooter(pdf, document.getAgency());
+
       pdf.close();
       return baos.toByteArray();
     } catch (Exception e) {
@@ -91,9 +94,13 @@ public class CommercialDocumentPdfService {
     }
   }
 
-  private void addHeader(Document pdf, Font brandFont) throws Exception {
-    String brand = System.getenv().getOrDefault("AGENCY_NAME", "LOCATION");
-    Image logo = loadLogo();
+  private void addHeader(Document pdf, CommercialDocument document, Font brandFont)
+      throws Exception {
+    String brand =
+        hasText(document.getAgency().getName())
+            ? document.getAgency().getName()
+            : System.getenv().getOrDefault("AGENCY_NAME", "LOCATION");
+    Image logo = loadLogo(document.getAgency().getLogoPng());
     PdfPTable header = new PdfPTable(logo != null ? 2 : 1);
     header.setWidthPercentage(100);
     header.getDefaultCell().setBorder(0);
@@ -149,19 +156,42 @@ public class CommercialDocumentPdfService {
     table.addCell(v);
   }
 
-  private Image loadLogo() {
-    try (InputStream input = getClass().getResourceAsStream("/static/logo.png")) {
-      if (input == null) {
-        return null;
+  private void addAgencyFooter(Document pdf, Agency agency)
+      throws Exception {
+    Font footerFont = new Font(Font.HELVETICA, 9);
+    if (hasText(agency.getLegalFooter())) {
+      Paragraph footer = new Paragraph(agency.getLegalFooter(), footerFont);
+      footer.setSpacingBefore(12f);
+      pdf.add(footer);
+    }
+    if (hasText(agency.getIban())) {
+      Paragraph iban = new Paragraph("IBAN : " + agency.getIban(), footerFont);
+      iban.setSpacingBefore(hasText(agency.getLegalFooter()) ? 4f : 12f);
+      pdf.add(iban);
+    }
+  }
+
+  private Image loadLogo(byte[] custom) {
+    try {
+      if (custom != null && custom.length > 0) {
+        return buildLogo(custom);
       }
-      byte[] bytes = input.readAllBytes();
-      Image image = Image.getInstance(bytes);
-      image.scaleToFit(120f, 60f);
-      image.setAlignment(Element.ALIGN_LEFT);
-      return image;
+      try (InputStream input = getClass().getResourceAsStream("/static/logo.png")) {
+        if (input == null) {
+          return null;
+        }
+        return buildLogo(input.readAllBytes());
+      }
     } catch (Exception e) {
       return null;
     }
+  }
+
+  private Image buildLogo(byte[] bytes) throws Exception {
+    Image image = Image.getInstance(bytes);
+    image.scaleToFit(120f, 60f);
+    image.setAlignment(Element.ALIGN_LEFT);
+    return image;
   }
 
   private static boolean hasText(String value) {

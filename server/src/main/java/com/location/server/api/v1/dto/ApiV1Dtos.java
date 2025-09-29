@@ -14,6 +14,8 @@ import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.Base64;
+import java.util.Locale;
 
 public final class ApiV1Dtos {
   private ApiV1Dtos() {}
