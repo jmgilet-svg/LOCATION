@@ -120,6 +120,7 @@ public class StressTestDialog extends JDialog {
                 title,
                 start,
                 end,
+                null,
                 null);
         try {
           dsp.createIntervention(payload);

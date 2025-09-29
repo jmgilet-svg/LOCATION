@@ -299,6 +299,7 @@ public class PlanningPanel extends JPanel {
             title,
             start,
             end,
+            null,
             null);
     try {
       ensureAvailability(resource.id(), start, end);
@@ -631,7 +632,8 @@ public class PlanningPanel extends JPanel {
             base.title() + " (copie)",
             start,
             end,
-            base.notes());
+            base.notes(),
+            base.price());
     try {
       ensureAvailability(base.resourceId(), start, end);
       Models.Intervention created = dsp.createIntervention(payload);
@@ -673,7 +675,8 @@ public class PlanningPanel extends JPanel {
             selected.title(),
             start,
             end,
-            selected.notes());
+            selected.notes(),
+            selected.price());
     try {
       ensureAvailability(selected.resourceId(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1107,7 +1110,8 @@ public class PlanningPanel extends JPanel {
             selected.title(),
             newStart,
             newEnd,
-            selected.notes());
+            selected.notes(),
+            selected.price());
     try {
       ensureAvailability(resource.id(), newStart, newEnd);
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1146,7 +1150,8 @@ public class PlanningPanel extends JPanel {
             selected.title(),
             selected.start(),
             selected.end(),
-            selected.notes());
+            selected.notes(),
+            selected.price());
     try {
       ensureAvailability(resource.id(), selected.start(), selected.end());
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1262,7 +1267,8 @@ public class PlanningPanel extends JPanel {
             original.title(),
             start,
             end,
-            original.notes());
+            original.notes(),
+            original.price());
     try {
       ensureAvailability(resource.id(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1351,7 +1357,8 @@ public class PlanningPanel extends JPanel {
         it.title(),
         it.start(),
         it.end(),
-        it.notes());
+        it.notes(),
+        it.price());
   }
 
   private void pushUpdateHistory(String label, Models.Intervention before, Models.Intervention after) {
@@ -1396,7 +1403,8 @@ public class PlanningPanel extends JPanel {
             created.title(),
             created.start(),
             created.end(),
-            created.notes());
+            created.notes(),
+            created.price());
     String[] idRef = new String[] {created.id()};
     history.push(
         label,
@@ -1438,7 +1446,8 @@ public class PlanningPanel extends JPanel {
             removed.title(),
             removed.start(),
             removed.end(),
-            removed.notes());
+            removed.notes(),
+            removed.price());
     String[] idRef = new String[] {removed.id()};
     history.push(
         label,

@@ -35,7 +35,8 @@ public final class Models {
       String title,
       Instant start,
       Instant end,
-      String notes) {
+      String notes,
+      Double price) {
     public Intervention {
       this.resourceIds = resourceIds == null ? List.of() : List.copyOf(resourceIds);
     }
@@ -50,6 +51,33 @@ public final class Models {
         Instant start,
         Instant end,
         String notes) {
+      this(id, agencyId, resourceId, clientId, driverId, title, start, end, notes, null);
+    }
+
+    public Intervention(
+        String id,
+        String agencyId,
+        List<String> resourceIds,
+        String clientId,
+        String driverId,
+        String title,
+        Instant start,
+        Instant end,
+        String notes) {
+      this(id, agencyId, resourceIds, clientId, driverId, title, start, end, notes, null);
+    }
+
+    public Intervention(
+        String id,
+        String agencyId,
+        String resourceId,
+        String clientId,
+        String driverId,
+        String title,
+        Instant start,
+        Instant end,
+        String notes,
+        Double price) {
       this(
           id,
           agencyId,
@@ -59,7 +87,8 @@ public final class Models {
           title,
           start,
           end,
-          notes);
+          notes,
+          price);
     }
 
     public String resourceId() {
@@ -68,8 +97,16 @@ public final class Models {
 
     public Intervention withResourceIds(List<String> newResourceIds) {
       return new Intervention(
-          id, agencyId, newResourceIds == null ? List.of() : List.copyOf(newResourceIds), clientId,
-          driverId, title, start, end, notes);
+          id,
+          agencyId,
+          newResourceIds == null ? List.of() : List.copyOf(newResourceIds),
+          clientId,
+          driverId,
+          title,
+          start,
+          end,
+          notes,
+          price);
     }
   }
 
