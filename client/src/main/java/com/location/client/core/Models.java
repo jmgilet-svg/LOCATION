@@ -52,7 +52,15 @@ public final class Models {
       java.time.LocalTime end,
       String reason) {}
 
-  public record EmailTemplate(String subject, String body) {}
+  public record EmailTemplate(String key, String subject, String html) {
+    public EmailTemplate(String subject, String html) {
+      this(null, subject, html);
+    }
+
+    public String body() {
+      return html;
+    }
+  }
   public record DocTemplate(String html) {}
 
   public record DocLine(String designation, double quantity, double unitPrice, double vatRate) {}
