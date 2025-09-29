@@ -244,10 +244,60 @@ public class RestDataSource implements DataSourceProvider {
       List<Models.Agency> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode agency : node) {
-          result.add(new Models.Agency(agency.path("id").asText(), agency.path("name").asText()));
+          result.add(parseAgency(agency));
         }
       }
       return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Agency getAgency(String id) {
+    if (id == null || id.isBlank()) {
+      return null;
+    }
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(() -> new HttpGet(baseUrl + "/api/v1/agencies/" + encodeSegment(id)));
+      return node == null ? null : parseAgency(node);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Agency saveAgency(Models.Agency agency) {
+    if (agency == null) {
+      throw new IllegalArgumentException("Agence requise");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      payload.put("name", agency.name());
+      putNullable(payload, "legalFooter", agency.legalFooter());
+      putNullable(payload, "iban", agency.iban());
+      putNullable(payload, "logoDataUri", agency.logoDataUri());
+      Supplier<HttpUriRequestBase> requestSupplier;
+      if (agency.id() == null || agency.id().isBlank()) {
+        requestSupplier =
+            () -> {
+              HttpPost post = new HttpPost(baseUrl + "/api/v1/agencies");
+              post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+              return post;
+            };
+      } else {
+        requestSupplier =
+            () -> {
+              HttpPut put = new HttpPut(baseUrl + "/api/v1/agencies/" + encodeSegment(agency.id()));
+              put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+              return put;
+            };
+      }
+      JsonNode node = executeForJson(requestSupplier);
+      return parseAgency(node);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -1658,6 +1708,18 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  private Models.Agency parseAgency(JsonNode node) {
+    if (node == null || node.isNull()) {
+      return null;
+    }
+    return new Models.Agency(
+        textOrNull(node, "id"),
+        textOrNull(node, "name"),
+        textOrNull(node, "legalFooter"),
+        textOrNull(node, "iban"),
+        textOrNull(node, "logoDataUri"));
+  }
+
   private Models.Doc docFrom(JsonNode node) {
     java.util.List<Models.DocLine> lines = new java.util.ArrayList<>();
     JsonNode arr = node.path("lines");
@@ -1693,6 +1755,14 @@ public class RestDataSource implements DataSourceProvider {
   private static String textOrNull(JsonNode node, String field) {
     JsonNode value = node.get(field);
     return value == null || value.isNull() ? null : value.asText();
+  }
+
+  private static void putNullable(ObjectNode node, String field, String value) {
+    if (value == null || value.isBlank()) {
+      node.putNull(field);
+    } else {
+      node.put(field, value);
+    }
   }
 
   private static String encodeSegment(String value) {
