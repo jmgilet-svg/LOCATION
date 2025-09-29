@@ -112,6 +112,71 @@ public interface DataSourceProvider extends AutoCloseable {
 
   void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message);
 
+  default Models.Doc createQuoteFromIntervention(Models.Intervention intervention) {
+    if (intervention == null) {
+      throw new IllegalArgumentException("Intervention requise");
+    }
+    String clientId = intervention.clientId();
+    if (clientId == null || clientId.isBlank()) {
+      throw new IllegalArgumentException(
+          "Intervention sans client — impossible de générer un devis");
+    }
+    String agencyId = intervention.agencyId();
+    if (agencyId == null || agencyId.isBlank()) {
+      agencyId = getCurrentAgencyId();
+    }
+    if (agencyId == null || agencyId.isBlank()) {
+      throw new IllegalStateException(
+          "Agence courante inconnue — impossible de générer un devis");
+    }
+    String title = intervention.title();
+    if (title == null || title.isBlank()) {
+      title = intervention.id() == null ? "Intervention" : "Intervention " + intervention.id();
+    }
+    Models.Doc doc = createDoc("QUOTE", agencyId, clientId, title);
+    java.util.List<String> resourceIds = intervention.resourceIds();
+    if (resourceIds == null || resourceIds.isEmpty()) {
+      return doc;
+    }
+    java.util.Map<String, Models.Resource> resourcesById = new java.util.HashMap<>();
+    for (Models.Resource resource : listResources()) {
+      resourcesById.put(resource.id(), resource);
+    }
+    java.util.List<Models.DocLine> lines = new java.util.ArrayList<>();
+    for (String resourceId : resourceIds) {
+      Models.Resource resource = resourcesById.get(resourceId);
+      String designation = resource != null ? resource.name() : "Ressource " + resourceId;
+      double rate;
+      try {
+        rate = getResourceDailyRate(resourceId);
+      } catch (UnsupportedOperationException ex) {
+        rate = 0.0;
+      }
+      if (Double.isNaN(rate) || Double.isInfinite(rate)) {
+        rate = 0.0;
+      }
+      lines.add(new Models.DocLine(designation, 1.0, rate, 0.0));
+    }
+    if (lines.isEmpty()) {
+      return doc;
+    }
+    Models.Doc docWithLines =
+        new Models.Doc(
+            doc.id(),
+            doc.type(),
+            doc.status(),
+            doc.reference(),
+            doc.title(),
+            doc.agencyId(),
+            doc.clientId(),
+            doc.date(),
+            doc.totalHt(),
+            doc.totalVat(),
+            doc.totalTtc(),
+            lines);
+    return updateDoc(docWithLines);
+  }
+
   default Models.EmailTemplate getAgencyEmailTemplate(String agencyId) {
     return getAgencyEmailTemplate(agencyId, normalizeTemplateKey(null));
   }
