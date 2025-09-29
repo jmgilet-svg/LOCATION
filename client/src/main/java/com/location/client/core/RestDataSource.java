@@ -264,6 +264,75 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public List<Models.ResourceType> listResourceTypes() {
+    try {
+      ensureLogin();
+      JsonNode node = executeForJson(() -> new HttpGet(baseUrl + "/api/v1/resource-types"));
+      List<Models.ResourceType> result = new ArrayList<>();
+      if (node.isArray()) {
+        for (JsonNode type : node) {
+          String id = type.path("id").asText();
+          String name = type.path("name").asText();
+          String icon = type.path("iconName").asText();
+          result.add(new Models.ResourceType(id, name, icon));
+        }
+      }
+      return result;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.ResourceType saveResourceType(Models.ResourceType resourceType) {
+    if (resourceType == null) {
+      throw new IllegalArgumentException("Type de ressource requis");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      if (resourceType.id() != null && !resourceType.id().isBlank()) {
+        payload.put("id", resourceType.id());
+      }
+      payload.put("name", resourceType.name());
+      payload.put("iconName", resourceType.iconName());
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/resource-types");
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
+      return new Models.ResourceType(
+          node.path("id").asText(), node.path("name").asText(), node.path("iconName").asText());
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteResourceType(String id) {
+    if (id == null || id.isBlank()) {
+      return;
+    }
+    try {
+      ensureLogin();
+      execute(
+          () -> new HttpDelete(baseUrl + "/api/v1/resource-types/" + encodeSegment(id)),
+          res -> {
+            int code = res.getCode();
+            EntityUtils.consumeQuietly(res.getEntity());
+            if (code >= 200 && code < 300) {
+              return null;
+            }
+            throw httpError(code, "HTTP " + code + " → suppression type");
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public List<Models.Intervention> listInterventions(OffsetDateTime from, OffsetDateTime to, String resourceId) {
     try {
       ensureLogin();
@@ -416,6 +485,63 @@ public class RestDataSource implements DataSourceProvider {
               throw httpError(code, "DELETE non OK: " + code);
             }
             return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public String getResourceTypeForResource(String resourceId) {
+    if (resourceId == null || resourceId.isBlank()) {
+      return null;
+    }
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(
+              () ->
+                  new HttpGet(
+                      baseUrl + "/api/v1/resources/" + encodeSegment(resourceId) + "/type"));
+      JsonNode value = node.path("resourceTypeId");
+      if (value.isMissingNode() || value.isNull()) {
+        return null;
+      }
+      String text = value.asText();
+      return text.isBlank() ? null : text;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void setResourceTypeForResource(String resourceId, String resourceTypeId) {
+    if (resourceId == null || resourceId.isBlank()) {
+      throw new IllegalArgumentException("Ressource requise");
+    }
+    try {
+      ensureLogin();
+      String url = baseUrl + "/api/v1/resources/" + encodeSegment(resourceId) + "/type";
+      if (resourceTypeId == null || resourceTypeId.isBlank()) {
+        execute(
+            () -> new HttpDelete(url),
+            res -> {
+              int code = res.getCode();
+              EntityUtils.consumeQuietly(res.getEntity());
+              if (code >= 200 && code < 300) {
+                return null;
+              }
+              throw httpError(code, "HTTP " + code + " → suppression type ressource");
+            });
+        return;
+      }
+      ObjectNode payload = om.createObjectNode();
+      payload.put("resourceTypeId", resourceTypeId);
+      executeForJson(
+          () -> {
+            HttpPut put = new HttpPut(url);
+            put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+            return put;
           });
     } catch (IOException e) {
       throw new RuntimeException(e);

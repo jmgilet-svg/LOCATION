@@ -5,6 +5,7 @@ import com.location.server.domain.Client;
 import com.location.server.domain.Intervention;
 import com.location.server.domain.RecurringUnavailability;
 import com.location.server.domain.Resource;
+import com.location.server.domain.ResourceType;
 import com.location.server.domain.Unavailability;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -35,7 +36,8 @@ public final class ApiV1Dtos {
       Integer colorRgb,
       AgencyDto agency,
       String tags,
-      Integer capacityTons) {
+      Integer capacityTons,
+      String resourceTypeId) {
     public static ResourceDto of(Resource resource) {
       return new ResourceDto(
           resource.getId(),
@@ -44,9 +46,20 @@ public final class ApiV1Dtos {
           resource.getColorRgb(),
           AgencyDto.of(resource.getAgency()),
           resource.getTags(),
-          resource.getCapacityTons());
+          resource.getCapacityTons(),
+          resource.getResourceType() == null ? null : resource.getResourceType().getId());
     }
   }
+
+  public record ResourceTypeDto(String id, @NotBlank String name, @NotBlank String iconName) {
+    public static ResourceTypeDto of(ResourceType type) {
+      return new ResourceTypeDto(type.getId(), type.getName(), type.getIconName());
+    }
+  }
+
+  public record ResourceTypeAssignmentDto(String resourceTypeId) {}
+
+  public record ResourceTypeAssignmentRequest(@NotBlank String resourceTypeId) {}
 
   public record InterventionDto(
       String id,

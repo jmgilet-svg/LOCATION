@@ -2,6 +2,7 @@ package com.location.server.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -32,6 +33,10 @@ public class Resource {
 
   @Column(name = "capacity_tons")
   private Integer capacityTons;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "resource_type_id")
+  private ResourceType resourceType;
 
   protected Resource() {}
 
@@ -110,5 +115,13 @@ public class Resource {
 
   public void setCapacityTons(Integer capacityTons) {
     this.capacityTons = capacityTons;
+  }
+
+  public ResourceType getResourceType() {
+    return resourceType;
+  }
+
+  public void setResourceType(ResourceType resourceType) {
+    this.resourceType = resourceType;
   }
 }

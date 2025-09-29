@@ -6,10 +6,14 @@
   <parent>
     <groupId>com.location</groupId>
     <artifactId>location-parent</artifactId>
-    <version>0.1.0</version>
+    <version>1.0.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
   <artifactId>location-server</artifactId>
   <name>LOCATION Server</name>
+  <properties>
+    <jjwt.version>0.11.5</jjwt.version>
+  </properties>
   <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
