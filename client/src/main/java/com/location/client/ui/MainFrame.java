@@ -529,6 +529,18 @@ public class MainFrame extends JFrame {
                 new ResourceEditorFrame(dsp).setVisible(true);
               }
             });
+    JMenuItem exploreResources =
+        new JMenuItem(
+            new AbstractAction("Explorateur de ressources…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                try {
+                  new ResourceExplorerFrame(dsp).setVisible(true);
+                } catch (RuntimeException ex) {
+                  Toast.error(MainFrame.this, "Explorateur indisponible: " + ex.getMessage());
+                }
+              }
+            });
     JMenuItem manageUnav =
         new JMenuItem(
             new AbstractAction("Gérer les indisponibilités…") {
@@ -560,6 +572,7 @@ public class MainFrame extends JFrame {
     data.add(newUnav);
     data.add(newRecurring);
     data.add(manageResources);
+    data.add(exploreResources);
     data.add(manageUnav);
     data.add(deleteIntervention);
     data.add(emailPdf);
@@ -706,6 +719,18 @@ public class MainFrame extends JFrame {
     settings.add(docTmpl);
     settings.add(docHtmlTmpl);
     settings.add(docWysiwyg);
+    settings.add(
+        new JMenuItem(
+            new AbstractAction("Types de ressources…") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                try {
+                  new ResourceTypeManagerFrame(dsp).setVisible(true);
+                } catch (RuntimeException ex) {
+                  Toast.error(MainFrame.this, "Gestion des types indisponible: " + ex.getMessage());
+                }
+              }
+            }));
 
     JMenu tools = new JMenu("Outils");
     JMenuItem generateData = new JMenuItem("Générer des interventions…");
