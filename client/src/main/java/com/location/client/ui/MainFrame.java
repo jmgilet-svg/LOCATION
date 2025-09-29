@@ -739,10 +739,13 @@ public class MainFrame extends JFrame {
     generateData.addActionListener(e -> new StressTestDialog(MainFrame.this, dsp, planning).setVisible(true));
     JMenuItem resourceColors = new JMenuItem("Couleurs des ressources…");
     resourceColors.addActionListener(e -> new ResourceColorDialog(MainFrame.this, dsp, planning).setVisible(true));
+    JMenuItem conflictInspector = new JMenuItem("Alerte conflits…");
+    conflictInspector.addActionListener(e -> new ConflictInspectorFrame(dsp, planning).setVisible(true));
     tools.add(newIntervention);
     tools.addSeparator();
     tools.add(generateData);
     tools.add(resourceColors);
+    tools.add(conflictInspector);
 
     JMenu help = new JMenu(Language.tr("menu.help"));
     help.setMnemonic(Language.isEnglish() ? 'H' : 'A');
