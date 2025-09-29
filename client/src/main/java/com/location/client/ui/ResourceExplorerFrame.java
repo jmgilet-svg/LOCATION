@@ -43,6 +43,7 @@ import javax.swing.JToolBar;
 import javax.swing.ListCellRenderer;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 
 public class ResourceExplorerFrame extends JFrame {
@@ -239,7 +240,9 @@ public class ResourceExplorerFrame extends JFrame {
       try {
         dataSourceProvider.setResourceTypeForResource(saved.id(), chosenType.id());
       } catch (UnsupportedOperationException ex) {
-        Toast.error(this, "Attribution de type indisponible: " + ex.getMessage());
+        Toast.error(
+            SwingUtilities.getWindowAncestor(this),
+            "Attribution de type indisponible: " + ex.getMessage());
         typeSupport = false;
       }
     }
@@ -277,7 +280,7 @@ public class ResourceExplorerFrame extends JFrame {
 
   private void onResourceUpdated(Models.Resource updated) {
     buildAccordion();
-    Toast.success(this, "Ressource mise à jour");
+    Toast.success(SwingUtilities.getWindowAncestor(this), "Ressource mise à jour");
     showDetails(updated);
   }
 
@@ -538,7 +541,7 @@ public class ResourceExplorerFrame extends JFrame {
         dataSourceProvider.saveUnavailability(
             new Models.Unavailability(null, resource.id(), reason, startInstant, endInstant, false));
         loadUnavailabilities();
-        Toast.success(this, "Indisponibilité ajoutée");
+        Toast.success(SwingUtilities.getWindowAncestor(this), "Indisponibilité ajoutée");
       } catch (RuntimeException ex) {
         JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
       }
@@ -558,7 +561,7 @@ public class ResourceExplorerFrame extends JFrame {
       try {
         dataSourceProvider.deleteUnavailability(selected.id());
         loadUnavailabilities();
-        Toast.info(this, "Indisponibilité supprimée");
+        Toast.info(SwingUtilities.getWindowAncestor(this), "Indisponibilité supprimée");
       } catch (RuntimeException ex) {
         JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
       }

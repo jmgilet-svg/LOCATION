@@ -60,7 +60,7 @@ public class InterventionEditorDialog extends JDialog {
             : new Models.Intervention(
                 null,
                 null,
-                null,
+                List.of(),
                 null,
                 null,
                 "Nouvelle intervention",

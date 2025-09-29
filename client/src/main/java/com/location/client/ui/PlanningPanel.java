@@ -1081,21 +1081,29 @@ public class PlanningPanel extends JPanel {
   }
 
   private boolean hasConflict(Tile t) {
-    if (!conflicts.isEmpty() && t != null && t.i != null && t.i.id() != null) {
-      String id = t.i.id();
-      String resourceId = t.i.resourceId();
+    if (t == null || t.i == null) {
+      return false;
+    }
+    String resourceId = t.i.resourceId();
+    String id = t.i.id();
+    if (!conflicts.isEmpty() && id != null) {
       for (ConflictUtil.Conflict conflict : conflicts) {
-        if ((id.equals(conflict.a().id()) || id.equals(conflict.b().id()))
-            && (conflict.resourceId() == null
-                || conflict.resourceId().equals(resourceId))) {
+        boolean sameIntervention =
+            id.equals(conflict.a().id()) || id.equals(conflict.b().id());
+        boolean sameResource =
+            conflict.resourceId() == null || Objects.equals(conflict.resourceId(), resourceId);
+        if (sameIntervention && sameResource) {
           return true;
         }
       }
     }
+    if (resourceId == null) {
+      return false;
+    }
     Instant s = instantForX(Math.min(t.x1, t.x2));
     Instant e = instantForX(Math.max(t.x1, t.x2));
     for (Models.Intervention intervention : interventions) {
-      if (Objects.equals(intervention.id(), t.i.id())) {
+      if (Objects.equals(intervention.id(), id)) {
         continue;
       }
       if (!intervention.resourceIds().contains(resourceId)) {
