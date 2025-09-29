@@ -4,3 +4,6 @@ trailer.svg
 forklift.svg
 excavator.svg
 hook.svg
+driver.svg
+nacelle.svg
+conflict.svg

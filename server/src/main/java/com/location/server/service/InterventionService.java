@@ -54,10 +54,6 @@ public class InterventionService {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
     }
-    if (interventionRepository.existsOverlap(resourceId, start, end)) {
-      throw new AssignmentConflictException(
-          "Intervention en conflit pour la ressource " + resourceId);
-    }
     if (driverId != null
         && !driverId.isBlank()
         && interventionRepository.existsDriverOverlap(driverId, start, end)) {
@@ -101,10 +97,6 @@ public class InterventionService {
       Double price) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
-    }
-    if (interventionRepository.existsOverlapExcluding(id, resourceId, start, end)) {
-      throw new AssignmentConflictException(
-          "Intervention en conflit pour la ressource " + resourceId);
     }
     if (driverId != null
         && !driverId.isBlank()
