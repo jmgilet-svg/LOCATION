@@ -63,11 +63,22 @@ public class CommercialDocumentService {
 
   @Transactional
   public CommercialDocument update(
-      String id, String reference, String title, List<LinePayload> linesPayload) {
+      String id,
+      String reference,
+      String title,
+      Boolean delivered,
+      Boolean paid,
+      List<LinePayload> linesPayload) {
     CommercialDocument document =
         documentRepository.findById(id).orElseThrow(() -> notFound("document", id));
     document.setReference(reference != null && reference.isBlank() ? null : reference);
     document.setTitle(title);
+    if (delivered != null) {
+      document.setDelivered(delivered);
+    }
+    if (paid != null) {
+      document.setPaid(paid);
+    }
 
     document.getLines().clear();
     lineRepository.deleteByDocumentId(document.getId());

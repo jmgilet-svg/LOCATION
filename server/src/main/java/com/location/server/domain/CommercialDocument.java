@@ -86,6 +86,12 @@ public class CommercialDocument {
   @Column(name = "total_ttc", precision = 14, scale = 2, nullable = false)
   private BigDecimal totalTtc = BigDecimal.ZERO;
 
+  @Column(name = "delivered", nullable = false)
+  private boolean delivered;
+
+  @Column(name = "paid", nullable = false)
+  private boolean paid;
+
   public CommercialDocument() {}
 
   public CommercialDocument(
@@ -108,6 +114,8 @@ public class CommercialDocument {
     this.totalHt = BigDecimal.ZERO;
     this.totalVat = BigDecimal.ZERO;
     this.totalTtc = BigDecimal.ZERO;
+    this.delivered = false;
+    this.paid = false;
   }
 
   public String getId() {
@@ -190,5 +198,21 @@ public class CommercialDocument {
     this.totalHt = ht;
     this.totalVat = vat;
     this.totalTtc = ttc;
+  }
+
+  public boolean isDelivered() {
+    return delivered;
+  }
+
+  public void setDelivered(boolean delivered) {
+    this.delivered = delivered;
+  }
+
+  public boolean isPaid() {
+    return paid;
+  }
+
+  public void setPaid(boolean paid) {
+    this.paid = paid;
   }
 }

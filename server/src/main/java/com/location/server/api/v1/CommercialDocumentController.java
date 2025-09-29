@@ -128,7 +128,9 @@ public class CommercialDocumentController {
                 .map(line -> new CommercialDocumentService.LinePayload(
                     line.designation(), line.quantity(), line.unitPrice(), line.vatRate()))
                 .collect(Collectors.toList());
-    CommercialDocument document = documentService.update(id, request.reference(), request.title(), lines);
+    CommercialDocument document =
+        documentService.update(
+            id, request.reference(), request.title(), request.delivered(), request.paid(), lines);
     return toDto(document);
   }
 
@@ -221,6 +223,8 @@ public class CommercialDocumentController {
         document.getTotalHt().doubleValue(),
         document.getTotalVat().doubleValue(),
         document.getTotalTtc().doubleValue(),
+        document.isDelivered(),
+        document.isPaid(),
         lines);
   }
 
@@ -270,12 +274,19 @@ public class CommercialDocumentController {
       double totalHt,
       double totalVat,
       double totalTtc,
+      boolean delivered,
+      boolean paid,
       List<DocLineDto> lines) {}
 
   public record CreateDocRequest(
       @NotNull DocType type, @NotBlank String agencyId, @NotBlank String clientId, @NotBlank String title) {}
 
-  public record UpdateDocRequest(String reference, @NotBlank String title, List<@Valid DocLineDto> lines) {}
+  public record UpdateDocRequest(
+      String reference,
+      @NotBlank String title,
+      Boolean delivered,
+      Boolean paid,
+      List<@Valid DocLineDto> lines) {}
 
   public record EmailRequest(
       @NotBlank @Email String to, String subject, String message, Boolean attachPdf) {}

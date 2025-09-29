@@ -1228,6 +1228,8 @@ public class RestDataSource implements DataSourceProvider {
                   payload.put("reference", document.reference());
                 }
                 payload.put("title", document.title());
+                payload.put("delivered", document.delivered());
+                payload.put("paid", document.paid());
                 ArrayNode lines = payload.putArray("lines");
                 for (Models.DocLine line : document.lines()) {
                   ObjectNode node1 = lines.addObject();
@@ -1767,6 +1769,8 @@ public class RestDataSource implements DataSourceProvider {
         node.path("totalHt").asDouble(),
         node.path("totalVat").asDouble(),
         node.path("totalTtc").asDouble(),
+        node.path("delivered").asBoolean(false),
+        node.path("paid").asBoolean(false),
         java.util.List.copyOf(lines));
   }
 
