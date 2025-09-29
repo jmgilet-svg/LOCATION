@@ -267,13 +267,15 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public Models.Resource saveResource(Models.Resource resource) {
-    String id = resource.id();
+    String id = "";
     Models.Resource existing =
         id == null
             ? null
-            : resources.stream().filter(r -> r.id().equals(id)).findFirst().orElse(null);
-    if (existing == null && id == null) {
+            : resources.stream().filter(r -> r.id().equals(resource.id())).findFirst().orElse(null);
+    if (existing == null && resource.id() == null) {
       id = UUID.randomUUID().toString();
+    } else {
+    	id =resource.id();
     }
     if (existing != null) {
       resources.remove(existing);

@@ -75,8 +75,8 @@ public class EmailComposeDialog extends JDialog {
   private void fillEmails() {
     cbTo.removeAllItems();
     for (Models.Client c : dsp.listClients()) {
-      if (c.email() != null && !c.email().isBlank()) {
-        cbTo.addItem(c.name() + " <" + c.email() + ">");
+      if (c.billingEmail() != null && !c.billingEmail().isBlank()) {
+        cbTo.addItem(c.name() + " <" + c.billingEmail() + ">");
       }
     }
   }

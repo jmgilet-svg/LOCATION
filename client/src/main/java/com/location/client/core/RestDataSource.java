@@ -497,10 +497,11 @@ public class RestDataSource implements DataSourceProvider {
   public List<Models.RecurringUnavailability> listRecurringUnavailabilities(String resourceId) {
     try {
       ensureLogin();
-      String url = baseUrl + "/api/v1/recurring-unavailabilities";
+      String url1 = baseUrl + "/api/v1/recurring-unavailabilities";
       if (resourceId != null && !resourceId.isBlank()) {
-        url += "?resourceId=" + encode(resourceId);
+        url1 += "?resourceId=" + encode(resourceId);
       }
+      String url = url1;
       JsonNode node = executeForJson(() -> new HttpGet(url));
       List<Models.RecurringUnavailability> result = new ArrayList<>();
       if (node.isArray()) {
@@ -555,10 +556,11 @@ public class RestDataSource implements DataSourceProvider {
   public Path downloadResourcesCsv(String tags, Path target) {
     try {
       ensureLogin();
-      String url = baseUrl + "/api/v1/resources/csv";
+      String url1 = baseUrl + "/api/v1/resources/csv";
       if (tags != null && !tags.isBlank()) {
-        url += "?tags=" + encode(tags);
+    	  url1 += "?tags=" + encode(tags);
       }
+      String url = url1;
       return execute(
           () -> new HttpGet(url),
           res -> {
@@ -844,11 +846,11 @@ public class RestDataSource implements DataSourceProvider {
                 payload.put("title", document.title());
                 ArrayNode lines = payload.putArray("lines");
                 for (Models.DocLine line : document.lines()) {
-                  ObjectNode node = lines.addObject();
-                  node.put("designation", line.designation());
-                  node.put("quantity", line.quantity());
-                  node.put("unitPrice", line.unitPrice());
-                  node.put("vatRate", line.vatRate());
+                  ObjectNode node1 = lines.addObject();
+                  node1.put("designation", line.designation());
+                  node1.put("quantity", line.quantity());
+                  node1.put("unitPrice", line.unitPrice());
+                  node1.put("vatRate", line.vatRate());
                 }
                 put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
                 return put;

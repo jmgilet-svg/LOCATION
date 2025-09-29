@@ -818,13 +818,13 @@ public class PlanningPanel extends JPanel {
       if (row >= 0) {
         Tile t = tileFor(selected, row);
         int x = Math.min(t.x1, t.x2);
-        int w = Math.max(16, Math.abs(t.x2 - t.x1));
+        int w1 = Math.max(16, Math.abs(t.x2 - t.x1));
         int y = HEADER_H + row * ROW_H + 4;
         int height = ROW_H - 8;
         Stroke old = g2.getStroke();
         g2.setColor(new Color(255, 200, 0, 180));
         g2.setStroke(new BasicStroke(3f));
-        g2.drawRoundRect(x - 4, y, w + 8, height, 14, 14);
+        g2.drawRoundRect(x - 4, y, w1 + 8, height, 14, 14);
         g2.setStroke(old);
       }
     }

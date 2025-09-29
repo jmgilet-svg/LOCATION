@@ -1631,7 +1631,7 @@ public class MainFrame extends JFrame {
     if (component == null || component.getParent() == null) {
       return new Rectangle(0, 0, getWidth(), getHeight());
     }
-    Rectangle rect = SwingUtilities.convertRectangle(component, component.getVisibleRect(), getLayeredPane());
+    Rectangle rect = SwingUtilities.convertRectangle(component, ((JComponent) component).getVisibleRect(), getLayeredPane());
     if (rect.width <= 0 || rect.height <= 0) {
       rect = new Rectangle(rect.x, rect.y, Math.max(1, component.getWidth()), Math.max(1, component.getHeight()));
     }
