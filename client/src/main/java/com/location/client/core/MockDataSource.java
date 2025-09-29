@@ -394,7 +394,7 @@ public class MockDataSource implements DataSourceProvider {
     Instant toInstant = to != null ? to.toInstant() : null;
     return interventions.stream()
         .filter(i -> matchesCurrentAgency(i.agencyId()))
-        .filter(i -> resourceId == null || resourceId.equals(i.resourceId()))
+        .filter(i -> resourceId == null || i.resourceIds().contains(resourceId))
         .filter(
             i ->
                 (fromInstant == null || i.end().isAfter(fromInstant))
@@ -410,7 +410,7 @@ public class MockDataSource implements DataSourceProvider {
                 i ->
                     conflicts(
                         i,
-                        intervention.resourceId(),
+                        intervention.resourceIds(),
                         intervention.driverId(),
                         intervention.start(),
                         intervention.end()));
@@ -418,13 +418,18 @@ public class MockDataSource implements DataSourceProvider {
       throw new IllegalStateException("Conflit d'affectation (MOCK)");
     }
     boolean unavailable =
-        listUnavailabilities(
-                intervention.start().atOffset(ZoneOffset.UTC),
-                intervention.end().atOffset(ZoneOffset.UTC),
-                intervention.resourceId())
-            .stream()
+        intervention.resourceIds().stream()
             .anyMatch(
-                u -> u.end().isAfter(intervention.start()) && u.start().isBefore(intervention.end()));
+                rid ->
+                    listUnavailabilities(
+                            intervention.start().atOffset(ZoneOffset.UTC),
+                            intervention.end().atOffset(ZoneOffset.UTC),
+                            rid)
+                        .stream()
+                        .anyMatch(
+                            u ->
+                                u.end().isAfter(intervention.start())
+                                    && u.start().isBefore(intervention.end())));
     if (unavailable) {
       throw new IllegalStateException("Ressource indisponible (MOCK)");
     }
@@ -432,7 +437,7 @@ public class MockDataSource implements DataSourceProvider {
         new Models.Intervention(
             UUID.randomUUID().toString(),
             intervention.agencyId(),
-            intervention.resourceId(),
+            intervention.resourceIds(),
             intervention.clientId(),
             intervention.driverId(),
             intervention.title(),
@@ -452,7 +457,7 @@ public class MockDataSource implements DataSourceProvider {
                 i ->
                     conflicts(
                         i,
-                        intervention.resourceId(),
+                        intervention.resourceIds(),
                         intervention.driverId(),
                         intervention.start(),
                         intervention.end()));
@@ -460,13 +465,18 @@ public class MockDataSource implements DataSourceProvider {
       throw new IllegalStateException("Conflit (MOCK) avec une autre intervention");
     }
     boolean unavailable =
-        listUnavailabilities(
-                intervention.start().atOffset(ZoneOffset.UTC),
-                intervention.end().atOffset(ZoneOffset.UTC),
-                intervention.resourceId())
-            .stream()
+        intervention.resourceIds().stream()
             .anyMatch(
-                u -> u.end().isAfter(intervention.start()) && u.start().isBefore(intervention.end()));
+                rid ->
+                    listUnavailabilities(
+                            intervention.start().atOffset(ZoneOffset.UTC),
+                            intervention.end().atOffset(ZoneOffset.UTC),
+                            rid)
+                        .stream()
+                        .anyMatch(
+                            u ->
+                                u.end().isAfter(intervention.start())
+                                    && u.start().isBefore(intervention.end())));
     if (unavailable) {
       throw new IllegalStateException("Conflit (MOCK) indisponibilité");
     }
@@ -1023,14 +1033,19 @@ public class MockDataSource implements DataSourceProvider {
 
   private boolean conflicts(
       Models.Intervention existing,
-      String resourceId,
+      java.util.List<String> resourceIds,
       String driverId,
       Instant start,
       Instant end) {
     if (!existing.end().isAfter(start) || !existing.start().isBefore(end)) {
       return false;
     }
-    boolean sameResource = existing.resourceId().equals(resourceId);
+    java.util.List<String> existingResources = existing.resourceIds();
+    java.util.List<String> incoming =
+        resourceIds == null ? java.util.List.of() : java.util.List.copyOf(resourceIds);
+    boolean sameResource =
+        !incoming.isEmpty()
+            && existingResources.stream().anyMatch(rid -> incoming.contains(rid));
     boolean sameDriver =
         existing.driverId() != null
             && driverId != null

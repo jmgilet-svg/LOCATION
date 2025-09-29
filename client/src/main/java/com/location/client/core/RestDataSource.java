@@ -357,7 +357,7 @@ public class RestDataSource implements DataSourceProvider {
           String id = intervention.path("id").asText();
           String title = intervention.path("title").asText();
           String agency = intervention.path("agencyId").asText();
-          String resource = intervention.path("resourceId").asText();
+          List<String> resources = readResourceIds(intervention);
           String client = intervention.path("clientId").asText();
           JsonNode driverNode = intervention.path("driverId");
           String driver = driverNode.isMissingNode() || driverNode.isNull() ? null : driverNode.asText();
@@ -365,7 +365,7 @@ public class RestDataSource implements DataSourceProvider {
           java.time.Instant end = java.time.Instant.parse(intervention.path("end").asText());
           JsonNode notesNode = intervention.path("notes");
           String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
-          result.add(new Models.Intervention(id, agency, resource, client, driver, title, start, end, notes));
+          result.add(new Models.Intervention(id, agency, resources, client, driver, title, start, end, notes));
         }
       }
       return result;
@@ -384,7 +384,21 @@ public class RestDataSource implements DataSourceProvider {
                 HttpPost post = new HttpPost(baseUrl + "/api/v1/interventions");
                 ObjectNode payload = om.createObjectNode();
                 payload.put("agencyId", intervention.agencyId());
-                payload.put("resourceId", intervention.resourceId());
+                String primaryResource = intervention.resourceId();
+                if (primaryResource != null && !primaryResource.isBlank()) {
+                  payload.put("resourceId", primaryResource);
+                } else {
+                  payload.putNull("resourceId");
+                }
+                if (intervention.resourceIds() != null && !intervention.resourceIds().isEmpty()) {
+                  ArrayNode array = om.createArrayNode();
+                  for (String rid : intervention.resourceIds()) {
+                    if (rid != null && !rid.isBlank()) {
+                      array.add(rid);
+                    }
+                  }
+                  payload.set("resourceIds", array);
+                }
                 payload.put("clientId", intervention.clientId());
                 if (intervention.driverId() != null) {
                   payload.put("driverId", intervention.driverId());
@@ -410,7 +424,7 @@ public class RestDataSource implements DataSourceProvider {
       return new Models.Intervention(
           id,
           intervention.agencyId(),
-          intervention.resourceId(),
+          readResourceIds(node),
           intervention.clientId(),
           intervention.driverId(),
           intervention.title(),
@@ -434,7 +448,21 @@ public class RestDataSource implements DataSourceProvider {
                         baseUrl + "/api/v1/interventions/" + encodeSegment(intervention.id()));
                 ObjectNode payload = om.createObjectNode();
                 payload.put("agencyId", intervention.agencyId());
-                payload.put("resourceId", intervention.resourceId());
+                String primaryResource = intervention.resourceId();
+                if (primaryResource != null && !primaryResource.isBlank()) {
+                  payload.put("resourceId", primaryResource);
+                } else {
+                  payload.putNull("resourceId");
+                }
+                if (intervention.resourceIds() != null && !intervention.resourceIds().isEmpty()) {
+                  ArrayNode array = om.createArrayNode();
+                  for (String rid : intervention.resourceIds()) {
+                    if (rid != null && !rid.isBlank()) {
+                      array.add(rid);
+                    }
+                  }
+                  payload.set("resourceIds", array);
+                }
                 payload.put("clientId", intervention.clientId());
                 if (intervention.driverId() != null) {
                   payload.put("driverId", intervention.driverId());
@@ -457,7 +485,7 @@ public class RestDataSource implements DataSourceProvider {
       return new Models.Intervention(
           node.path("id").asText(),
           node.path("agencyId").asText(),
-          node.path("resourceId").asText(),
+          readResourceIds(node),
           node.path("clientId").asText(),
           node.path("driverId").isMissingNode() || node.path("driverId").isNull()
               ? null
@@ -489,6 +517,31 @@ public class RestDataSource implements DataSourceProvider {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private List<String> readResourceIds(JsonNode node) {
+    List<String> resources = new ArrayList<>();
+    JsonNode resourcesNode = node.path("resourceIds");
+    if (resourcesNode.isArray()) {
+      for (JsonNode r : resourcesNode) {
+        if (!r.isNull()) {
+          String value = r.asText();
+          if (value != null && !value.isBlank()) {
+            resources.add(value);
+          }
+        }
+      }
+    }
+    if (resources.isEmpty()) {
+      JsonNode single = node.path("resourceId");
+      if (!single.isMissingNode() && !single.isNull()) {
+        String value = single.asText();
+        if (value != null && !value.isBlank()) {
+          resources.add(value);
+        }
+      }
+    }
+    return resources;
   }
 
   @Override
