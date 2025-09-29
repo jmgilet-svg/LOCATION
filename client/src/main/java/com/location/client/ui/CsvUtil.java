@@ -46,7 +46,7 @@ public final class CsvUtil {
   public static void exportClients(DataSourceProvider dsp, Path target) throws IOException {
     List<Models.Client> clients = dsp.listClients();
     try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-      writer.write("id;name;email;phone\n");
+      writer.write("id;name;email;address;zip;city;vatNumber;iban\n");
       for (Models.Client client : clients) {
         writer.write(
             escape(client.id())
@@ -54,7 +54,16 @@ public final class CsvUtil {
                 + escape(client.name())
                 + ';'
                 + escape(client.billingEmail())
-                + ';');
+                + ';'
+                + escape(client.billingAddress())
+                + ';'
+                + escape(client.billingZip())
+                + ';'
+                + escape(client.billingCity())
+                + ';'
+                + escape(client.vatNumber())
+                + ';'
+                + escape(client.iban()));
         writer.newLine();
       }
     }

@@ -8,7 +8,15 @@ public final class Models {
 
   public record Agency(String id, String name) {}
 
-  public record Client(String id, String name, String billingEmail) {}
+  public record Client(
+      String id,
+      String name,
+      String billingEmail,
+      String billingAddress,
+      String billingZip,
+      String billingCity,
+      String vatNumber,
+      String iban) {}
 
   public record Driver(String id, String name, String email) {}
 

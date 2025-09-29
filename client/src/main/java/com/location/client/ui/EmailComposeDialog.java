@@ -16,6 +16,7 @@ public class EmailComposeDialog extends JDialog {
   private final JComboBox<String> cbTo = new JComboBox<>();
   private final JTextField tfSubject = new JTextField(32);
   private final HtmlEditorPanel editor = new HtmlEditorPanel();
+  private final JCheckBox cbAttachPdf = new JCheckBox("Joindre le PDF", true);
 
   public EmailComposeDialog(Window owner, DataSourceProvider dsp, List<String> preselectedDocIds) {
     super(owner, "Envoyer par e‑mail", ModalityType.APPLICATION_MODAL);
@@ -55,6 +56,7 @@ public class EmailComposeDialog extends JDialog {
     add(editor, BorderLayout.CENTER);
 
     JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    south.add(cbAttachPdf);
     south.add(new JButton(new AbstractAction("Annuler") {
       @Override
       public void actionPerformed(ActionEvent e) {
@@ -93,7 +95,7 @@ public class EmailComposeDialog extends JDialog {
       if (to == null || to.isBlank()) {
         throw new IllegalArgumentException("Renseignez un destinataire.");
       }
-      dsp.emailDocsBatch(ids, to, subject, body);
+      dsp.emailDocsBatch(ids, to, subject, body, cbAttachPdf.isSelected());
       Toast.success(this, "E‑mail envoyé (" + ids.size() + " doc)");
       ActivityCenter.log("Email groupé → " + to + " (" + ids.size() + ")");
       dispose();

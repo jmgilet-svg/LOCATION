@@ -158,7 +158,8 @@ public class CommercialDocumentController {
   @PostMapping("/{id}/email")
   public ResponseEntity<Void> email(@PathVariable String id, @Valid @RequestBody EmailRequest request) {
     CommercialDocument document = documentRepository.findById(id).orElseThrow();
-    MailGateway.Mail mail = buildMail(request.to, request.subject, request.message, document);
+    boolean attachPdf = request.attachPdf() == null ? true : request.attachPdf();
+    MailGateway.Mail mail = buildMail(request.to, request.subject, request.message, document, attachPdf);
     mailGateway.send(mail);
     return ResponseEntity.accepted().build();
   }
@@ -167,16 +168,17 @@ public class CommercialDocumentController {
   public ResponseEntity<Void> emailBatch(@Valid @RequestBody EmailBatchRequest request) {
     for (String documentId : request.ids()) {
       CommercialDocument document = documentRepository.findById(documentId).orElseThrow();
+      boolean attachPdf = request.attachPdf() == null ? true : request.attachPdf();
       MailGateway.Mail mail =
-          buildMail(request.to(), request.subject(), request.message(), document);
+          buildMail(request.to(), request.subject(), request.message(), document, attachPdf);
       mailGateway.send(mail);
     }
     return ResponseEntity.accepted().build();
   }
 
   private MailGateway.Mail buildMail(
-      String to, String subject, String message, CommercialDocument document) {
-    byte[] pdf = pdfService.build(document);
+      String to, String subject, String message, CommercialDocument document, boolean attachPdf) {
+    byte[] pdf = attachPdf ? pdfService.build(document) : null;
     String effectiveSubject = subject;
     String effectiveBody = message;
     if ((effectiveSubject == null || effectiveSubject.isBlank())
@@ -201,7 +203,8 @@ public class CommercialDocumentController {
     if (effectiveBody == null || effectiveBody.isBlank()) {
       effectiveBody = "Bonjour,\nVeuillez trouver le document en pièce jointe.";
     }
-    return new MailGateway.Mail(to, effectiveSubject, effectiveBody, pdf, filenameFor(document));
+    String filename = attachPdf ? filenameFor(document) : null;
+    return new MailGateway.Mail(to, effectiveSubject, effectiveBody, pdf, filename);
   }
 
   private static DocDto toDto(CommercialDocument document) {
@@ -274,8 +277,13 @@ public class CommercialDocumentController {
 
   public record UpdateDocRequest(String reference, @NotBlank String title, List<@Valid DocLineDto> lines) {}
 
-  public record EmailRequest(@NotBlank @Email String to, String subject, String message) {}
+  public record EmailRequest(
+      @NotBlank @Email String to, String subject, String message, Boolean attachPdf) {}
 
   public record EmailBatchRequest(
-      @NotEmpty List<String> ids, @NotBlank @Email String to, String subject, String message) {}
+      @NotEmpty List<String> ids,
+      @NotBlank @Email String to,
+      String subject,
+      String message,
+      Boolean attachPdf) {}
 }

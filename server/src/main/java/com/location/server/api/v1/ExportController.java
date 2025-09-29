@@ -36,7 +36,8 @@ public class ExportController {
   @GetMapping(value = "/clients.csv", produces = "text/csv; charset=UTF-8")
   public ResponseEntity<byte[]> exportClientsCsv() {
     AgencyContext.require();
-    StringBuilder csv = new StringBuilder("id;name;billingEmail\n");
+    StringBuilder csv =
+        new StringBuilder("id;name;billingEmail;billingAddress;billingZip;billingCity;vatNumber;iban\n");
     clientRepository
         .findAll()
         .forEach(
@@ -49,6 +50,25 @@ public class ExportController {
                         client.getBillingEmail() == null
                             ? ""
                             : sanitize(client.getBillingEmail()))
+                    .append(';')
+                    .append(
+                        client.getBillingAddress() == null
+                            ? ""
+                            : sanitize(client.getBillingAddress()))
+                    .append(';')
+                    .append(
+                        client.getBillingZip() == null
+                            ? ""
+                            : sanitize(client.getBillingZip()))
+                    .append(';')
+                    .append(
+                        client.getBillingCity() == null
+                            ? ""
+                            : sanitize(client.getBillingCity()))
+                    .append(';')
+                    .append(client.getVatNumber() == null ? "" : sanitize(client.getVatNumber()))
+                    .append(';')
+                    .append(client.getIban() == null ? "" : sanitize(client.getIban()))
                     .append('\n'));
     return csvResponse("clients.csv", csv);
   }

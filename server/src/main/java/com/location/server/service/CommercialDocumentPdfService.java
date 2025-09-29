@@ -5,6 +5,7 @@ import com.location.server.domain.CommercialDocumentLine;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -12,6 +13,7 @@ import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.text.NumberFormat;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class CommercialDocumentPdfService {
 
       Font titleFont = new Font(Font.HELVETICA, 18, Font.BOLD);
       Font normal = new Font(Font.HELVETICA, 11);
+      addHeader(pdf, titleFont);
       Paragraph title = new Paragraph(titleFor(document), titleFont);
       title.setSpacingAfter(8f);
       pdf.add(title);
@@ -35,6 +38,17 @@ public class CommercialDocumentPdfService {
       metadata.setWidthPercentage(100);
       addRow(metadata, "Agence", document.getAgency().getName(), normal);
       addRow(metadata, "Client", document.getClient().getName(), normal);
+      if (hasText(document.getClient().getBillingAddress())
+          || hasText(document.getClient().getBillingZip())
+          || hasText(document.getClient().getBillingCity())) {
+        addRow(metadata, "Adresse client", formatClientAddress(document), normal);
+      }
+      if (hasText(document.getClient().getVatNumber())) {
+        addRow(metadata, "TVA client", document.getClient().getVatNumber(), normal);
+      }
+      if (hasText(document.getClient().getIban())) {
+        addRow(metadata, "IBAN", document.getClient().getIban(), normal);
+      }
       addRow(metadata, "Référence", document.getReference() == null ? "" : document.getReference(), normal);
       addRow(metadata, "Date", document.getDate().toLocalDate().toString(), normal);
       pdf.add(metadata);
@@ -77,6 +91,26 @@ public class CommercialDocumentPdfService {
     }
   }
 
+  private void addHeader(Document pdf, Font brandFont) throws Exception {
+    String brand = System.getenv().getOrDefault("AGENCY_NAME", "LOCATION");
+    Image logo = loadLogo();
+    PdfPTable header = new PdfPTable(logo != null ? 2 : 1);
+    header.setWidthPercentage(100);
+    header.getDefaultCell().setBorder(0);
+    if (logo != null) {
+      PdfPCell logoCell = new PdfPCell(logo);
+      logoCell.setBorder(0);
+      logoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+      header.addCell(logoCell);
+    }
+    PdfPCell brandCell = new PdfPCell(new Phrase(brand, brandFont));
+    brandCell.setBorder(0);
+    brandCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+    brandCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+    header.addCell(brandCell);
+    pdf.add(header);
+  }
+
   private static String titleFor(CommercialDocument document) {
     String base =
         switch (document.getType()) {
@@ -113,5 +147,47 @@ public class CommercialDocumentPdfService {
     v.setBorderWidth(0.5f);
     table.addCell(k);
     table.addCell(v);
+  }
+
+  private Image loadLogo() {
+    try (InputStream input = getClass().getResourceAsStream("/static/logo.png")) {
+      if (input == null) {
+        return null;
+      }
+      byte[] bytes = input.readAllBytes();
+      Image image = Image.getInstance(bytes);
+      image.scaleToFit(120f, 60f);
+      image.setAlignment(Element.ALIGN_LEFT);
+      return image;
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  private static boolean hasText(String value) {
+    return value != null && !value.isBlank();
+  }
+
+  private static String formatClientAddress(CommercialDocument document) {
+    String address = document.getClient().getBillingAddress();
+    String zip = document.getClient().getBillingZip();
+    String city = document.getClient().getBillingCity();
+    return joinNonBlank(
+        ", ",
+        address,
+        joinNonBlank(" ", zip, city));
+  }
+
+  private static String joinNonBlank(String separator, String... parts) {
+    StringBuilder builder = new StringBuilder();
+    for (String part : parts) {
+      if (part != null && !part.isBlank()) {
+        if (!builder.isEmpty()) {
+          builder.append(separator);
+        }
+        builder.append(part.trim());
+      }
+    }
+    return builder.toString();
   }
 }

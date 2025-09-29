@@ -98,7 +98,11 @@ public interface DataSourceProvider extends AutoCloseable {
 
   java.nio.file.Path downloadDocPdf(String id, java.nio.file.Path target);
 
-  void emailDoc(String id, String to, String subject, String message);
+  default void emailDoc(String id, String to, String subject, String message) {
+    emailDoc(id, to, subject, message, true);
+  }
+
+  void emailDoc(String id, String to, String subject, String message, boolean attachPdf);
 
   java.nio.file.Path downloadDocsCsv(String type, String clientId, java.nio.file.Path target);
 
@@ -110,7 +114,13 @@ public interface DataSourceProvider extends AutoCloseable {
 
   Models.DocTemplate saveDocTemplate(String docType, String html);
 
-  void emailDocsBatch(java.util.List<String> ids, String to, String subject, String message);
+  default void emailDocsBatch(
+      java.util.List<String> ids, String to, String subject, String message) {
+    emailDocsBatch(ids, to, subject, message, true);
+  }
+
+  void emailDocsBatch(
+      java.util.List<String> ids, String to, String subject, String message, boolean attachPdf);
 
   default Models.Doc createQuoteFromIntervention(Models.Intervention intervention) {
     if (intervention == null) {
@@ -229,6 +239,21 @@ public interface DataSourceProvider extends AutoCloseable {
   default void deleteRecurringUnavailability(String id) {
     throw new UnsupportedOperationException(
         "deleteRecurringUnavailability non disponible dans " + getLabel());
+  }
+
+  static String merge(String template, java.util.Map<String, String> context) {
+    if (template == null || template.isBlank()) {
+      return "";
+    }
+    if (context == null || context.isEmpty()) {
+      return template;
+    }
+    String merged = template;
+    for (java.util.Map.Entry<String, String> entry : context.entrySet()) {
+      String value = entry.getValue() == null ? "" : entry.getValue();
+      merged = merged.replace("{{" + entry.getKey() + "}}", value);
+    }
+    return merged;
   }
 
   static String normalizeTemplateKey(String templateKey) {

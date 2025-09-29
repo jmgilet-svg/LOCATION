@@ -201,7 +201,7 @@ public class TopBar extends JPanel {
 
       List<Models.Client> clients = planning.getClients();
       cbClient.removeAllItems();
-      cbClient.addItem(new Models.Client(null, "(tous clients)", ""));
+      cbClient.addItem(new Models.Client(null, "(tous clients)", null, null, null, null, null, null));
       clients.forEach(cbClient::addItem);
       selectById(cbClient, Models.Client::id, clientId);
     } finally {
