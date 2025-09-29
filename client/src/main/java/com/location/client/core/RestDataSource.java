@@ -113,13 +113,122 @@ public class RestDataSource implements DataSourceProvider {
 
   @Override
   public Models.EmailTemplate getAgencyEmailTemplate(String agencyId, String templateKey) {
-    throw new RuntimeException("getAgencyEmailTemplate non disponible sur ce backend (démo).");
+    String key = DataSourceProvider.normalizeTemplateKey(templateKey);
+    String targetAgency =
+        agencyId != null && !agencyId.isBlank() ? agencyId : getCurrentAgencyId();
+    if (targetAgency == null || targetAgency.isBlank()) {
+      throw new IllegalArgumentException("Agence requise pour récupérer le modèle e-mail");
+    }
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(
+              () ->
+                  new HttpGet(
+                      baseUrl
+                          + "/api/v1/agencies/"
+                          + encodeSegment(targetAgency)
+                          + "/email-template"));
+      String subject =
+          node.path("subject").isMissingNode() || node.path("subject").isNull()
+              ? ""
+              : node.path("subject").asText();
+      String body =
+          node.path("body").isMissingNode() || node.path("body").isNull()
+              ? ""
+              : node.path("body").asText();
+      return new Models.EmailTemplate(key, subject, body);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @Override
   public Models.EmailTemplate updateAgencyEmailTemplate(
       String agencyId, String templateKey, String subject, String html) {
-    throw new RuntimeException("updateAgencyEmailTemplate non disponible sur ce backend (démo).");
+    if (subject == null || subject.isBlank()) {
+      throw new IllegalArgumentException("Sujet requis");
+    }
+    if (html == null || html.isBlank()) {
+      throw new IllegalArgumentException("Corps e-mail requis");
+    }
+    String key = DataSourceProvider.normalizeTemplateKey(templateKey);
+    String targetAgency =
+        agencyId != null && !agencyId.isBlank() ? agencyId : getCurrentAgencyId();
+    if (targetAgency == null || targetAgency.isBlank()) {
+      throw new IllegalArgumentException("Agence requise pour enregistrer le modèle e-mail");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      payload.put("subject", subject);
+      payload.put("body", html);
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPut put =
+                    new HttpPut(
+                        baseUrl
+                            + "/api/v1/agencies/"
+                            + encodeSegment(targetAgency)
+                            + "/email-template");
+                put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return put;
+              });
+      String savedSubject =
+          node.path("subject").isMissingNode() || node.path("subject").isNull()
+              ? ""
+              : node.path("subject").asText();
+      String savedBody =
+          node.path("body").isMissingNode() || node.path("body").isNull()
+              ? ""
+              : node.path("body").asText();
+      return new Models.EmailTemplate(key, savedSubject, savedBody);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void emailBulk(java.util.List<String> ids, String toOverride) {
+    if (ids == null || ids.isEmpty()) {
+      throw new IllegalArgumentException("Aucun identifiant d'intervention fourni");
+    }
+    try {
+      ensureLogin();
+      ObjectNode payload = om.createObjectNode();
+      ArrayNode array = payload.putArray("ids");
+      for (String id : ids) {
+        if (id != null && !id.isBlank()) {
+          array.add(id);
+        }
+      }
+      if (array.isEmpty()) {
+        throw new IllegalArgumentException("Aucun identifiant d'intervention valide");
+      }
+      if (toOverride == null || toOverride.isBlank()) {
+        payload.putNull("toOverride");
+      } else {
+        payload.put("toOverride", toOverride);
+      }
+      execute(
+          () -> {
+            HttpPost post =
+                new HttpPost(baseUrl + "/api/v1/interventions/email-bulk");
+            post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+            return post;
+          },
+          res -> {
+            int sc = res.getCode();
+            EntityUtils.consumeQuietly(res.getEntity());
+            if (sc != 202) {
+              throw httpError(sc, "Email bulk HTTP " + sc);
+            }
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @Override
