@@ -1009,8 +1009,22 @@ public class MainFrame extends JFrame {
             e -> {
               sidebar.setBadge("planning", planning.conflictCount());
               try {
-                List<Models.Doc> docs = dsp.listDocs("QUOTE", null);
-                sidebar.setBadge("docs", docs == null ? 0 : docs.size());
+                List<Models.Doc> docs = dsp.listDocs(null, null);
+                if (docs == null || docs.isEmpty()) {
+                  sidebar.setBadgeText("docs", null);
+                } else {
+                  long quotes = docs.stream().filter(d -> "QUOTE".equals(d.type())).count();
+                  long orders = docs.stream().filter(d -> "ORDER".equals(d.type())).count();
+                  long deliveries =
+                      docs.stream().filter(d -> "DELIVERY".equals(d.type())).count();
+                  long invoices = docs.stream().filter(d -> "INVOICE".equals(d.type())).count();
+                  String text =
+                      "Q" + quotes +
+                      " BC" + orders +
+                      " BL" + deliveries +
+                      " F" + invoices;
+                  sidebar.setBadgeText("docs", text);
+                }
               } catch (Exception ignored) {
               }
             });
