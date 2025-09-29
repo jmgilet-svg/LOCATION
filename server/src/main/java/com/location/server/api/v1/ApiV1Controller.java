@@ -309,7 +309,8 @@ public class ApiV1Controller {
             request.title(),
             request.start(),
             request.end(),
-            request.notes()));
+            request.notes(),
+            request.price()));
   }
 
   @PutMapping("/interventions/{id}")
@@ -325,7 +326,8 @@ public class ApiV1Controller {
             request.title(),
             request.start(),
             request.end(),
-            request.notes()));
+            request.notes(),
+            request.price()));
   }
 
   @DeleteMapping("/interventions/{id}")

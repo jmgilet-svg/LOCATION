@@ -60,7 +60,7 @@ class InterventionNotesWebTest {
     start = OffsetDateTime.of(2025, 1, 10, 8, 0, 0, 0, ZoneOffset.UTC);
     end = start.plusHours(2);
     Intervention intervention =
-        new Intervention("I", "Titre", start, end, agency, resource, client, driver, null);
+        new Intervention("I", "Titre", start, end, agency, resource, client, driver, null, 80.0);
     interventionId = interventionRepository.save(intervention).getId();
     driverId = driver.getId();
   }
@@ -76,13 +76,15 @@ class InterventionNotesWebTest {
         "\"title\":\"MAJ\"," +
         "\"start\":\"" + start.plusHours(1).toString() + "\"," +
         "\"end\":\"" + end.plusHours(1).toString() + "\"," +
-        "\"notes\":\"Ces notes ✅\"}";
+        "\"notes\":\"Ces notes ✅\"," +
+        "\"price\":45.0}";
 
     mvc.perform(
             put("/api/v1/interventions/" + interventionId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(payload))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.notes").value("Ces notes ✅"));
+        .andExpect(jsonPath("$.notes").value("Ces notes ✅"))
+        .andExpect(jsonPath("$.price").value(45.0));
   }
 }

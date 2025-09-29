@@ -2,6 +2,7 @@ package com.location.client.ui;
 
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
+import com.location.client.ui.icons.SvgIconLoader;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -38,11 +39,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.Icon;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -88,6 +91,7 @@ public class PlanningPanel extends JPanel {
   private static final int SLOT_MINUTES = 15;
   private static final DayOfWeek WEEK_START = DayOfWeek.MONDAY;
   private static final Duration DEFAULT_CREATE_DURATION = Duration.ofHours(2);
+  private static final Icon CONFLICT_ICON = SvgIconLoader.load("conflict.svg", 16);
 
   private int colWidth;
   private Tile dragTile;
@@ -302,6 +306,7 @@ public class PlanningPanel extends JPanel {
             title,
             start,
             end,
+            null,
             null);
     try {
       ensureAvailability(resource.id(), start, end);
@@ -665,7 +670,8 @@ public class PlanningPanel extends JPanel {
             base.title() + " (copie)",
             start,
             end,
-            base.notes());
+            base.notes(),
+            base.price());
     try {
       ensureAvailability(base.resourceId(), start, end);
       Models.Intervention created = dsp.createIntervention(payload);
@@ -707,7 +713,8 @@ public class PlanningPanel extends JPanel {
             selected.title(),
             start,
             end,
-            selected.notes());
+            selected.notes(),
+            selected.price());
     try {
       ensureAvailability(selected.resourceId(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1029,6 +1036,19 @@ public class PlanningPanel extends JPanel {
     g2.drawRoundRect(x, y, w, height, 10, 10);
     g2.setComposite(AlphaComposite.SrcOver);
 
+    if (conflict) {
+      Icon warn = CONFLICT_ICON;
+      if (warn != null) {
+        int iconWidth = warn.getIconWidth();
+        int iconX = Math.max(x + 4, x + w - iconWidth - 6);
+        int iconY = y + 4;
+        warn.paintIcon(this, g2, iconX, iconY);
+      } else {
+        g2.setColor(new Color(219, 68, 55, 220));
+        g2.fillOval(x + w - 14, y + 6, 10, 10);
+      }
+    }
+
     g2.setColor(new Color(255, 255, 255, 160));
     g2.fillRect(x, y, 4, height);
     g2.fillRect(x + w - 4, y, 4, height);
@@ -1073,10 +1093,16 @@ public class PlanningPanel extends JPanel {
     }
     Instant s = instantForX(Math.min(t.x1, t.x2));
     Instant e = instantForX(Math.max(t.x1, t.x2));
-    String rId = resources.get(Math.max(0, Math.min(resources.size() - 1, t.row))).id();
-    for (Models.Intervention i : interventions) {
-      if (!i.resourceId().equals(rId) || i == t.i) continue;
-      if (i.end().isAfter(s) && i.start().isBefore(e)) return true;
+    for (Models.Intervention intervention : interventions) {
+      if (Objects.equals(intervention.id(), t.i.id())) {
+        continue;
+      }
+      if (!intervention.resourceIds().contains(resourceId)) {
+        continue;
+      }
+      if (intervention.end().isAfter(s) && intervention.start().isBefore(e)) {
+        return true;
+      }
     }
     return false;
   }
@@ -1152,7 +1178,8 @@ public class PlanningPanel extends JPanel {
             selected.title(),
             newStart,
             newEnd,
-            selected.notes());
+            selected.notes(),
+            selected.price());
     try {
       ensureAvailability(resource.id(), newStart, newEnd);
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1191,7 +1218,8 @@ public class PlanningPanel extends JPanel {
             selected.title(),
             selected.start(),
             selected.end(),
-            selected.notes());
+            selected.notes(),
+            selected.price());
     try {
       ensureAvailability(resource.id(), selected.start(), selected.end());
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1307,7 +1335,8 @@ public class PlanningPanel extends JPanel {
             original.title(),
             start,
             end,
-            original.notes());
+            original.notes(),
+            original.price());
     try {
       ensureAvailability(resource.id(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
@@ -1396,7 +1425,8 @@ public class PlanningPanel extends JPanel {
         it.title(),
         it.start(),
         it.end(),
-        it.notes());
+        it.notes(),
+        it.price());
   }
 
   private void pushUpdateHistory(String label, Models.Intervention before, Models.Intervention after) {
@@ -1441,7 +1471,8 @@ public class PlanningPanel extends JPanel {
             created.title(),
             created.start(),
             created.end(),
-            created.notes());
+            created.notes(),
+            created.price());
     String[] idRef = new String[] {created.id()};
     history.push(
         label,
@@ -1483,7 +1514,8 @@ public class PlanningPanel extends JPanel {
             removed.title(),
             removed.start(),
             removed.end(),
-            removed.notes());
+            removed.notes(),
+            removed.price());
     String[] idRef = new String[] {removed.id()};
     history.push(
         label,

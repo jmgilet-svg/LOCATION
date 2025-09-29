@@ -365,7 +365,10 @@ public class RestDataSource implements DataSourceProvider {
           java.time.Instant end = java.time.Instant.parse(intervention.path("end").asText());
           JsonNode notesNode = intervention.path("notes");
           String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
-          result.add(new Models.Intervention(id, agency, resources, client, driver, title, start, end, notes));
+          JsonNode priceNode = intervention.path("price");
+          Double price = priceNode.isMissingNode() || priceNode.isNull() ? null : priceNode.asDouble();
+          result.add(
+              new Models.Intervention(id, agency, resources, client, driver, title, start, end, notes, price));
         }
       }
       return result;
@@ -415,12 +418,19 @@ public class RestDataSource implements DataSourceProvider {
                 } else {
                   payload.putNull("notes");
                 }
+                if (intervention.price() != null) {
+                  payload.put("price", intervention.price());
+                } else {
+                  payload.putNull("price");
+                }
                 post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
                 return post;
               });
       String id = node.path("id").asText();
       JsonNode notesNode = node.path("notes");
       String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
+      JsonNode priceNode = node.path("price");
+      Double price = priceNode.isMissingNode() || priceNode.isNull() ? intervention.price() : priceNode.asDouble();
       return new Models.Intervention(
           id,
           intervention.agencyId(),
@@ -430,7 +440,8 @@ public class RestDataSource implements DataSourceProvider {
           intervention.title(),
           intervention.start(),
           intervention.end(),
-          notes);
+          notes,
+          price);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -479,6 +490,11 @@ public class RestDataSource implements DataSourceProvider {
                 } else {
                   payload.putNull("notes");
                 }
+                if (intervention.price() != null) {
+                  payload.put("price", intervention.price());
+                } else {
+                  payload.putNull("price");
+                }
                 put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
                 return put;
               });
@@ -495,7 +511,10 @@ public class RestDataSource implements DataSourceProvider {
           java.time.Instant.parse(node.path("end").asText()),
           node.path("notes").isMissingNode() || node.path("notes").isNull()
               ? null
-              : node.path("notes").asText());
+              : node.path("notes").asText(),
+          node.path("price").isMissingNode() || node.path("price").isNull()
+              ? null
+              : node.path("price").asDouble());
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

@@ -9,7 +9,6 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
@@ -130,106 +129,174 @@ public class MockDataSource implements DataSourceProvider {
         .put("INVOICE", new Models.DocTemplate("<h1>Facture {{docRef}}</h1>"));
 
     Models.ResourceType typeGrue =
-        saveResourceType(new Models.ResourceType(null, "Grue", "crane.svg"));
+        saveResourceType(new Models.ResourceType(null, "GRUE", "crane.svg"));
     Models.ResourceType typeCamion =
-        saveResourceType(new Models.ResourceType(null, "Camion", "truck.svg"));
+        saveResourceType(new Models.ResourceType(null, "CAMION", "truck.svg"));
     Models.ResourceType typeRemorque =
-        saveResourceType(new Models.ResourceType(null, "Remorque", "trailer.svg"));
+        saveResourceType(new Models.ResourceType(null, "REMORQUE", "trailer.svg"));
+    Models.ResourceType typeNacelle =
+        saveResourceType(new Models.ResourceType(null, "NACELLE", "nacelle.svg"));
+    Models.ResourceType typeChauffeur =
+        saveResourceType(new Models.ResourceType(null, "CHAUFFEUR", "driver.svg"));
 
-    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Alpha", "alpha@acme.tld"));
-    clients.add(new Models.Client(UUID.randomUUID().toString(), "Client Beta", "beta@acme.tld"));
+    clients.add(
+        new Models.Client(
+            UUID.randomUUID().toString(), "Chantier Alpha", "alpha@chantier.test"));
+    clients.add(
+        new Models.Client(
+            UUID.randomUUID().toString(), "Chantier Beta", "beta@chantier.test"));
 
-    drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Jean Dupont", "jean@loc.tld"));
-    drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Sophie Martin", "sophie@loc.tld"));
+    drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Jean Routier", "jean@loc.tld"));
+    drivers.add(new Models.Driver(UUID.randomUUID().toString(), "Alice Grutier", "alice@loc.tld"));
 
-    Models.Resource resGrue =
-        new Models.Resource(
-            UUID.randomUUID().toString(),
-            "Grue X",
-            "AB-123-CD",
-            0xFF4444,
-            a1.id(),
-            "grue,90t",
-            90);
-    Models.Resource resCamion =
-        new Models.Resource(
-            UUID.randomUUID().toString(),
-            "Camion Y",
-            "EF-456-GH",
-            0x44AA44,
-            a1.id(),
-            "camion,benne",
-            18);
-    Models.Resource resRemorque =
-        new Models.Resource(
-            UUID.randomUUID().toString(),
-            "Remorque Z",
-            "IJ-789-KL",
-            0x4444FF,
-            a2.id(),
-            "remorque,plateau",
-            10);
-    resources.add(resGrue);
-    resources.add(resCamion);
-    resources.add(resRemorque);
+    int[] palette = {0x4CAF50, 0xFF9800, 0x3F51B5, 0x009688, 0x9C27B0, 0x795548};
+    List<String> agencyIds = List.of(a1.id(), a2.id());
 
-    resourceTypeAssignments.put(resGrue.id(), typeGrue.id());
-    resourceTypeAssignments.put(resCamion.id(), typeCamion.id());
-    resourceTypeAssignments.put(resRemorque.id(), typeRemorque.id());
-    resourceDailyRates.put(resGrue.id(), 950.0);
-    resourceDailyRates.put(resCamion.id(), 520.0);
-    resourceDailyRates.put(resRemorque.id(), 310.0);
+    for (int i = 0; i < 6; i++) {
+      int height = 40 + 5 * i;
+      Models.Resource resource =
+          new Models.Resource(
+              UUID.randomUUID().toString(),
+              String.format("Grue %dm", height),
+              String.format("GR-%02d-%02d", 60 + i, 10 + i),
+              palette[i % palette.length],
+              agencyIds.get(i % agencyIds.size()),
+              String.format("grue,%dm", height),
+              height);
+      resources.add(resource);
+      resourceTypeAssignments.put(resource.id(), typeGrue.id());
+      resourceDailyRates.put(resource.id(), 700.0 + i * 80.0);
+    }
 
-    ZonedDateTime base =
-        ZonedDateTime.now(ZoneId.systemDefault()).withHour(9).withMinute(0).withSecond(0).withNano(0);
+    for (int i = 0; i < 6; i++) {
+      int tonnage = 10 + 2 * i;
+      Models.Resource resource =
+          new Models.Resource(
+              UUID.randomUUID().toString(),
+              String.format("Camion %dt", tonnage),
+              String.format("CA-%02d-%02d", 70 + i, 20 + i),
+              palette[(i + 1) % palette.length],
+              agencyIds.get((i + 1) % agencyIds.size()),
+              String.format("camion,%dt", tonnage),
+              tonnage);
+      resources.add(resource);
+      resourceTypeAssignments.put(resource.id(), typeCamion.id());
+      resourceDailyRates.put(resource.id(), 400.0 + i * 50.0);
+    }
 
-    addIntervention(
-        a1.id(),
-        resources.get(0).id(),
-        clients.get(0).id(),
-        drivers.get(0).id(),
-        "Livraison chantier",
-        base.plusDays(1).toInstant(),
-        base.plusDays(1).plusHours(2).toInstant(),
-        "Site A – prévoir EPI");
-    addIntervention(
-        a1.id(),
-        resources.get(1).id(),
-        clients.get(1).id(),
-        drivers.get(1).id(),
-        "Levage poutres",
-        base.plusDays(1).plusHours(3).toInstant(),
-        base.plusDays(1).plusHours(5).toInstant(),
-        null);
-    addIntervention(
-        a2.id(),
-        resources.get(2).id(),
-        clients.get(1).id(),
-        null,
-        "Transport matériel",
-        base.plusDays(2).toInstant(),
-        base.plusDays(2).plusHours(1).toInstant(),
-        "RDV à 7h30");
+    for (int i = 0; i < 6; i++) {
+      int length = 6 + i;
+      Models.Resource resource =
+          new Models.Resource(
+              UUID.randomUUID().toString(),
+              String.format("Remorque %dm", length),
+              String.format("RE-%02d-%02d", 80 + i, 30 + i),
+              palette[(i + 2) % palette.length],
+              agencyIds.get((i + 2) % agencyIds.size()),
+              String.format("remorque,%dm", length),
+              null);
+      resources.add(resource);
+      resourceTypeAssignments.put(resource.id(), typeRemorque.id());
+      resourceDailyRates.put(resource.id(), 120.0 + i * 20.0);
+    }
 
-    addUnavailability(
-        resources.get(0).id(),
-        "Maintenance",
-        base.plusDays(1).plusHours(6).toInstant(),
-        base.plusDays(1).plusHours(8).toInstant());
-    addUnavailability(
-        resources.get(1).id(),
-        "Panne hydraulique",
-        base.plusDays(1).minusHours(2).toInstant(),
-        base.plusDays(1).minusHours(1).toInstant());
+    for (int i = 0; i < 6; i++) {
+      int height = 10 + 2 * i;
+      Models.Resource resource =
+          new Models.Resource(
+              UUID.randomUUID().toString(),
+              String.format("Nacelle %dm", height),
+              String.format("NA-%02d-%02d", 90 + i, 40 + i),
+              palette[(i + 3) % palette.length],
+              agencyIds.get((i + 3) % agencyIds.size()),
+              String.format("nacelle,%dm", height),
+              null);
+      resources.add(resource);
+      resourceTypeAssignments.put(resource.id(), typeNacelle.id());
+      resourceDailyRates.put(resource.id(), 180.0 + i * 25.0);
+    }
 
-    recurring.add(
-        new Models.RecurringUnavailability(
-            UUID.randomUUID().toString(),
-            resources.get(0).id(),
-            DayOfWeek.MONDAY,
-            LocalTime.of(8, 0),
-            LocalTime.of(10, 0),
-            "Routine hebdo"));
+    for (int i = 0; i < 6; i++) {
+      Models.Resource resource =
+          new Models.Resource(
+              UUID.randomUUID().toString(),
+              String.format("Chauffeur %s", (char) ('A' + i)),
+              null,
+              palette[(i + 4) % palette.length],
+              agencyIds.get((i + 4) % agencyIds.size()),
+              "chauffeur",
+              null);
+      resources.add(resource);
+      resourceTypeAssignments.put(resource.id(), typeChauffeur.id());
+      resourceDailyRates.put(resource.id(), 250.0 + i * 15.0);
+    }
+
+    OffsetDateTime startRef =
+        LocalDate.now()
+            .atTime(9, 0)
+            .atZone(ZoneId.systemDefault())
+            .toOffsetDateTime();
+    String clientAlpha = clients.isEmpty() ? null : clients.get(0).id();
+    String clientBeta = clients.size() > 1 ? clients.get(1).id() : clientAlpha;
+    String driverA = drivers.isEmpty() ? null : drivers.get(0).id();
+    String driverB = drivers.size() > 1 ? drivers.get(1).id() : driverA;
+
+    if (!resources.isEmpty() && clientAlpha != null) {
+      String resA = resources.get(0).id();
+      String resB = resources.size() > 7 ? resources.get(7).id() : resA;
+      String resC = resources.size() > 13 ? resources.get(13).id() : resB;
+
+      interventions.add(
+          new Models.Intervention(
+              UUID.randomUUID().toString(),
+              a1.id(),
+              List.of(resA),
+              clientAlpha,
+              driverA,
+              "Assemblage",
+              startRef.toInstant(),
+              startRef.plusHours(2).toInstant(),
+              "Site A – prévoir EPI"));
+
+      if (clientBeta != null) {
+        interventions.add(
+            new Models.Intervention(
+                UUID.randomUUID().toString(),
+                a1.id(),
+                List.of(resB),
+                clientBeta,
+                driverB,
+                "Livraison",
+                startRef.plusHours(1).toInstant(),
+                startRef.plusHours(4).toInstant(),
+                "Livraison chantier"));
+      }
+
+      List<String> comboResources =
+          resC != null && !resC.equals(resA) ? List.of(resA, resC) : List.of(resA);
+      interventions.add(
+          new Models.Intervention(
+              UUID.randomUUID().toString(),
+              a1.id(),
+              comboResources,
+              clientAlpha,
+              driverA,
+              "Opération combinée",
+              startRef.plusHours(1).toInstant(),
+              startRef.plusHours(3).toInstant(),
+              "Chevauchement volontaire"));
+    }
+
+    if (!resources.isEmpty()) {
+      recurring.add(
+          new Models.RecurringUnavailability(
+              UUID.randomUUID().toString(),
+              resources.get(0).id(),
+              DayOfWeek.MONDAY,
+              LocalTime.of(12, 0),
+              LocalTime.of(14, 0),
+              "Maintenance hebdomadaire"));
+    }
 
     List<Models.DocLine> quoteLines = List.of(new Models.DocLine("Heures grue", 2.0, 120.0, 20.0));
     java.time.OffsetDateTime quoteDate = java.time.OffsetDateTime.now().minusDays(5);
@@ -404,19 +471,7 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public Models.Intervention createIntervention(Models.Intervention intervention) {
-    boolean overlap =
-        interventions.stream()
-            .anyMatch(
-                i ->
-                    conflicts(
-                        i,
-                        intervention.resourceIds(),
-                        intervention.driverId(),
-                        intervention.start(),
-                        intervention.end()));
-    if (overlap) {
-      throw new IllegalStateException("Conflit d'affectation (MOCK)");
-    }
+    // Les conflits d'affectation ne sont plus bloquants côté mock : ils sont indiqués visuellement
     boolean unavailable =
         intervention.resourceIds().stream()
             .anyMatch(
@@ -443,27 +498,15 @@ public class MockDataSource implements DataSourceProvider {
             intervention.title(),
             intervention.start(),
             intervention.end(),
-            intervention.notes());
+            intervention.notes(),
+            intervention.price());
     interventions.add(created);
     return created;
   }
 
   @Override
   public Models.Intervention updateIntervention(Models.Intervention intervention) {
-    boolean overlap =
-        interventions.stream()
-            .filter(i -> !i.id().equals(intervention.id()))
-            .anyMatch(
-                i ->
-                    conflicts(
-                        i,
-                        intervention.resourceIds(),
-                        intervention.driverId(),
-                        intervention.start(),
-                        intervention.end()));
-    if (overlap) {
-      throw new IllegalStateException("Conflit (MOCK) avec une autre intervention");
-    }
+    // Les chevauchements sont acceptés : les avertissements sont gérés dans l'interface
     boolean unavailable =
         intervention.resourceIds().stream()
             .anyMatch(
@@ -1062,9 +1105,19 @@ public class MockDataSource implements DataSourceProvider {
       Instant start,
       Instant end,
       String notes) {
+    Double price = resourceDailyRates.getOrDefault(resourceId, 0.0);
     interventions.add(
         new Models.Intervention(
-            UUID.randomUUID().toString(), agencyId, resourceId, clientId, driverId, title, start, end, notes));
+            UUID.randomUUID().toString(),
+            agencyId,
+            resourceId,
+            clientId,
+            driverId,
+            title,
+            start,
+            end,
+            notes,
+            price));
   }
 
   private void addUnavailability(String resourceId, String reason, Instant start, Instant end) {
