@@ -6,7 +6,7 @@ import java.util.List;
 public final class Models {
   private Models() {}
 
-  public record Agency(String id, String name) {}
+  public record Agency(String id, String name, String legalFooter, String iban, String logoDataUri) {}
 
   public record Client(
       String id,

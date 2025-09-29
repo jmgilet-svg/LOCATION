@@ -81,8 +81,20 @@ public class MockDataSource implements DataSourceProvider {
     docHtmlTemplates.clear();
     docs.clear();
 
-    var a1 = new Models.Agency(UUID.randomUUID().toString(), "Agence Nord");
-    var a2 = new Models.Agency(UUID.randomUUID().toString(), "Agence Sud");
+    var a1 =
+        new Models.Agency(
+            UUID.randomUUID().toString(),
+            "Agence Nord",
+            "Agence Nord — 10 rue du Test, 75000 Paris",
+            "FR76 1234 5678 9012 3456 7890 123",
+            null);
+    var a2 =
+        new Models.Agency(
+            UUID.randomUUID().toString(),
+            "Agence Sud",
+            "Agence Sud — 5 avenue de la Démo, 34000 Montpellier",
+            "FR76 9876 5432 1098 7654 3210 987",
+            null);
     agencies.add(a1);
     agencies.add(a2);
     currentAgencyId = a1.id();
@@ -348,6 +360,40 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public List<Models.Agency> listAgencies() {
     return List.copyOf(agencies);
+  }
+
+  @Override
+  public Models.Agency getAgency(String id) {
+    if (id == null || id.isBlank()) {
+      return null;
+    }
+    return agencies.stream().filter(a -> id.equals(a.id())).findFirst().orElse(null);
+  }
+
+  @Override
+  public Models.Agency saveAgency(Models.Agency agency) {
+    if (agency == null) {
+      throw new IllegalArgumentException("Agence requise");
+    }
+    String id = agency.id() == null || agency.id().isBlank() ? UUID.randomUUID().toString() : agency.id();
+    Models.Agency stored =
+        new Models.Agency(id, agency.name(), agency.legalFooter(), agency.iban(), agency.logoDataUri());
+    int idx = -1;
+    for (int i = 0; i < agencies.size(); i++) {
+      if (id.equals(agencies.get(i).id())) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx >= 0) {
+      agencies.set(idx, stored);
+    } else {
+      agencies.add(stored);
+    }
+    if (currentAgencyId == null || currentAgencyId.isBlank()) {
+      currentAgencyId = stored.id();
+    }
+    return stored;
   }
 
   @Override

@@ -189,7 +189,7 @@ public class TopBar extends JPanel {
 
       List<Models.Agency> agencies = planning.getAgencies();
       cbAgency.removeAllItems();
-      cbAgency.addItem(new Models.Agency(null, "(toutes agences)"));
+      cbAgency.addItem(new Models.Agency(null, "(toutes agences)", null, null, null));
       agencies.forEach(cbAgency::addItem);
       selectById(cbAgency, Models.Agency::id, agencyId);
 
