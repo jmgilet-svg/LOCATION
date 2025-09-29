@@ -637,6 +637,10 @@ public class PlanningPanel extends JPanel {
     return List.copyOf(conflicts);
   }
 
+  public int conflictCount() {
+    return conflicts == null ? 0 : conflicts.size();
+  }
+
   public Models.Intervention getSelected() {
     return selected;
   }

@@ -15,7 +15,7 @@ public final class IconLoader {
   }
 
   public static Icon resources() {
-    return svg("crane.svg");
+    return svg("toolbox.svg");
   }
 
   public static Icon drivers() {
@@ -23,11 +23,11 @@ public final class IconLoader {
   }
 
   public static Icon docs() {
-    return svg("file-text.svg");
+    return svg("docs.svg");
   }
 
   public static Icon unavailabilities() {
-    return svg("ban.svg");
+    return svg("pause.svg");
   }
 
   public static Icon reports() {
