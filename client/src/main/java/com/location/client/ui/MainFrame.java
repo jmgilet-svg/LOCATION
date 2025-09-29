@@ -1020,7 +1020,7 @@ public class MainFrame extends JFrame {
   }
 
   private void openDocuments() {
-    new DocumentsFrame(dsp).setVisible(true);
+    new DocumentsBrowserFrame(dsp).setVisible(true);
   }
 
   private void showPlaceholder(String feature) {

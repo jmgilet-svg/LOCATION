@@ -13,9 +13,16 @@ public interface DataSourceProvider extends AutoCloseable {
 
   List<Models.Agency> listAgencies();
 
-  Models.Agency getAgency(String id);
+  default Models.Agency getAgency(String id) {
+    if (id == null || id.isBlank()) {
+      return null;
+    }
+    return listAgencies().stream().filter(agency -> id.equals(agency.id())).findFirst().orElse(null);
+  }
 
-  Models.Agency saveAgency(Models.Agency agency);
+  default Models.Agency saveAgency(Models.Agency agency) {
+    throw new UnsupportedOperationException("saveAgency non disponible dans " + getLabel());
+  }
 
   List<Models.Client> listClients();
 

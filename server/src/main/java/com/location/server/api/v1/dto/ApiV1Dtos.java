@@ -20,61 +20,18 @@ import java.util.Locale;
 public final class ApiV1Dtos {
   private ApiV1Dtos() {}
 
-  public record AgencyDto(
-      String id, String name, String legalFooter, String iban, String logoDataUri) {
+  public record AgencyDto(String id, String name, String legalFooter, String iban, String logoDataUri) {
     public static AgencyDto of(Agency agency) {
-      return new AgencyDto(
-          agency.getId(),
-          agency.getName(),
-          agency.getLegalFooter(),
-          agency.getIban(),
-          encodeLogo(agency.getLogoPng()));
-    }
-
-    public void applyTo(Agency agency) {
-      if (name == null || name.isBlank()) {
-        throw new IllegalArgumentException("Nom d'agence requis");
-      }
-      agency.setName(name.trim());
-      agency.setLegalFooter(normalize(legalFooter));
-      agency.setIban(normalize(iban));
-      agency.setLogoPng(decodeLogo(logoDataUri));
-    }
-
-    private static String normalize(String value) {
-      return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private static String encodeLogo(byte[] bytes) {
-      if (bytes == null || bytes.length == 0) {
-        return null;
-      }
-      return "data:image/png;base64," + Base64.getEncoder().encodeToString(bytes);
-    }
-
-    private static byte[] decodeLogo(String dataUri) {
-      if (dataUri == null || dataUri.isBlank()) {
-        return null;
-      }
-      String trimmed = dataUri.trim();
-      String base64 = trimmed;
-      int commaIndex = trimmed.indexOf(',');
-      if (trimmed.startsWith("data:")) {
-        if (!trimmed.toLowerCase(Locale.ROOT).startsWith("data:image/png")) {
-          throw new IllegalArgumentException("Logo PNG invalide");
-        }
-        if (commaIndex < 0) {
-          throw new IllegalArgumentException("Logo PNG invalide");
-        }
-        base64 = trimmed.substring(commaIndex + 1);
-      }
-      try {
-        return Base64.getDecoder().decode(base64);
-      } catch (IllegalArgumentException ex) {
-        throw new IllegalArgumentException("Logo PNG invalide", ex);
-      }
+      return new AgencyDto(agency.getId(), agency.getName(), null, null, null);
     }
   }
+
+  public record SaveAgencyRequest(
+      String id,
+      @NotBlank @Size(max = 128) String name,
+      String legalFooter,
+      String iban,
+      String logoDataUri) {}
 
   public record ClientDto(
       String id,

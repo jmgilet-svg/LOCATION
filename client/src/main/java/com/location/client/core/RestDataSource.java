@@ -244,7 +244,13 @@ public class RestDataSource implements DataSourceProvider {
       List<Models.Agency> result = new ArrayList<>();
       if (node.isArray()) {
         for (JsonNode agency : node) {
-          result.add(parseAgency(agency));
+          result.add(
+              new Models.Agency(
+                  agency.path("id").asText(),
+                  agency.path("name").asText(),
+                  textOrNull(agency, "legalFooter"),
+                  textOrNull(agency, "iban"),
+                  textOrNull(agency, "logoDataUri")));
         }
       }
       return result;
@@ -260,9 +266,13 @@ public class RestDataSource implements DataSourceProvider {
     }
     try {
       ensureLogin();
-      JsonNode node =
-          executeForJson(() -> new HttpGet(baseUrl + "/api/v1/agencies/" + encodeSegment(id)));
-      return node == null ? null : parseAgency(node);
+      JsonNode node = executeForJson(() -> new HttpGet(baseUrl + "/api/v1/agencies/" + encodeSegment(id)));
+      return new Models.Agency(
+          node.path("id").asText(),
+          node.path("name").asText(),
+          textOrNull(node, "legalFooter"),
+          textOrNull(node, "iban"),
+          textOrNull(node, "logoDataUri"));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -273,31 +283,39 @@ public class RestDataSource implements DataSourceProvider {
     if (agency == null) {
       throw new IllegalArgumentException("Agence requise");
     }
+    String name = agency.name();
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Nom de l'agence requis");
+    }
     try {
       ensureLogin();
       ObjectNode payload = om.createObjectNode();
-      payload.put("name", agency.name());
-      putNullable(payload, "legalFooter", agency.legalFooter());
-      putNullable(payload, "iban", agency.iban());
-      putNullable(payload, "logoDataUri", agency.logoDataUri());
-      Supplier<HttpUriRequestBase> requestSupplier;
-      if (agency.id() == null || agency.id().isBlank()) {
-        requestSupplier =
-            () -> {
-              HttpPost post = new HttpPost(baseUrl + "/api/v1/agencies");
-              post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-              return post;
-            };
-      } else {
-        requestSupplier =
-            () -> {
-              HttpPut put = new HttpPut(baseUrl + "/api/v1/agencies/" + encodeSegment(agency.id()));
-              put.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
-              return put;
-            };
+      if (agency.id() != null && !agency.id().isBlank()) {
+        payload.put("id", agency.id());
       }
-      JsonNode node = executeForJson(requestSupplier);
-      return parseAgency(node);
+      payload.put("name", name);
+      if (agency.legalFooter() != null) {
+        payload.put("legalFooter", agency.legalFooter());
+      }
+      if (agency.iban() != null) {
+        payload.put("iban", agency.iban());
+      }
+      if (agency.logoDataUri() != null) {
+        payload.put("logoDataUri", agency.logoDataUri());
+      }
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v1/agencies");
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
+      return new Models.Agency(
+          node.path("id").asText(),
+          node.path("name").asText(),
+          textOrNull(node, "legalFooter"),
+          textOrNull(node, "iban"),
+          textOrNull(node, "logoDataUri"));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

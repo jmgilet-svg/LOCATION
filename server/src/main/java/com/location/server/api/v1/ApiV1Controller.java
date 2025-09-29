@@ -10,6 +10,7 @@ import com.location.server.api.v1.dto.ApiV1Dtos.ResourceDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.RecurringUnavailabilityDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.UnavailabilityDto;
 import com.location.server.api.v1.dto.ApiV1Dtos.UpdateInterventionRequest;
+import com.location.server.api.v1.dto.ApiV1Dtos.SaveAgencyRequest;
 import com.location.server.domain.Agency;
 import com.location.server.repo.AgencyRepository;
 import com.location.server.repo.ClientRepository;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -122,46 +124,27 @@ public class ApiV1Controller {
 
   @GetMapping("/agencies/{id}")
   public AgencyDto agency(@PathVariable String id) {
-    var agency =
-        agencyRepository
-            .findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-    return AgencyDto.of(agency);
+    return agencyRepository
+        .findById(id)
+        .map(AgencyDto::of)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agence introuvable"));
   }
 
   @PostMapping("/agencies")
-  public AgencyDto createAgency(@RequestBody AgencyDto request) {
-    if (request == null) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agence requise");
+  public AgencyDto saveAgency(@Valid @RequestBody SaveAgencyRequest request) {
+    Agency agency;
+    if (request.id() != null && !request.id().isBlank()) {
+      agency =
+          agencyRepository
+              .findById(request.id())
+              .orElseThrow(
+                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agence introuvable"));
+      agency.setName(request.name());
+    } else {
+      agency = new Agency(UUID.randomUUID().toString(), request.name());
     }
-    String id =
-        request.id() == null || request.id().isBlank() ? UUID.randomUUID().toString() : request.id();
-    Agency agency =
-        agencyRepository
-            .findById(id)
-            .orElseGet(() -> new Agency(id, request.name() == null ? "" : request.name()));
-    try {
-      request.applyTo(agency);
-    } catch (IllegalArgumentException ex) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
-    Agency saved = agencyRepository.save(agency);
-    return AgencyDto.of(saved);
-  }
-
-  @PutMapping("/agencies/{id}")
-  public AgencyDto updateAgency(@PathVariable String id, @RequestBody AgencyDto request) {
-    var agency =
-        agencyRepository
-            .findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-    try {
-      request.applyTo(agency);
-    } catch (IllegalArgumentException ex) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
-    Agency saved = agencyRepository.save(agency);
-    return AgencyDto.of(saved);
+    agencyRepository.save(agency);
+    return AgencyDto.of(agency);
   }
 
   @GetMapping("/clients")

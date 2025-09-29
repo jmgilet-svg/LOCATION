@@ -367,7 +367,7 @@ public class MockDataSource implements DataSourceProvider {
     if (id == null || id.isBlank()) {
       return null;
     }
-    return agencies.stream().filter(a -> id.equals(a.id())).findFirst().orElse(null);
+    return agencies.stream().filter(agency -> id.equals(agency.id())).findFirst().orElse(null);
   }
 
   @Override
@@ -375,24 +375,31 @@ public class MockDataSource implements DataSourceProvider {
     if (agency == null) {
       throw new IllegalArgumentException("Agence requise");
     }
-    String id = agency.id() == null || agency.id().isBlank() ? UUID.randomUUID().toString() : agency.id();
+    String name = agency.name();
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Nom de l'agence requis");
+    }
+    String id = agency.id();
+    if (id == null || id.isBlank()) {
+      id = UUID.randomUUID().toString();
+    }
     Models.Agency stored =
-        new Models.Agency(id, agency.name(), agency.legalFooter(), agency.iban(), agency.logoDataUri());
-    int idx = -1;
+        new Models.Agency(id, name, agency.legalFooter(), agency.iban(), agency.logoDataUri());
+    boolean replaced = false;
     for (int i = 0; i < agencies.size(); i++) {
-      if (id.equals(agencies.get(i).id())) {
-        idx = i;
+      if (agencies.get(i).id().equals(id)) {
+        agencies.set(i, stored);
+        replaced = true;
         break;
       }
     }
-    if (idx >= 0) {
-      agencies.set(idx, stored);
-    } else {
+    if (!replaced) {
       agencies.add(stored);
     }
-    if (currentAgencyId == null || currentAgencyId.isBlank()) {
-      currentAgencyId = stored.id();
-    }
+    agencyTemplates.computeIfAbsent(id, k -> new HashMap<>());
+    docSequences.computeIfAbsent(id, k -> new HashMap<>());
+    docTemplates.computeIfAbsent(id, k -> new HashMap<>());
+    docHtmlTemplates.computeIfAbsent(id, k -> new HashMap<>());
     return stored;
   }
 
