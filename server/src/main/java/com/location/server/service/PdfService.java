@@ -87,8 +87,8 @@ public class PdfService {
       return "";
     }
     StringBuilder builder = new StringBuilder(safe(client.getName()));
-    if (client.getBillingEmail() != null && !client.getBillingEmail().isBlank()) {
-      builder.append(" — ").append(client.getBillingEmail());
+    if (client.getEmail() != null && !client.getEmail().isBlank()) {
+      builder.append(" — ").append(client.getEmail());
     }
     return builder.toString();
   }

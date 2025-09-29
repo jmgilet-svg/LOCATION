@@ -37,7 +37,7 @@ public class ExportController {
   public ResponseEntity<byte[]> exportClientsCsv() {
     AgencyContext.require();
     StringBuilder csv =
-        new StringBuilder("id;name;billingEmail;billingAddress;billingZip;billingCity;vatNumber;iban\n");
+        new StringBuilder("id;name;email;phone;address;zip;city;vatNumber;iban\n");
     clientRepository
         .findAll()
         .forEach(
@@ -46,25 +46,15 @@ public class ExportController {
                     .append(';')
                     .append(sanitize(client.getName()))
                     .append(';')
-                    .append(
-                        client.getBillingEmail() == null
-                            ? ""
-                            : sanitize(client.getBillingEmail()))
+                    .append(client.getEmail() == null ? "" : sanitize(client.getEmail()))
                     .append(';')
-                    .append(
-                        client.getBillingAddress() == null
-                            ? ""
-                            : sanitize(client.getBillingAddress()))
+                    .append(client.getPhone() == null ? "" : sanitize(client.getPhone()))
                     .append(';')
-                    .append(
-                        client.getBillingZip() == null
-                            ? ""
-                            : sanitize(client.getBillingZip()))
+                    .append(client.getAddress() == null ? "" : sanitize(client.getAddress()))
                     .append(';')
-                    .append(
-                        client.getBillingCity() == null
-                            ? ""
-                            : sanitize(client.getBillingCity()))
+                    .append(client.getZip() == null ? "" : sanitize(client.getZip()))
+                    .append(';')
+                    .append(client.getCity() == null ? "" : sanitize(client.getCity()))
                     .append(';')
                     .append(client.getVatNumber() == null ? "" : sanitize(client.getVatNumber()))
                     .append(';')

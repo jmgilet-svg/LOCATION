@@ -16,16 +16,19 @@ public class Client {
   private String name;
 
   @Column(name = "billing_email", nullable = false, length = 160)
-  private String billingEmail;
+  private String email;
+
+  @Column(length = 50)
+  private String phone;
 
   @Column(name = "billing_address", length = 200)
-  private String billingAddress;
+  private String address;
 
   @Column(name = "billing_zip", length = 16)
-  private String billingZip;
+  private String zip;
 
   @Column(name = "billing_city", length = 120)
-  private String billingCity;
+  private String city;
 
   @Column(name = "vat_number", length = 32)
   private String vatNumber;
@@ -35,25 +38,27 @@ public class Client {
 
   protected Client() {}
 
-  public Client(String id, String name, String billingEmail) {
-    this(id, name, billingEmail, null, null, null, null, null);
+  public Client(String id, String name, String email) {
+    this(id, name, email, null, null, null, null, null, null);
   }
 
   public Client(
       String id,
       String name,
-      String billingEmail,
-      String billingAddress,
-      String billingZip,
-      String billingCity,
+      String email,
+      String phone,
+      String address,
+      String zip,
+      String city,
       String vatNumber,
       String iban) {
     this.id = id;
     this.name = name;
-    this.billingEmail = billingEmail;
-    this.billingAddress = billingAddress;
-    this.billingZip = billingZip;
-    this.billingCity = billingCity;
+    this.email = email;
+    this.phone = phone;
+    this.address = address;
+    this.zip = zip;
+    this.city = city;
     this.vatNumber = vatNumber;
     this.iban = iban;
   }
@@ -74,36 +79,44 @@ public class Client {
     this.name = name;
   }
 
-  public String getBillingEmail() {
-    return billingEmail;
+  public String getEmail() {
+    return email;
   }
 
-  public void setBillingEmail(String billingEmail) {
-    this.billingEmail = billingEmail;
+  public void setEmail(String email) {
+    this.email = email;
   }
 
-  public String getBillingAddress() {
-    return billingAddress;
+  public String getPhone() {
+    return phone;
   }
 
-  public void setBillingAddress(String billingAddress) {
-    this.billingAddress = billingAddress;
+  public void setPhone(String phone) {
+    this.phone = phone;
   }
 
-  public String getBillingZip() {
-    return billingZip;
+  public String getAddress() {
+    return address;
   }
 
-  public void setBillingZip(String billingZip) {
-    this.billingZip = billingZip;
+  public void setAddress(String address) {
+    this.address = address;
   }
 
-  public String getBillingCity() {
-    return billingCity;
+  public String getZip() {
+    return zip;
   }
 
-  public void setBillingCity(String billingCity) {
-    this.billingCity = billingCity;
+  public void setZip(String zip) {
+    this.zip = zip;
+  }
+
+  public String getCity() {
+    return city;
+  }
+
+  public void setCity(String city) {
+    this.city = city;
   }
 
   public String getVatNumber() {

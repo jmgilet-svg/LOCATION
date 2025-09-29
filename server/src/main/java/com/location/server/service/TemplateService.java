@@ -87,10 +87,10 @@ public class TemplateService {
     Map<String, String> bindings = new HashMap<>();
     bindings.put("agencyName", document.getAgency().getName());
     bindings.put("clientName", document.getClient().getName());
-    bindings.put("clientEmail", nullToEmpty(document.getClient().getBillingEmail()));
-    bindings.put("clientAddress", nullToEmpty(document.getClient().getBillingAddress()));
-    bindings.put("clientZip", nullToEmpty(document.getClient().getBillingZip()));
-    bindings.put("clientCity", nullToEmpty(document.getClient().getBillingCity()));
+    bindings.put("clientEmail", nullToEmpty(document.getClient().getEmail()));
+    bindings.put("clientAddress", nullToEmpty(document.getClient().getAddress()));
+    bindings.put("clientZip", nullToEmpty(document.getClient().getZip()));
+    bindings.put("clientCity", nullToEmpty(document.getClient().getCity()));
     bindings.put("clientVatNumber", nullToEmpty(document.getClient().getVatNumber()));
     bindings.put("clientIban", nullToEmpty(document.getClient().getIban()));
     bindings.put("docRef", nullToEmpty(document.getReference()));

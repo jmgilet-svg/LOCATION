@@ -26,6 +26,26 @@ public interface DataSourceProvider extends AutoCloseable {
 
   List<Models.Client> listClients();
 
+  default Models.Client saveClient(Models.Client client) {
+    throw new UnsupportedOperationException("saveClient non disponible dans " + getLabel());
+  }
+
+  default void deleteClient(String clientId) {
+    throw new UnsupportedOperationException("deleteClient non disponible dans " + getLabel());
+  }
+
+  default List<Models.Contact> listContacts(String clientId) {
+    return java.util.List.of();
+  }
+
+  default Models.Contact saveContact(Models.Contact contact) {
+    throw new UnsupportedOperationException("saveContact non disponible dans " + getLabel());
+  }
+
+  default void deleteContact(String contactId) {
+    throw new UnsupportedOperationException("deleteContact non disponible dans " + getLabel());
+  }
+
   String getCurrentAgencyId();
 
   void setCurrentAgencyId(String agencyId);
