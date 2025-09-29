@@ -1363,8 +1363,9 @@ public class MainFrame extends JFrame {
       toast("Ressources/Clients vides");
       return;
     }
-    Models.Resource defaultResource = resources.get(0);
-    Models.Client defaultClient = clients.get(0);
+    JComboBox<Models.Resource> cbR = new JComboBox<>(resources.toArray(new Models.Resource[0]));
+    JComboBox<Models.Client> cbC = new JComboBox<>(clients.toArray(new Models.Client[0]));
+    JTextField tfTitle = new JTextField("Nouvelle intervention", 24);
     Instant start = Instant.now().plus(Duration.ofHours(1));
     JTextField tfStart = new JTextField(start.toString());
     JTextField tfEnd = new JTextField(start.plus(Duration.ofHours(2)).toString());
@@ -1404,9 +1405,9 @@ public class MainFrame extends JFrame {
                     resource.id(),
                     client.id(),
                     null,
-                    tfTitle.getText(),
-                    Instant.parse(tfStart.getText()),
-                    Instant.parse(tfEnd.getText()),
+                    tfTitle.getText().trim(),
+                    Instant.parse(tfStart.getText().trim()),
+                    Instant.parse(tfEnd.getText().trim()),
                     null,
                     price));
         toastSuccess("Intervention créée");
