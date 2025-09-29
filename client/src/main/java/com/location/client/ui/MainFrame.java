@@ -733,10 +733,14 @@ public class MainFrame extends JFrame {
             }));
 
     JMenu tools = new JMenu("Outils");
+    JMenuItem newIntervention = new JMenuItem("Nouvelle intervention…");
+    newIntervention.addActionListener(e -> createInterventionDialog());
     JMenuItem generateData = new JMenuItem("Générer des interventions…");
     generateData.addActionListener(e -> new StressTestDialog(MainFrame.this, dsp, planning).setVisible(true));
     JMenuItem resourceColors = new JMenuItem("Couleurs des ressources…");
     resourceColors.addActionListener(e -> new ResourceColorDialog(MainFrame.this, dsp, planning).setVisible(true));
+    tools.add(newIntervention);
+    tools.addSeparator();
     tools.add(generateData);
     tools.add(resourceColors);
 
@@ -1355,52 +1359,32 @@ public class MainFrame extends JFrame {
       toast("Ressources/Clients vides");
       return;
     }
-    JComboBox<Models.Resource> cbR = new JComboBox<>(resources.toArray(new Models.Resource[0]));
-    JComboBox<Models.Client> cbC = new JComboBox<>(clients.toArray(new Models.Client[0]));
-    JTextField tfTitle = new JTextField("Nouvelle intervention");
+    Models.Resource defaultResource = resources.get(0);
+    Models.Client defaultClient = clients.get(0);
     Instant start = Instant.now().plus(Duration.ofHours(1));
-    JTextField tfStart = new JTextField(start.toString());
-    JTextField tfEnd = new JTextField(start.plus(Duration.ofHours(2)).toString());
-    JPanel panel = new JPanel(new GridLayout(0, 1, 6, 6));
-    panel.add(new JLabel("Ressource:"));
-    panel.add(cbR);
-    panel.add(new JLabel("Client:"));
-    panel.add(cbC);
-    panel.add(new JLabel("Titre:"));
-    panel.add(tfTitle);
-    panel.add(new JLabel("Début (ISO):"));
-    panel.add(tfStart);
-    panel.add(new JLabel("Fin (ISO):"));
-    panel.add(tfEnd);
-    int result = JOptionPane.showConfirmDialog(this, panel, "Créer une intervention", JOptionPane.OK_CANCEL_OPTION);
-    if (result == JOptionPane.OK_OPTION) {
-      Models.Resource resource = (Models.Resource) cbR.getSelectedItem();
-      Models.Client client = (Models.Client) cbC.getSelectedItem();
-      if (resource == null || client == null) {
-        error("Sélection invalide");
-        return;
-      }
-      try {
-        Models.Intervention created =
-            dsp.createIntervention(
-                new Models.Intervention(
-                    null,
-                    resource.agencyId(),
-                    resource.id(),
-                    client.id(),
-                    null,
-                    tfTitle.getText(),
-                    Instant.parse(tfStart.getText()),
-                    Instant.parse(tfEnd.getText()),
-                    null));
-        toastSuccess("Intervention créée");
-        ActivityCenter.log("Création intervention " + created.id());
-        planning.rememberCreation(created, "Création");
-        refreshData();
-      } catch (Exception ex) {
-        error(ex.getMessage());
-      }
-    }
+    Instant end = start.plus(Duration.ofHours(2));
+    Models.Intervention base =
+        new Models.Intervention(
+            null,
+            defaultResource.agencyId(),
+            defaultResource.id(),
+            defaultClient.id(),
+            null,
+            "Nouvelle intervention",
+            start,
+            end,
+            null);
+    new InterventionEditorDialog(
+            this,
+            dsp,
+            base,
+            saved -> {
+              if (saved != null) {
+                planning.rememberCreation(saved, "Création");
+                refreshData();
+              }
+            })
+        .setVisible(true);
   }
 
   private void createUnavailabilityDialog() {
