@@ -314,6 +314,7 @@ public class PlanningPanel extends JPanel {
       selected = created;
       reload();
       notifySuccess("Intervention créée", "Création intervention " + created.id());
+      maybeOfferQuote(created);
       pushCreationHistory("Création", created);
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
@@ -1455,6 +1456,48 @@ public class PlanningPanel extends JPanel {
           }
           reload();
         });
+  }
+
+  private void maybeOfferQuote(Models.Intervention created) {
+    if (created == null) {
+      return;
+    }
+    String clientId = created.clientId();
+    if (clientId == null || clientId.isBlank()) {
+      return;
+    }
+    java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+    int choice =
+        JOptionPane.showConfirmDialog(
+            window,
+            "Générer un devis pour cette intervention ?",
+            "Créer un devis",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.QUESTION_MESSAGE);
+    if (choice != JOptionPane.YES_OPTION) {
+      return;
+    }
+    try {
+      Models.Doc doc = dsp.createQuoteFromIntervention(created);
+      if (doc != null) {
+        notifySuccess("Devis généré", "Génération devis " + doc.id());
+        SwingUtilities.invokeLater(() -> new DocumentsFrame(dsp).setVisible(true));
+      }
+    } catch (UnsupportedOperationException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          window,
+          "La source de données ne permet pas de générer automatiquement un devis.",
+          "Fonctionnalité indisponible",
+          JOptionPane.INFORMATION_MESSAGE);
+    } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          window,
+          "Erreur lors de la génération du devis : " + ex.getMessage(),
+          "Erreur",
+          JOptionPane.ERROR_MESSAGE);
+    }
   }
 
   private void pushCreationHistory(String label, Models.Intervention created) {
