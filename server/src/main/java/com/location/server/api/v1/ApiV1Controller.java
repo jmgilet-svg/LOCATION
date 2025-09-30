@@ -346,6 +346,7 @@ public class ApiV1Controller {
             request.start(),
             request.end(),
             request.notes(),
+            request.internalNotes(),
             request.price()));
   }
 
@@ -363,6 +364,7 @@ public class ApiV1Controller {
             request.start(),
             request.end(),
             request.notes(),
+            request.internalNotes(),
             request.price()));
   }
 

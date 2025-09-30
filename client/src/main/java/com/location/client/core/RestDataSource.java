@@ -721,10 +721,26 @@ public class RestDataSource implements DataSourceProvider {
           java.time.Instant end = java.time.Instant.parse(intervention.path("end").asText());
           JsonNode notesNode = intervention.path("notes");
           String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
+          JsonNode internalNotesNode = intervention.path("internalNotes");
+          String internalNotes =
+              internalNotesNode.isMissingNode() || internalNotesNode.isNull()
+                  ? null
+                  : internalNotesNode.asText();
           JsonNode priceNode = intervention.path("price");
           Double price = priceNode.isMissingNode() || priceNode.isNull() ? null : priceNode.asDouble();
           result.add(
-              new Models.Intervention(id, agency, resources, client, driver, title, start, end, notes, price));
+              new Models.Intervention(
+                  id,
+                  agency,
+                  resources,
+                  client,
+                  driver,
+                  title,
+                  start,
+                  end,
+                  notes,
+                  internalNotes,
+                  price));
         }
       }
       return result;
@@ -774,6 +790,11 @@ public class RestDataSource implements DataSourceProvider {
                 } else {
                   payload.putNull("notes");
                 }
+                if (intervention.internalNotes() != null) {
+                  payload.put("internalNotes", intervention.internalNotes());
+                } else {
+                  payload.putNull("internalNotes");
+                }
                 if (intervention.price() != null) {
                   payload.put("price", intervention.price());
                 } else {
@@ -785,8 +806,14 @@ public class RestDataSource implements DataSourceProvider {
       String id = node.path("id").asText();
       JsonNode notesNode = node.path("notes");
       String notes = notesNode.isMissingNode() || notesNode.isNull() ? null : notesNode.asText();
+      JsonNode internalNotesNode = node.path("internalNotes");
+      String internalNotes =
+          internalNotesNode.isMissingNode() || internalNotesNode.isNull()
+              ? intervention.internalNotes()
+              : internalNotesNode.asText();
       JsonNode priceNode = node.path("price");
-      Double price = priceNode.isMissingNode() || priceNode.isNull() ? intervention.price() : priceNode.asDouble();
+      Double price =
+          priceNode.isMissingNode() || priceNode.isNull() ? intervention.price() : priceNode.asDouble();
       return new Models.Intervention(
           id,
           intervention.agencyId(),
@@ -797,6 +824,7 @@ public class RestDataSource implements DataSourceProvider {
           intervention.start(),
           intervention.end(),
           notes,
+          internalNotes,
           price);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -846,6 +874,11 @@ public class RestDataSource implements DataSourceProvider {
                 } else {
                   payload.putNull("notes");
                 }
+                if (intervention.internalNotes() != null) {
+                  payload.put("internalNotes", intervention.internalNotes());
+                } else {
+                  payload.putNull("internalNotes");
+                }
                 if (intervention.price() != null) {
                   payload.put("price", intervention.price());
                 } else {
@@ -868,6 +901,9 @@ public class RestDataSource implements DataSourceProvider {
           node.path("notes").isMissingNode() || node.path("notes").isNull()
               ? null
               : node.path("notes").asText(),
+          node.path("internalNotes").isMissingNode() || node.path("internalNotes").isNull()
+              ? null
+              : node.path("internalNotes").asText(),
           node.path("price").isMissingNode() || node.path("price").isNull()
               ? null
               : node.path("price").asDouble());
