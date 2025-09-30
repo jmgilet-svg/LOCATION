@@ -88,15 +88,23 @@ public class TemplateService {
     bindings.put("agencyName", document.getAgency().getName());
     bindings.put("clientName", document.getClient().getName());
     bindings.put("clientEmail", nullToEmpty(document.getClient().getEmail()));
+    bindings.put("clientPhone", nullToEmpty(document.getClient().getPhone()));
     bindings.put("clientAddress", nullToEmpty(document.getClient().getAddress()));
     bindings.put("clientZip", nullToEmpty(document.getClient().getZip()));
     bindings.put("clientCity", nullToEmpty(document.getClient().getCity()));
     bindings.put("clientVatNumber", nullToEmpty(document.getClient().getVatNumber()));
     bindings.put("clientIban", nullToEmpty(document.getClient().getIban()));
+    bindings.put("agencyLegalFooter", nullToEmpty(document.getAgency().getLegalFooter()));
+    bindings.put("agencyIban", nullToEmpty(document.getAgency().getIban()));
     bindings.put("docRef", nullToEmpty(document.getReference()));
     bindings.put("docTitle", nullToEmpty(document.getTitle()));
     bindings.put("docType", document.getType().name());
+    bindings.put("docStatus", document.getStatus().name());
     bindings.put("docDate", document.getDate() == null ? "" : document.getDate().toLocalDate().toString());
+    bindings.put("docDelivered", Boolean.toString(document.isDelivered()));
+    bindings.put("docPaid", Boolean.toString(document.isPaid()));
+    bindings.put("totalHt", document.getTotalHt().toPlainString());
+    bindings.put("totalVat", document.getTotalVat().toPlainString());
     bindings.put("totalTtc", document.getTotalTtc().toPlainString());
     return bindings;
   }
