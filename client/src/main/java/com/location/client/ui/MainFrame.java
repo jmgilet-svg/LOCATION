@@ -532,6 +532,8 @@ public class MainFrame extends JFrame {
     exportIcs.addActionListener(e -> exportPlanningDayIcsDialog());
     JMenuItem exportPng = new JMenuItem("Export PNG (Planning)");
     exportPng.addActionListener(e -> exportPlanningPngDialog());
+    JMenuItem exportPlanningPdf = new JMenuItem("Export PDF (Planning complet)");
+    exportPlanningPdf.addActionListener(e -> exportPlanningPdfFullDialog());
     JMenuItem exportCsvRest = new JMenuItem("Exporter CSV (serveur REST)");
     exportCsvRest.addActionListener(e -> exportCsvRest());
     JMenuItem exportGeneral =
@@ -555,6 +557,7 @@ public class MainFrame extends JFrame {
     file.add(exportClientsCsv);
     file.add(exportIcs);
     file.add(exportPng);
+    file.add(exportPlanningPdf);
     file.addSeparator();
     file.add(exportCsvRest);
     file.add(exportGeneral);
@@ -1334,6 +1337,15 @@ public class MainFrame extends JFrame {
     return path;
   }
 
+  private Path ensurePdfExtension(File file) {
+    Path path = file.toPath();
+    String name = path.getFileName().toString();
+    if (!name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+      return path.resolveSibling(name + ".pdf");
+    }
+    return path;
+  }
+
   private Path ensurePngExtension(File file) {
     Path path = file.toPath();
     String name = path.getFileName().toString();
@@ -1788,6 +1800,40 @@ public class MainFrame extends JFrame {
   public void toastSuccess(String message) {
     status.setText(message);
     Toast.success(this, message);
+  }
+
+  private void exportPlanningPdfFullDialog() {
+    if (!(dsp instanceof RestDataSource rd)) {
+      error("Export PDF complet nécessite le mode REST");
+      return;
+    }
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Export PDF (planning complet)");
+    if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+    Path target = ensurePdfExtension(chooser.getSelectedFile());
+    Path tmp = null;
+    try {
+      int width = Math.max(800, planning.getWidth());
+      int height = planning.computeTotalHeight();
+      tmp = Files.createTempFile("planning-full-", ".png");
+      ImageExport.exportComponentSized(planning, width, height, tmp);
+      String title =
+          "Planning " + topBar.getFrom().toLocalDate() + " → " + topBar.getTo().toLocalDate();
+      rd.uploadPlanningPngForPdf(tmp, title, target);
+      toastSuccess("PDF exporté: " + target.getFileName());
+    } catch (Exception ex) {
+      error("Export PDF complet → " + ex.getMessage());
+    } finally {
+      if (tmp != null) {
+        try {
+          Files.deleteIfExists(tmp);
+        } catch (IOException ignore) {
+          // best effort cleanup
+        }
+      }
+    }
   }
 
   private void error(String message) {

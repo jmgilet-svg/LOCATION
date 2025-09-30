@@ -6,10 +6,12 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -21,9 +23,11 @@ import java.util.function.Supplier;
 import org.apache.hc.client5.http.classic.methods.HttpDelete;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
 import org.apache.hc.client5.http.classic.methods.HttpPut;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ContentType;
@@ -2037,5 +2041,33 @@ public class RestDataSource implements DataSourceProvider {
   @Override
   public void close() throws Exception {
     http.close();
+  }
+
+  public void uploadPlanningPngForPdf(Path png, String title, Path targetPdf) throws IOException {
+    String url = baseUrl + "/api/v1/planning/pdf";
+    HttpPost post = new HttpPost(url);
+    applyHeaders(post);
+    byte[] bytes = Files.readAllBytes(png);
+    MultipartEntityBuilder builder =
+        MultipartEntityBuilder.create()
+            .setCharset(StandardCharsets.UTF_8)
+            .addBinaryBody("image", bytes, ContentType.IMAGE_PNG, png.getFileName().toString());
+    if (title != null && !title.isBlank()) {
+      builder.addTextBody("title", title, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    }
+    post.setEntity(builder.build());
+    try (CloseableHttpResponse response = http.execute(post)) {
+      int statusCode = response.getCode();
+      if (statusCode != 200) {
+        throw new IOException("HTTP " + statusCode);
+      }
+      HttpEntity entity = response.getEntity();
+      if (entity == null) {
+        throw new IOException("Réponse vide");
+      }
+      try (InputStream in = entity.getContent()) {
+        Files.copy(in, targetPdf, StandardCopyOption.REPLACE_EXISTING);
+      }
+    }
   }
 }
