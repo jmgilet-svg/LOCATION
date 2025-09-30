@@ -14,6 +14,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.FontMetrics;
 import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -99,6 +100,8 @@ public class PlanningPanel extends JPanel {
   private boolean dragResizeLeft;
   private boolean dragResizeRight;
   private Models.Intervention selected;
+  private int hoverRow = -1;
+  private String hoverTileKey;
   private boolean weekMode;
   private String flashingInterventionId;
   private double flashingPhase;
@@ -211,6 +214,14 @@ public class PlanningPanel extends JPanel {
             createAt(e.getPoint());
           }
         }
+      }
+
+      @Override
+      public void mouseExited(MouseEvent e) {
+        hoverRow = -1;
+        hoverTileKey = null;
+        repaint();
+        setCursor(Cursor.getDefaultCursor());
       }
     };
     addMouseListener(adapter);
@@ -783,10 +794,16 @@ public class PlanningPanel extends JPanel {
     g2.setColor(new Color(250, 250, 255));
     g2.fillRect(0, 0, TIME_W, h);
     g2.setColor(new Color(245, 245, 245));
-   g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), HEADER_H);
-   g2.setColor(Color.GRAY);
-   g2.drawLine(0, HEADER_H, w, HEADER_H);
-   g2.drawLine(TIME_W, 0, TIME_W, h);
+    if (hoverRow >= 0) {
+      int hy = HEADER_H + hoverRow * ROW_H;
+      g2.setColor(new Color(100, 149, 237, 28));
+      g2.fillRect(TIME_W, hy, Math.max(0, w - TIME_W), ROW_H);
+      g2.setColor(new Color(245, 245, 245));
+    }
+    g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), HEADER_H);
+    g2.setColor(Color.GRAY);
+    g2.drawLine(0, HEADER_H, w, HEADER_H);
+    g2.drawLine(TIME_W, 0, TIME_W, h);
 
     paintHeatmap(g2, viewDays, dayWidth, h);
 
@@ -1039,6 +1056,9 @@ public class PlanningPanel extends JPanel {
     }
     g2.setColor(conflict ? new Color(219, 68, 55, 200) : new Color(0, 0, 0, 80));
     g2.drawRoundRect(x, y, w, height, 10, 10);
+    if (hoverTileKey != null && hoverTileKey.equals(tileKey(t))) {
+      paintHoverGlow(g2, x, y, w, height);
+    }
     g2.setComposite(AlphaComposite.SrcOver);
 
     if (conflict) {
@@ -1067,7 +1087,7 @@ public class PlanningPanel extends JPanel {
 
     g2.setColor(Color.WHITE);
     g2.setFont(getFont().deriveFont(Font.BOLD));
-    g2.drawString(t.i.title(), x + 8, y + 18);
+    drawWrapped(g2, t.i.title(), x + 8, y + 4, Math.max(8, w - 16), Math.max(12, height - 16));
   }
 
   private void paintHatched(Graphics2D g2, int x, int y, int width, int height, boolean recurring) {
@@ -1245,7 +1265,19 @@ public class PlanningPanel extends JPanel {
   }
 
   private void updateCursor(Point p) {
-    Optional<Tile> ot = findTileAt(p);
+    int newHoverRow = (p.y - HEADER_H) / ROW_H;
+    if (p.y < HEADER_H || p.x < TIME_W || newHoverRow < 0 || newHoverRow >= resources.size()) {
+      newHoverRow = -1;
+    }
+    Optional<Tile> otHover = findTileAt(p);
+    String newHoverTileKey = otHover.map(this::tileKey).orElse(null);
+    if (newHoverRow != hoverRow || !Objects.equals(newHoverTileKey, hoverTileKey)) {
+      hoverRow = newHoverRow;
+      hoverTileKey = newHoverTileKey;
+      repaint();
+    }
+
+    Optional<Tile> ot = otHover;
     if (ot.isEmpty()) {
       setCursor(Cursor.getDefaultCursor());
       return;
@@ -1645,6 +1677,74 @@ public class PlanningPanel extends JPanel {
       }
       throw ex;
     }
+  }
+
+  private String tileKey(Tile t) {
+    if (t == null || t.i == null) {
+      return null;
+    }
+    String id = t.i.id();
+    if (id != null) {
+      return id;
+    }
+    String resource = t.i.resourceId() == null ? "" : t.i.resourceId();
+    String start = t.i.start() == null ? "" : t.i.start().toString();
+    String end = t.i.end() == null ? "" : t.i.end().toString();
+    return resource + "|" + start + "|" + end;
+  }
+
+  private void drawWrapped(Graphics2D g2, String text, int x, int y, int maxWidth, int maxHeight) {
+    if (text == null || text.isBlank()) {
+      return;
+    }
+    FontMetrics fm = g2.getFontMetrics();
+    int lineHeight = fm.getHeight();
+    int availableLines = Math.max(1, maxHeight / lineHeight);
+    List<String> lines = new ArrayList<>();
+    String[] words = text.split("\\s+");
+    StringBuilder line = new StringBuilder();
+    for (String w : words) {
+      String candidate = line.length() == 0 ? w : line + " " + w;
+      if (fm.stringWidth(candidate) <= maxWidth) {
+        line.setLength(0);
+        line.append(candidate);
+      } else {
+        if (line.length() > 0) {
+          lines.add(line.toString());
+          line.setLength(0);
+          line.append(w);
+        } else {
+          lines.add(w);
+          line.setLength(0);
+        }
+      }
+    }
+    if (line.length() > 0) {
+      lines.add(line.toString());
+    }
+    boolean ellipsis = lines.size() > availableLines;
+    int toDraw = Math.min(availableLines, lines.size());
+    int baseline = y + fm.getAscent();
+    for (int i = 0; i < toDraw; i++) {
+      String s = lines.get(i);
+      if (ellipsis && i == toDraw - 1) {
+        while (fm.stringWidth(s + "…") > maxWidth && s.length() > 1) {
+          s = s.substring(0, s.length() - 1);
+        }
+        s = s + "…";
+      }
+      g2.drawString(s, x, baseline + i * lineHeight);
+    }
+  }
+
+  private void paintHoverGlow(Graphics2D g2, int x, int y, int w, int h) {
+    Stroke old = g2.getStroke();
+    for (int r = 0; r < 3; r++) {
+      g2.setColor(new Color(255, 255, 255, 60 - r * 15));
+      g2.setStroke(new BasicStroke(2 + r * 2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      g2.drawRoundRect(x - r, y - r, w + 2 * r, h + 2 * r, 12, 12);
+    }
+    g2.setStroke(old);
   }
 
   private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {
