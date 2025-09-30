@@ -2,6 +2,8 @@ package com.location.client.ui;
 
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
+import com.location.client.ui.uikit.TableUtils;
+import com.location.client.ui.uikit.Toasts;
 
 import java.awt.BorderLayout;
 import java.awt.Desktop;
@@ -31,7 +33,6 @@ import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
-import com.location.client.ui.uikit.Toasts;
 
 /** Administration des clients & contacts. */
 public class ClientsAdminFrame extends JFrame {
@@ -79,6 +80,7 @@ public class ClientsAdminFrame extends JFrame {
 
   private ClientsAdminFrame(DataSourceProvider dsp, boolean forEmbedding) {
     super("Clients — Administration");
+    TableUtils.applySearch(listTable, tfSearch, 250);
     this.dsp = dsp;
     setLayout(new BorderLayout(8, 8));
 
@@ -305,23 +307,26 @@ public class ClientsAdminFrame extends JFrame {
   }
 
   private void refreshList() {
-    String query = tfSearch.getText().trim().toLowerCase();
     String selectedId = current == null ? null : current.id();
     listModel.setRowCount(0);
     listData.clear();
     List<Models.Client> clients = new ArrayList<>(dsp.listClients());
     clients.sort(Comparator.comparing(Models.Client::name, String.CASE_INSENSITIVE_ORDER));
     for (Models.Client client : clients) {
-      if (matchesQuery(client, query)) {
-        listData.add(client);
-        listModel.addRow(new Object[] {client.name(), client.email(), client.phone(), client.city()});
-      }
+      listData.add(client);
+      listModel.addRow(new Object[] {client.name(), client.email(), client.phone(), client.city()});
     }
     if (selectedId != null) {
       for (int i = 0; i < listData.size(); i++) {
         if (Objects.equals(listData.get(i).id(), selectedId)) {
-          final int row = i;
-          SwingUtilities.invokeLater(() -> listTable.setRowSelectionInterval(row, row));
+          final int modelRow = i;
+          SwingUtilities.invokeLater(
+              () -> {
+                int viewRow = listTable.convertRowIndexToView(modelRow);
+                if (viewRow >= 0) {
+                  listTable.setRowSelectionInterval(viewRow, viewRow);
+                }
+              });
           return;
         }
       }
@@ -331,22 +336,16 @@ public class ClientsAdminFrame extends JFrame {
     }
   }
 
-  private boolean matchesQuery(Models.Client client, String query) {
-    if (query.isEmpty()) {
-      return true;
-    }
-    return (client.name() != null && client.name().toLowerCase().contains(query))
-        || (client.phone() != null && client.phone().toLowerCase().contains(query))
-        || (client.city() != null && client.city().toLowerCase().contains(query))
-        || (client.email() != null && client.email().toLowerCase().contains(query));
-  }
-
   private void loadSelected() {
     int row = listTable.getSelectedRow();
-    if (row < 0 || row >= listData.size()) {
+    if (row < 0) {
       return;
     }
-    Models.Client selected = listData.get(row);
+    int modelRow = listTable.convertRowIndexToModel(row);
+    if (modelRow < 0 || modelRow >= listData.size()) {
+      return;
+    }
+    Models.Client selected = listData.get(modelRow);
     current = selected;
     tfName.setText(selected.name() == null ? "" : selected.name());
     tfEmail.setText(selected.email() == null ? "" : selected.email());
