@@ -34,6 +34,11 @@ import javax.swing.table.DefaultTableModel;
 
 /** Administration des clients & contacts. */
 public class ClientsAdminFrame extends JFrame {
+  public static JPanel createContent(DataSourceProvider dsp) {
+    ClientsAdminFrame tmp = new ClientsAdminFrame(dsp, true);
+    return (JPanel) tmp.getContentPane();
+  }
+
   private final DataSourceProvider dsp;
 
   private final DefaultTableModel listModel =
@@ -68,6 +73,10 @@ public class ClientsAdminFrame extends JFrame {
   private final List<Models.Contact> contactData = new ArrayList<>();
 
   public ClientsAdminFrame(DataSourceProvider dsp) {
+    this(dsp, false);
+  }
+
+  private ClientsAdminFrame(DataSourceProvider dsp, boolean forEmbedding) {
     super("Clients — Administration");
     this.dsp = dsp;
     setLayout(new BorderLayout(8, 8));
@@ -137,7 +146,9 @@ public class ClientsAdminFrame extends JFrame {
             });
 
     setSize(1000, 620);
-    setLocationRelativeTo(null);
+    if (!forEmbedding) {
+      setLocationRelativeTo(null);
+    }
 
     refreshList();
   }

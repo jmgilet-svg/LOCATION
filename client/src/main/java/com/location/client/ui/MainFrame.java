@@ -36,6 +36,9 @@ public class MainFrame extends JFrame {
   private final Preferences prefs;
   private final PlanningPanel planning;
   private final PlanningMinimap minimap;
+  private final JPanel centerCards = new JPanel(new java.awt.CardLayout());
+  private JPanel clientsPanel;
+  private JPanel unavPanel;
   private final TopBar topBar;
   private final Sidebar sidebar;
   private final JToolBar selectionBar = new JToolBar();
@@ -124,6 +127,8 @@ public class MainFrame extends JFrame {
     JPanel planningContainer = new JPanel(new BorderLayout());
     planningContainer.add(planning, BorderLayout.CENTER);
     planningContainer.add(minimap, BorderLayout.SOUTH);
+
+    centerCards.add(planningContainer, "planning");
     SuggestionPanel suggestionPanel = new SuggestionPanel(dsp);
     suggestionPanel.setHours(planning.getStartHour(), planning.getEndHour());
     suggestionPanel.setAfterApply(planning::reload);
@@ -183,9 +188,10 @@ public class MainFrame extends JFrame {
           prefs.setDayIso(planning.getDay().toString());
           prefs.save();
         });
-    add(planningContainer, BorderLayout.CENTER);
+    add(centerCards, BorderLayout.CENTER);
     add(suggestionPanel, BorderLayout.EAST);
     sidebar.setSelected("planning");
+    showCard("planning");
     registerNavigationShortcuts();
     startBadgeTimer();
     JPanel south = new JPanel(new BorderLayout());
@@ -953,28 +959,45 @@ public class MainFrame extends JFrame {
 
   private void handleNavigation(String target) {
     switch (target) {
-      case "planning" -> sidebar.setSelected("planning");
+      case "planning" -> {
+        sidebar.setSelected("planning");
+        showCard("planning");
+      }
       case "docs" -> {
         openDocuments();
         sidebar.setSelected("planning");
+        showCard("planning");
       }
       case "clients" -> {
-        new ClientsAdminFrame(dsp).setVisible(true);
-        sidebar.setSelected("planning");
+        if (clientsPanel == null) {
+          clientsPanel = ClientsAdminFrame.createContent(dsp);
+          centerCards.add(clientsPanel, "clients");
+        }
+        sidebar.setSelected("clients");
+        showCard("clients");
       }
       case "resources" -> {
         showPlaceholder("Ressources");
         sidebar.setSelected("planning");
+        showCard("planning");
       }
       case "drivers" -> {
         showPlaceholder("Chauffeurs");
         sidebar.setSelected("planning");
+        showCard("planning");
       }
       case "unav" -> {
-        showPlaceholder("Indisponibilités");
-        sidebar.setSelected("planning");
+        if (unavPanel == null) {
+          unavPanel = UnavailabilityFrame.createContent(dsp);
+          centerCards.add(unavPanel, "unav");
+        }
+        sidebar.setSelected("unav");
+        showCard("unav");
       }
-      default -> sidebar.setSelected("planning");
+      default -> {
+        sidebar.setSelected("planning");
+        showCard("planning");
+      }
     }
   }
 
@@ -1101,6 +1124,11 @@ public class MainFrame extends JFrame {
         feature + " — module en préparation",
         "Navigation",
         JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private void showCard(String id) {
+    java.awt.CardLayout layout = (java.awt.CardLayout) centerCards.getLayout();
+    layout.show(centerCards, id);
   }
 
   private void exportPlanningDayCsvDialog() {
