@@ -145,6 +145,38 @@ public interface DataSourceProvider extends AutoCloseable {
 
   Models.DocTemplate saveDocTemplate(String docType, String html);
 
+  default java.util.List<Models.Template> listTemplates() {
+    return listTemplates(null);
+  }
+
+  default java.util.List<Models.Template> listTemplates(Models.TemplateKind kind) {
+    throw new UnsupportedOperationException("listTemplates non disponible dans " + getLabel());
+  }
+
+  default Models.Template saveTemplate(Models.Template template) {
+    throw new UnsupportedOperationException("saveTemplate non disponible dans " + getLabel());
+  }
+
+  default void deleteTemplate(String templateId) {
+    throw new UnsupportedOperationException("deleteTemplate non disponible dans " + getLabel());
+  }
+
+  default void sendEmail(
+      java.util.List<String> to,
+      java.util.List<String> cc,
+      java.util.List<String> bcc,
+      String subject,
+      String html) {
+    throw new UnsupportedOperationException("sendEmail non disponible dans " + getLabel());
+  }
+
+  default void sendEmail(String to, String subject, String html) {
+    if (to == null || to.isBlank()) {
+      throw new IllegalArgumentException("Destinataire requis");
+    }
+    sendEmail(java.util.List.of(to), java.util.List.of(), java.util.List.of(), subject, html);
+  }
+
   default void emailDocsBatch(
       java.util.List<String> ids, String to, String subject, String message) {
     emailDocsBatch(ids, to, subject, message, true);
