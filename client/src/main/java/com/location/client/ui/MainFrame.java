@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Enumeration;
@@ -414,9 +415,9 @@ public class MainFrame extends JFrame {
                 deleteSelected();
               }
             });
-    getRootPane()
-        .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-        .put(KeyStroke.getKeyStroke("control K"), "commandPalette");
+    InputMap paletteInput = getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    paletteInput.put(KeyStroke.getKeyStroke("control K"), "commandPalette");
+    paletteInput.put(KeyStroke.getKeyStroke("meta K"), "commandPalette");
     getRootPane()
         .getActionMap()
         .put(
@@ -1125,23 +1126,66 @@ public class MainFrame extends JFrame {
 
   private void openCommandPalette() {
     CommandPaletteDialog dialog =
-        new CommandPaletteDialog(this)
-            .commands(
-                new CommandPaletteDialog.Command(
-                    "planning", "Aller au planning", () -> handleNavigation("planning")),
-                new CommandPaletteDialog.Command(
-                    "docs", "Ouvrir les documents", () -> handleNavigation("docs")),
-                new CommandPaletteDialog.Command(
-                    "new-intervention",
-                    "Nouvelle intervention",
-                    this::createInterventionDialog),
-                new CommandPaletteDialog.Command(
-                    "global-search", "Recherche globale", this::openGlobalSearch),
-                new CommandPaletteDialog.Command(
-                    "theme-light", "Thème clair", () -> Theme.apply(Theme.Mode.LIGHT)),
-                new CommandPaletteDialog.Command(
-                    "theme-dark", "Thème sombre", () -> Theme.apply(Theme.Mode.DARK)));
+        new CommandPaletteDialog(this).commands(buildCommandPaletteCommands());
     dialog.setVisible(true);
+  }
+
+  private CommandPaletteDialog.Command[] buildCommandPaletteCommands() {
+    List<CommandPaletteDialog.Command> commands = new ArrayList<>();
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning", "Aller au planning", () -> handleNavigation("planning")));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "docs", "Ouvrir les documents", () -> handleNavigation("docs")));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "new-intervention",
+            "Nouvelle intervention",
+            this::createInterventionDialog));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "global-search", "Recherche globale", this::openGlobalSearch));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning-today",
+            "Aller à aujourd'hui",
+            () -> {
+              planning.setDay(LocalDate.now());
+              planning.reload();
+            }));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning-next-conflict", "Planning: prochain conflit", planning::nextConflict));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning-prev-conflict", "Planning: conflit précédent", planning::prevConflict));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning-only-conflicts",
+            "Planning: afficher uniquement les conflits",
+            () -> planning.setFilterOnlyConflicts(true)));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning-all",
+            "Planning: afficher tous",
+            () -> planning.setFilterOnlyConflicts(false)));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "export-png-view", "Export PNG (vue)", this::exportPlanningPngDialog));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "export-png-full", "Export PNG (complet)", this::exportPlanningPngFullDialog));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "export-pdf-full", "Export PDF (complet)", this::exportPlanningPdfFullDialog));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "theme-light", "Thème clair", () -> Theme.apply(Theme.Mode.LIGHT)));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "theme-dark", "Thème sombre", () -> Theme.apply(Theme.Mode.DARK)));
+    return commands.toArray(new CommandPaletteDialog.Command[0]);
   }
 
   private void openGlobalSearch() {
