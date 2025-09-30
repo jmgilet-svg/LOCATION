@@ -2092,6 +2092,29 @@ public class RestDataSource implements DataSourceProvider {
     }
   }
 
+  @Override
+  public java.util.List<String> suggestTags(int limit) {
+    String url = baseUrl + "/api/v1/interventions/tags/suggest?limit=" + Math.max(1, limit);
+    HttpGet get = new HttpGet(url);
+    applyHeaders(get);
+    try (CloseableHttpResponse response = http.execute(get)) {
+      if (response.getCode() != 200) {
+        return java.util.List.of();
+      }
+      HttpEntity entity = response.getEntity();
+      if (entity == null) {
+        return java.util.List.of();
+      }
+      try (InputStream in = entity.getContent()) {
+        java.util.List<String> tags =
+            om.readValue(in, new TypeReference<java.util.List<String>>() {});
+        return tags == null ? java.util.List.of() : java.util.List.copyOf(tags);
+      }
+    } catch (IOException ex) {
+      return java.util.List.of();
+    }
+  }
+
   public void uploadPlanningPngForPdf(
       Path png,
       String title,
