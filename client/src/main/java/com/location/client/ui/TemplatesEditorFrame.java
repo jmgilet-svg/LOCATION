@@ -2,6 +2,7 @@ package com.location.client.ui;
 
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
+import com.location.client.ui.uikit.MailFavorites;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -295,9 +296,8 @@ public class TemplatesEditorFrame extends JFrame {
   }
 
   private void doSendTest() {
-    String to =
-        JOptionPane.showInputDialog(this, "Destinataire", "Envoyer test", JOptionPane.QUESTION_MESSAGE);
-    if (to == null || to.isBlank()) {
+    RecipientChoice choice = askRecipient();
+    if (choice == null || choice.email().isBlank()) {
       return;
     }
     String subject =
@@ -306,7 +306,10 @@ public class TemplatesEditorFrame extends JFrame {
       return;
     }
     try {
-      dsp.sendEmail(to, subject, editor.getText());
+      dsp.sendEmail(choice.email(), subject, editor.getText());
+      if (choice.remember()) {
+        MailFavorites.add(choice.email());
+      }
       JOptionPane.showMessageDialog(
           this, "Email (test) envoyé (stub).", "Email", JOptionPane.INFORMATION_MESSAGE);
     } catch (Exception ex) {
@@ -368,6 +371,38 @@ public class TemplatesEditorFrame extends JFrame {
       varMenu.add(it);
     }
   }
+
+  private RecipientChoice askRecipient() {
+    java.util.List<String> favorites = MailFavorites.get();
+    javax.swing.JComboBox<String> combo = new javax.swing.JComboBox<>(favorites.toArray(new String[0]));
+    combo.setEditable(true);
+    if (!favorites.isEmpty()) {
+      combo.setSelectedIndex(0);
+    }
+    javax.swing.JCheckBox remember = new javax.swing.JCheckBox("Mémoriser ce destinataire", true);
+    javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout(8, 8));
+    panel.add(new javax.swing.JLabel("Destinataire"), java.awt.BorderLayout.NORTH);
+    panel.add(combo, java.awt.BorderLayout.CENTER);
+    panel.add(remember, java.awt.BorderLayout.SOUTH);
+    int result =
+        javax.swing.JOptionPane.showConfirmDialog(
+            this,
+            panel,
+            "Envoyer test",
+            javax.swing.JOptionPane.OK_CANCEL_OPTION,
+            javax.swing.JOptionPane.PLAIN_MESSAGE);
+    if (result != javax.swing.JOptionPane.OK_OPTION) {
+      return null;
+    }
+    Object value = combo.getEditor().getItem();
+    String email = value == null ? "" : value.toString().trim();
+    if (email.isEmpty()) {
+      return null;
+    }
+    return new RecipientChoice(email, remember.isSelected());
+  }
+
+  private record RecipientChoice(String email, boolean remember) {}
 
   private void showVarMenu(JComponent invoker) {
     varMenu.show(invoker, 0, invoker.getHeight());
