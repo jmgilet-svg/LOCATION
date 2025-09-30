@@ -31,6 +31,7 @@ public class TopBar extends JPanel {
   private final JComboBox<Models.Client> cbClient = new JComboBox<>();
   private final JTextField tfQuery = new JTextField();
   private final JTextField tfTags = new JTextField();
+  private final JTextField tfInterventionTags = new JTextField();
   private final JCheckBox cbNoConflicts = new JCheckBox("Sans conflit");
   private final JSpinner spDate = new JSpinner(new SpinnerDateModel());
   private boolean updating = false;
@@ -131,6 +132,17 @@ public class TopBar extends JPanel {
           preferences.save();
         });
 
+    tfInterventionTags.setColumns(12);
+    tfInterventionTags.addActionListener(
+        e -> {
+          if (updating) {
+            return;
+          }
+          planning.setTagFilter(tfInterventionTags.getText());
+          preferences.setInterventionTagFilter(tfInterventionTags.getText());
+          preferences.save();
+        });
+
     cbNoConflicts.setFocusable(false);
     cbNoConflicts.addActionListener(
         e -> {
@@ -148,8 +160,10 @@ public class TopBar extends JPanel {
     right.add(cbClient);
     right.add(new JLabel("Recherche:"));
     right.add(tfQuery);
-    right.add(new JLabel("Tags:"));
+    right.add(new JLabel("Tags ressource:"));
     right.add(tfTags);
+    right.add(new JLabel("Tags intervention:"));
+    right.add(tfInterventionTags);
     right.add(cbNoConflicts);
 
     add(left, BorderLayout.WEST);
@@ -167,6 +181,9 @@ public class TopBar extends JPanel {
     String savedTags = preferences.getFilterTags();
     tfTags.setText(savedTags);
     planning.setFilterTags(savedTags);
+    String savedInterventionTags = preferences.getInterventionTagFilter();
+    tfInterventionTags.setText(savedInterventionTags);
+    planning.setTagFilter(savedInterventionTags);
     updating = true;
     try {
       cbNoConflicts.setSelected(planning.isFilterNoConflicts());

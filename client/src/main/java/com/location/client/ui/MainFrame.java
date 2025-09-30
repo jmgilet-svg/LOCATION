@@ -11,6 +11,7 @@ import com.location.client.ui.uikit.Svg;
 import com.location.client.ui.uikit.Toasts;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -47,6 +48,7 @@ public class MainFrame extends JFrame {
   private final Preferences prefs;
   private final PlanningPanel planning;
   private final PlanningMinimap minimap;
+  private final PlanningInspector inspector;
   private final JPanel centerCards = new JPanel(new java.awt.CardLayout());
   private JPanel clientsPanel;
   private JPanel unavPanel;
@@ -76,6 +78,7 @@ public class MainFrame extends JFrame {
     ResourceColors.initialize(prefs);
     this.planning = new PlanningPanel(dsp);
     this.minimap = new PlanningMinimap();
+    this.inspector = new PlanningInspector(dsp);
     this.topBar = new TopBar(planning, prefs);
     this.sidebar = new Sidebar(this::handleNavigation);
     minimap.setWorkingHours(planning.getStartHour(), planning.getEndHour());
@@ -136,7 +139,9 @@ public class MainFrame extends JFrame {
     add(topBar, BorderLayout.NORTH);
     add(sidebar, BorderLayout.WEST);
     JPanel planningContainer = new JPanel(new BorderLayout());
+    inspector.setPreferredSize(new Dimension(320, 600));
     planningContainer.add(planning, BorderLayout.CENTER);
+    planningContainer.add(inspector, BorderLayout.EAST);
     planningContainer.add(minimap, BorderLayout.SOUTH);
 
     centerCards.add(planningContainer, "planning");
@@ -158,6 +163,22 @@ public class MainFrame extends JFrame {
               @Override
               public void actionPerformed(ActionEvent e) {
                 planning.duplicateSelected();
+              }
+            }));
+    selectionBar.add(
+        new JButton(
+            new AbstractAction("Dupliquer +1j") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                planning.duplicateSelected(1);
+              }
+            }));
+    selectionBar.add(
+        new JButton(
+            new AbstractAction("Dupliquer +7j") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                planning.duplicateSelected(7);
               }
             }));
     selectionBar.add(
@@ -190,6 +211,7 @@ public class MainFrame extends JFrame {
           suggestionPanel.showFor(selection, dayItems);
           boolean hasSelection = !selection.isEmpty();
           selectionBar.setVisible(hasSelection);
+          inspector.showIntervention(hasSelection ? selection.get(0) : null);
           if (hasSelection) {
             int count = selection.size();
             selectionInfo.setText(count == 1 ? "1 sélectionnée" : count + " sélectionnées");

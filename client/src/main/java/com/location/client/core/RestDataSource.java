@@ -1,5 +1,6 @@
 package com.location.client.core;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -2041,6 +2042,54 @@ public class RestDataSource implements DataSourceProvider {
   @Override
   public void close() throws Exception {
     http.close();
+  }
+
+  @Override
+  public java.util.List<String> getInterventionTags(String interventionId) {
+    if (interventionId == null || interventionId.isBlank()) {
+      return java.util.List.of();
+    }
+    String url = baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/tags";
+    HttpGet get = new HttpGet(url);
+    applyHeaders(get);
+    try (CloseableHttpResponse response = http.execute(get)) {
+      int status = response.getCode();
+      if (status != 200) {
+        return java.util.List.of();
+      }
+      HttpEntity entity = response.getEntity();
+      if (entity == null) {
+        return java.util.List.of();
+      }
+      try (InputStream in = entity.getContent()) {
+        java.util.List<String> tags =
+            om.readValue(in, new TypeReference<java.util.List<String>>() {});
+        return tags == null ? java.util.List.of() : java.util.List.copyOf(tags);
+      }
+    } catch (IOException ex) {
+      return java.util.List.of();
+    }
+  }
+
+  @Override
+  public void setInterventionTags(String interventionId, java.util.List<String> tags) {
+    if (interventionId == null || interventionId.isBlank()) {
+      return;
+    }
+    String url = baseUrl + "/api/v1/interventions/" + encodeSegment(interventionId) + "/tags";
+    HttpPost post = new HttpPost(url);
+    applyHeaders(post);
+    java.util.List<String> payload =
+        tags == null ? java.util.List.of() : new java.util.ArrayList<>(tags);
+    try {
+      String body = om.writeValueAsString(payload);
+      post.setEntity(new StringEntity(body, ContentType.APPLICATION_JSON));
+      try (CloseableHttpResponse response = http.execute(post)) {
+        EntityUtils.consumeQuietly(response.getEntity());
+      }
+    } catch (IOException ex) {
+      // ignoré : l'API REST est best effort sur les tags
+    }
   }
 
   public void uploadPlanningPngForPdf(
