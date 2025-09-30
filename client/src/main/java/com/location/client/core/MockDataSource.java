@@ -18,8 +18,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MockDataSource implements DataSourceProvider {
+
+  private final Map<String, List<String>> interventionTags = new ConcurrentHashMap<>();
 
   private final List<Models.Agency> agencies = new ArrayList<>();
   private final List<Models.Client> clients = new ArrayList<>();
@@ -62,6 +65,22 @@ public class MockDataSource implements DataSourceProvider {
   @Override
   public String getLabel() {
     return "MOCK";
+  }
+
+  @Override
+  public List<String> getInterventionTags(String interventionId) {
+    if (interventionId == null) {
+      return List.of();
+    }
+    return interventionTags.getOrDefault(interventionId, List.of());
+  }
+
+  @Override
+  public void setInterventionTags(String interventionId, List<String> tags) {
+    if (interventionId == null) {
+      return;
+    }
+    interventionTags.put(interventionId, tags == null ? List.of() : new ArrayList<>(tags));
   }
 
   @Override

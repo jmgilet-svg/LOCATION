@@ -189,6 +189,14 @@ public class Preferences {
     props.setProperty("filterTags", value == null ? "" : value);
   }
 
+  public String getInterventionTagFilter() {
+    return props.getProperty("filterInterventionTags", "");
+  }
+
+  public void setInterventionTagFilter(String value) {
+    props.setProperty("filterInterventionTags", value == null ? "" : value);
+  }
+
   public String getDayIso() {
     String value = props.getProperty("planning.lastDay");
     if (value == null || value.isBlank()) {

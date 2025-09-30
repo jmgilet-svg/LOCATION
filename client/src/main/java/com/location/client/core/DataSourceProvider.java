@@ -274,6 +274,14 @@ public interface DataSourceProvider extends AutoCloseable {
         "deleteRecurringUnavailability non disponible dans " + getLabel());
   }
 
+  default java.util.List<String> getInterventionTags(String interventionId) {
+    throw new UnsupportedOperationException("getInterventionTags non disponible dans " + getLabel());
+  }
+
+  default void setInterventionTags(String interventionId, java.util.List<String> tags) {
+    throw new UnsupportedOperationException("setInterventionTags non disponible dans " + getLabel());
+  }
+
   static String merge(String template, java.util.Map<String, String> context) {
     if (template == null || template.isBlank()) {
       return "";

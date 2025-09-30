@@ -79,6 +79,8 @@ public class PlanningPanel extends JPanel {
   private List<ConflictUtil.Conflict> conflicts = List.of();
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
+  private final java.util.Map<String, List<String>> interventionTags = new HashMap<>();
+  private String interventionTagFilter = "";
   public interface SelectionListener {
     void onSelection(List<Models.Intervention> selection, List<Models.Intervention> dayItems);
   }
@@ -458,6 +460,10 @@ public class PlanningPanel extends JPanel {
               .filter(i -> i.title() != null && i.title().toLowerCase().contains(q))
               .toList();
     }
+    loadInterventionTags(data);
+    if (interventionTagFilter != null && !interventionTagFilter.isBlank()) {
+      data = data.stream().filter(this::matchesInterventionTagFilter).toList();
+    }
     if (filterTags != null && !filterTags.isBlank()) {
       Set<String> visibleIds = resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
       data = data.stream().filter(i -> visibleIds.contains(i.resourceId())).toList();
@@ -487,6 +493,7 @@ public class PlanningPanel extends JPanel {
               .toList();
       computedConflicts = ConflictUtil.computeConflicts(data);
     }
+    retainInterventionTagsFor(data);
     conflicts = computedConflicts;
     interventions = data;
     if (selectedId != null) {
@@ -618,6 +625,79 @@ public class PlanningPanel extends JPanel {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  public void setTagFilter(String value) {
+    String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    if (Objects.equals(normalized, interventionTagFilter)) {
+      return;
+    }
+    interventionTagFilter = normalized;
+    reload();
+    repaint();
+  }
+
+  public String getTagFilter() {
+    return interventionTagFilter;
+  }
+
+  private void loadInterventionTags(List<Models.Intervention> items) {
+    interventionTags.clear();
+    if (items == null || items.isEmpty()) {
+      return;
+    }
+    for (Models.Intervention intervention : items) {
+      if (intervention == null) {
+        continue;
+      }
+      String id = intervention.id();
+      if (id == null || id.isBlank()) {
+        continue;
+      }
+      try {
+        List<String> tags = dsp.getInterventionTags(id);
+        interventionTags.put(id, tags == null ? List.of() : List.copyOf(tags));
+      } catch (RuntimeException ignored) {
+        // ignore les échecs réseau pour ne pas bloquer le rechargement
+      }
+    }
+  }
+
+  private void retainInterventionTagsFor(List<Models.Intervention> items) {
+    if (items == null) {
+      interventionTags.clear();
+      return;
+    }
+    Set<String> ids =
+        items.stream()
+            .map(Models.Intervention::id)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    interventionTags.keySet().removeIf(id -> !ids.contains(id));
+  }
+
+  private boolean matchesInterventionTagFilter(Models.Intervention intervention) {
+    if (intervention == null) {
+      return false;
+    }
+    if (interventionTagFilter == null || interventionTagFilter.isBlank()) {
+      return true;
+    }
+    String id = intervention.id();
+    if (id == null || id.isBlank()) {
+      return false;
+    }
+    List<String> tags = interventionTags.get(id);
+    if (tags == null || tags.isEmpty()) {
+      return false;
+    }
+    String needle = interventionTagFilter;
+    for (String tag : tags) {
+      if (tag != null && tag.toLowerCase(Locale.ROOT).contains(needle)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public void setDay(LocalDate value) {
@@ -763,16 +843,33 @@ public class PlanningPanel extends JPanel {
   }
 
   public boolean duplicateSelected() {
+    return duplicateSelectedWithDelta(Duration.ofHours(1), " (copie)");
+  }
+
+  public boolean duplicateSelected(int days) {
+    Duration delta = Duration.ofDays(days);
+    String suffix = days == 0 ? " (copie)" : " (copie +" + days + "j)";
+    return duplicateSelectedWithDelta(delta, suffix);
+  }
+
+  private boolean duplicateSelectedWithDelta(Duration delta, String suffix) {
     if (selected == null) {
       Toolkit.getDefaultToolkit().beep();
       return false;
     }
     Models.Intervention base = selected;
-    Instant start = base.start().plus(Duration.ofHours(1));
-    Instant end = base.end().plus(Duration.ofHours(1));
+    Instant start = base.start().plus(delta);
+    Instant end = base.end().plus(delta);
     if (!end.isAfter(start)) {
       Toolkit.getDefaultToolkit().beep();
       return false;
+    }
+    String title = base.title();
+    if (title == null || title.isBlank()) {
+      title = "Intervention";
+    }
+    if (suffix != null && !suffix.isBlank()) {
+      title += suffix;
     }
     Models.Intervention payload =
         new Models.Intervention(
@@ -781,7 +878,7 @@ public class PlanningPanel extends JPanel {
             base.resourceId(),
             base.clientId(),
             base.driverId(),
-            base.title() + " (copie)",
+            title,
             start,
             end,
             base.notes(),
