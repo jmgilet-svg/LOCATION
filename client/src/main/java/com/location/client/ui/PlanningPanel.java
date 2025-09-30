@@ -109,6 +109,8 @@ public class PlanningPanel extends JPanel {
   private int colWidth;
   private Tile dragTile;
   private Point dragStart;
+  private boolean altDupPending = false;
+  private boolean altDupDone = false;
   private boolean dragResizeLeft;
   private boolean dragResizeRight;
   private Models.Intervention selected;
@@ -211,6 +213,8 @@ public class PlanningPanel extends JPanel {
     MouseAdapter adapter = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
+        altDupPending = e.isAltDown();
+        altDupDone = false;
         onPress(e.getPoint());
       }
 
@@ -251,6 +255,7 @@ public class PlanningPanel extends JPanel {
     };
     addMouseListener(adapter);
     addMouseMotionListener(adapter);
+    registerUndoShortcuts();
   }
 
   private void createAt(Point p) {
@@ -1716,6 +1721,15 @@ public class PlanningPanel extends JPanel {
   }
 
   private void onDrag(Point p) {
+    if (altDupPending && !altDupDone) {
+      if (selected != null) {
+        boolean ok = duplicateSelected();
+        altDupDone = ok;
+        if (ok) {
+          findTileAt(p).ifPresent(t -> dragTile = t);
+        }
+      }
+    }
     if (dragTile == null || dragStart == null) {
       return;
     }
@@ -1749,6 +1763,8 @@ public class PlanningPanel extends JPanel {
   }
 
   private void onRelease() {
+    altDupPending = false;
+    altDupDone = false;
     if (dragTile == null) {
       dragStart = null;
       return;
@@ -2219,6 +2235,51 @@ public class PlanningPanel extends JPanel {
       }
     }
     return -1;
+  }
+
+  private void registerUndoShortcuts() {
+    javax.swing.InputMap im = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+    javax.swing.ActionMap am = getActionMap();
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK), "undo");
+    am.put(
+        "undo",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            undoLast();
+          }
+        });
+    im.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
+        "redo");
+    am.put(
+        "redo",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            redoLast();
+          }
+        });
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK), "undoMeta");
+    am.put(
+        "undoMeta",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            undoLast();
+          }
+        });
+    im.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.META_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
+        "redoMeta");
+    am.put(
+        "redoMeta",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            redoLast();
+          }
+        });
   }
 
   private void registerConflictNavigationShortcuts() {
