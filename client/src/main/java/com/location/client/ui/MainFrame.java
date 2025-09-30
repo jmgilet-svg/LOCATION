@@ -1827,6 +1827,8 @@ public class MainFrame extends JFrame {
     String pageChoice = optionsDialog.getPage();
     String orientationChoice = optionsDialog.getOrientation();
     Path logoChoice = optionsDialog.getLogoPath();
+    String agencyChoice = optionsDialog.getAgency();
+    boolean includeRecap = optionsDialog.isRecap();
     optionsDialog.dispose();
 
     JFileChooser chooser = new JFileChooser();
@@ -1855,7 +1857,19 @@ public class MainFrame extends JFrame {
       } else {
         orientation = "portrait";
       }
-      rd.uploadPlanningPngForPdf(tmp, title, page, orientation, logoChoice, target);
+      String period =
+          topBar.getFrom().toLocalDate() + " → " + topBar.getTo().toLocalDate();
+      String recapText = null;
+      if (includeRecap) {
+        java.util.Map<String, Integer> counts = planning.getVisibleRecapByResource();
+        if (!counts.isEmpty()) {
+          StringBuilder builder = new StringBuilder();
+          counts.forEach((name, value) -> builder.append(name).append(": ").append(value).append('\n'));
+          recapText = builder.toString();
+        }
+      }
+      rd.uploadPlanningPngForPdf(
+          tmp, title, page, orientation, logoChoice, agencyChoice, period, recapText, target);
       toastSuccess("PDF exporté: " + target.getFileName());
     } catch (Exception ex) {
       error("Export PDF complet → " + ex.getMessage());
@@ -1874,10 +1888,14 @@ public class MainFrame extends JFrame {
   static class ExportOptionsDialog extends JDialog {
     private final JSpinner startSpinner =
         new JSpinner(new SpinnerDateModel(new Date(), null, null, Calendar.DAY_OF_MONTH));
-    private final JComboBox<String> pageCombo = new JComboBox<>(new String[] {"Auto", "A4", "A3"});
+    private final JComboBox<String> pageCombo =
+        new JComboBox<>(new String[] {"Auto", "A4", "A3", "A2", "A1"});
     private final JComboBox<String> orientationCombo =
         new JComboBox<>(new String[] {"Auto", "Portrait", "Paysage"});
     private final JTextField logoField = new JTextField(24);
+    private final JTextField agencyField = new JTextField(24);
+    private final JCheckBox recapCheck =
+        new JCheckBox("Inclure récapitulatif par ressource", true);
     private Path logoPath;
     private boolean ok;
 
@@ -1925,6 +1943,16 @@ public class MainFrame extends JFrame {
           });
       logoPanel.add(browseButton);
       form.add(logoPanel, constraints);
+
+      constraints.gridx = 0;
+      constraints.gridy++;
+      form.add(new JLabel("Agence :"), constraints);
+      constraints.gridx = 1;
+      form.add(agencyField, constraints);
+
+      constraints.gridx = 1;
+      constraints.gridy++;
+      form.add(recapCheck, constraints);
 
       add(form, BorderLayout.CENTER);
 
@@ -1984,6 +2012,15 @@ public class MainFrame extends JFrame {
         }
       }
       return logoPath;
+    }
+
+    String getAgency() {
+      String text = agencyField.getText();
+      return text == null ? null : text.trim();
+    }
+
+    boolean isRecap() {
+      return recapCheck.isSelected();
     }
   }
 

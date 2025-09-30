@@ -34,6 +34,9 @@ public class PlanningExportController {
   @PostMapping(value = "/pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<byte[]> exportPdf(
       @RequestPart("image") MultipartFile image,
+      @RequestParam(value = "agency", required = false) String agency,
+      @RequestParam(value = "period", required = false) String period,
+      @RequestParam(value = "recapText", required = false) String recapText,
       @RequestParam(value = "title", required = false) String title,
       @RequestParam(value = "page", required = false) String page,
       @RequestParam(value = "orientation", required = false) String orientation,
@@ -55,7 +58,11 @@ public class PlanningExportController {
 
       PageSize basePageSize = null;
       if (page != null && !page.equalsIgnoreCase("auto")) {
-        if (page.equalsIgnoreCase("A3")) {
+        if (page.equalsIgnoreCase("A1")) {
+          basePageSize = PageSize.A1;
+        } else if (page.equalsIgnoreCase("A2")) {
+          basePageSize = PageSize.A2;
+        } else if (page.equalsIgnoreCase("A3")) {
           basePageSize = PageSize.A3;
         } else if (page.equalsIgnoreCase("A4")) {
           basePageSize = PageSize.A4;
@@ -96,6 +103,18 @@ public class PlanningExportController {
           doc.add(lg);
         }
 
+        if ((agency != null && !agency.isBlank()) || (period != null && !period.isBlank())) {
+          Paragraph header = new Paragraph();
+          if (agency != null && !agency.isBlank()) {
+            header.add(new com.itextpdf.layout.element.Text(agency).setBold()).add("  ");
+          }
+          if (period != null && !period.isBlank()) {
+            header.add(new com.itextpdf.layout.element.Text("— " + period));
+          }
+          header.setTextAlignment(TextAlignment.CENTER).setFontSize(12);
+          doc.add(header);
+        }
+
         Image img = new Image(ImageDataFactory.create(imageBytes));
 
         float maxWidth =
@@ -112,6 +131,27 @@ public class PlanningExportController {
         img.scale(scale, scale);
         img.setHorizontalAlignment(HorizontalAlignment.CENTER);
         doc.add(img);
+
+        if (recapText != null && !recapText.isBlank()) {
+          String[] lines = recapText.split("\n");
+          com.itextpdf.layout.element.Table table =
+              new com.itextpdf.layout.element.Table(new float[] {5, 1}).useAllAvailableWidth();
+          table.addHeaderCell(new com.itextpdf.layout.element.Cell().add("Ressource").setBold());
+          table.addHeaderCell(new com.itextpdf.layout.element.Cell().add("Interventions").setBold());
+          for (String line : lines) {
+            String[] parts = line.split(":", 2);
+            if (parts.length == 2) {
+              table.addCell(
+                  new com.itextpdf.layout.element.Cell()
+                      .add(parts[0] == null ? "" : parts[0].trim()));
+              table.addCell(
+                  new com.itextpdf.layout.element.Cell()
+                      .add(parts[1] == null ? "" : parts[1].trim()));
+            }
+          }
+          doc.add(new Paragraph("Récapitulatif").setBold().setMarginTop(10));
+          doc.add(table);
+        }
 
         String footer =
             safeTitle + " — généré le " + LocalDateTime.now().format(FOOTER_FORMATTER);
