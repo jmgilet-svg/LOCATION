@@ -100,6 +100,15 @@ public class PlanningPanel extends JPanel {
   private boolean dragResizeLeft;
   private boolean dragResizeRight;
   private Models.Intervention selected;
+  private final java.util.Map<String, Integer> laneIndexById = new java.util.HashMap<>();
+  private final java.util.Map<String, Integer> laneCountByResource = new java.util.HashMap<>();
+  private final java.util.Map<String, Integer> textWidthCache =
+      new java.util.LinkedHashMap<>(128, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, Integer> eldest) {
+          return size() > 512;
+        }
+      };
   private int hoverRow = -1;
   private String hoverTileKey;
   private boolean weekMode;
@@ -778,6 +787,50 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  private void computeLanes(java.time.Instant from, java.time.Instant to) {
+    laneIndexById.clear();
+    laneCountByResource.clear();
+    java.util.Map<String, java.util.List<Models.Intervention>> byResource = new java.util.HashMap<>();
+    for (Models.Intervention intervention : interventions) {
+      if (intervention == null || intervention.resourceId() == null) {
+        continue;
+      }
+      if (intervention.end().isAfter(from) && intervention.start().isBefore(to)) {
+        byResource
+            .computeIfAbsent(intervention.resourceId(), key -> new java.util.ArrayList<>())
+            .add(intervention);
+      }
+    }
+    for (java.util.Map.Entry<String, java.util.List<Models.Intervention>> entry : byResource.entrySet()) {
+      String resourceId = entry.getKey();
+      java.util.List<Models.Intervention> list = entry.getValue();
+      list.sort(java.util.Comparator.comparing(Models.Intervention::start));
+      java.util.List<java.time.Instant> laneEnds = new java.util.ArrayList<>();
+      for (Models.Intervention intervention : list) {
+        int laneIndex = -1;
+        for (int idx = 0; idx < laneEnds.size(); idx++) {
+          if (!intervention.start().isBefore(laneEnds.get(idx))) {
+            laneIndex = idx;
+            break;
+          }
+        }
+        if (laneIndex < 0) {
+          laneIndex = laneEnds.size();
+          laneEnds.add(intervention.end());
+        } else {
+          java.time.Instant currentEnd = laneEnds.get(laneIndex);
+          if (intervention.end().isAfter(currentEnd)) {
+            laneEnds.set(laneIndex, intervention.end());
+          }
+        }
+        if (intervention.id() != null) {
+          laneIndexById.put(intervention.id(), laneIndex);
+        }
+      }
+      laneCountByResource.put(resourceId, Math.max(1, laneEnds.size()));
+    }
+  }
+
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
@@ -790,6 +843,8 @@ public class PlanningPanel extends JPanel {
     int availableWidth = Math.max(0, w - TIME_W);
     colWidth = Math.max(1, availableWidth / totalCols);
     int dayWidth = colWidth * HOURS;
+
+    computeLanes(getViewFrom().toInstant(), getViewTo().toInstant());
 
     g2.setColor(new Color(250, 250, 255));
     g2.fillRect(0, 0, TIME_W, h);
@@ -1035,10 +1090,11 @@ public class PlanningPanel extends JPanel {
   }
 
   private void paintTile(Graphics2D g2, Tile t) {
-    int y = HEADER_H + t.row * ROW_H + 6;
-    int height = ROW_H - 12;
-    int x = Math.min(t.x1, t.x2);
-    int w = Math.max(16, Math.abs(t.x2 - t.x1));
+    java.awt.Rectangle rect = tileRect(t);
+    int x = rect.x;
+    int y = rect.y;
+    int w = rect.width;
+    int height = rect.height;
 
     boolean conflict = hasConflict(t);
     Color base = resourceColors.get(t.i.resourceId());
@@ -1088,6 +1144,21 @@ public class PlanningPanel extends JPanel {
     g2.setColor(Color.WHITE);
     g2.setFont(getFont().deriveFont(Font.BOLD));
     drawWrapped(g2, t.i.title(), x + 8, y + 4, Math.max(8, w - 16), Math.max(12, height - 16));
+  }
+
+  private java.awt.Rectangle tileRect(Tile t) {
+    int baseY = HEADER_H + t.row * ROW_H + 6;
+    int baseHeight = ROW_H - 12;
+    int x = Math.min(t.x1, t.x2);
+    int w = Math.max(16, Math.abs(t.x2 - t.x1));
+    String interventionId = t.i.id();
+    String resourceId = t.i.resourceId();
+    int lanes = Math.max(1, laneCountByResource.getOrDefault(resourceId, 1));
+    int lane = interventionId != null ? laneIndexById.getOrDefault(interventionId, 0) : 0;
+    int innerHeight = Math.max(18, baseHeight / lanes);
+    int y = baseY + lane * innerHeight;
+    int h = Math.max(16, innerHeight - 2);
+    return new java.awt.Rectangle(x, y, w, h);
   }
 
   private void paintHatched(Graphics2D g2, int x, int y, int width, int height, boolean recurring) {
@@ -1144,11 +1215,7 @@ public class PlanningPanel extends JPanel {
     for (Models.Intervention i : interventions) {
       int r = indexOfResource(i.resourceId());
       Tile t = tileFor(i, r);
-      int y = HEADER_H + r * ROW_H + 6;
-      int height = ROW_H - 12;
-      int x = Math.min(t.x1, t.x2);
-      int w = Math.max(16, Math.abs(t.x2 - t.x1));
-      Rectangle rect = new Rectangle(x, y, w, height);
+      Rectangle rect = tileRect(t);
       if (rect.contains(p)) return Optional.of(t);
     }
     return Optional.empty();
@@ -1705,7 +1772,7 @@ public class PlanningPanel extends JPanel {
     StringBuilder line = new StringBuilder();
     for (String w : words) {
       String candidate = line.length() == 0 ? w : line + " " + w;
-      if (fm.stringWidth(candidate) <= maxWidth) {
+      if (stringWidth(fm, candidate) <= maxWidth) {
         line.setLength(0);
         line.append(candidate);
       } else {
@@ -1728,13 +1795,35 @@ public class PlanningPanel extends JPanel {
     for (int i = 0; i < toDraw; i++) {
       String s = lines.get(i);
       if (ellipsis && i == toDraw - 1) {
-        while (fm.stringWidth(s + "…") > maxWidth && s.length() > 1) {
+        while (stringWidth(fm, s + "…") > maxWidth && s.length() > 1) {
           s = s.substring(0, s.length() - 1);
         }
         s = s + "…";
       }
       g2.drawString(s, x, baseline + i * lineHeight);
     }
+  }
+
+  private int stringWidth(FontMetrics metrics, String text) {
+    if (text == null || text.isEmpty()) {
+      return 0;
+    }
+    java.awt.Font font = metrics.getFont();
+    String key =
+        font.getName()
+            + '|'
+            + font.getStyle()
+            + '|'
+            + font.getSize()
+            + '|'
+            + text;
+    Integer cached = textWidthCache.get(key);
+    if (cached != null) {
+      return cached;
+    }
+    int width = metrics.stringWidth(text);
+    textWidthCache.put(key, width);
+    return width;
   }
 
   private void paintHoverGlow(Graphics2D g2, int x, int y, int w, int h) {
