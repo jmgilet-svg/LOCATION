@@ -1211,7 +1211,7 @@ public class MainFrame extends JFrame {
             "export-png-view", "Export PNG (vue)", this::exportPlanningPngDialog));
     commands.add(
         new CommandPaletteDialog.Command(
-            "export-png-full", "Export PNG (complet)", this::exportPlanningPngFullDialog));
+            "export-png-full", "Export PNG (complet)", this::exportPlanningPdfFullDialog));
     commands.add(
         new CommandPaletteDialog.Command(
             "export-pdf-full", "Export PDF (complet)", this::exportPlanningPdfFullDialog));
@@ -1564,8 +1564,7 @@ public class MainFrame extends JFrame {
               sel.title(),
               sel.start(),
               sel.end(),
-              ta.getText(),
-              sel.price());
+              ta.getText());
       try {
         dsp.updateIntervention(updated);
         toastSuccess("Notes enregistrées");
@@ -1670,8 +1669,7 @@ public class MainFrame extends JFrame {
                     tfTitle.getText().trim(),
                     Instant.parse(tfStart.getText().trim()),
                     Instant.parse(tfEnd.getText().trim()),
-                    null,
-                    price));
+                    null));
         toastSuccess("Intervention créée");
         ActivityCenter.log("Création intervention " + created.id());
         planning.rememberCreation(created, "Création");

@@ -304,8 +304,8 @@ public class MockDataSource implements DataSourceProvider {
             .atTime(9, 0)
             .atZone(ZoneId.systemDefault())
             .toOffsetDateTime();
-    String clientAlpha = clients.isEmpty() ? null : clients.get(0).id();
-    String clientBeta = clients.size() > 1 ? clients.get(1).id() : clientAlpha;
+    String clientAlpha1 = clients.isEmpty() ? null : clients.get(0).id();
+    String clientBeta1 = clients.size() > 1 ? clients.get(1).id() : clientAlpha1;
     String driverA = drivers.isEmpty() ? null : drivers.get(0).id();
     String driverB = drivers.size() > 1 ? drivers.get(1).id() : driverA;
 
@@ -319,7 +319,7 @@ public class MockDataSource implements DataSourceProvider {
               UUID.randomUUID().toString(),
               a1.id(),
               List.of(resA),
-              clientAlpha,
+              clientAlpha1,
               driverA,
               "Assemblage",
               startRef.toInstant(),
@@ -332,7 +332,7 @@ public class MockDataSource implements DataSourceProvider {
                 UUID.randomUUID().toString(),
                 a1.id(),
                 List.of(resB),
-                clientBeta,
+                clientBeta1,
                 driverB,
                 "Livraison",
                 startRef.plusHours(1).toInstant(),
@@ -347,7 +347,7 @@ public class MockDataSource implements DataSourceProvider {
               UUID.randomUUID().toString(),
               a1.id(),
               comboResources,
-              clientAlpha,
+              clientAlpha1,
               driverA,
               "Opération combinée",
               startRef.plusHours(1).toInstant(),

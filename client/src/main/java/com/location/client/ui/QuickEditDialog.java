@@ -201,8 +201,7 @@ public class QuickEditDialog extends JDialog {
               title,
               newStart,
               newEnd,
-              base.notes(),
-              base.price());
+              base.notes());
       try {
         List<Models.Unavailability> unavailabilityList =
             dsp.listUnavailabilities(

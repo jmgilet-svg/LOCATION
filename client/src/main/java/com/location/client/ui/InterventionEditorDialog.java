@@ -143,7 +143,7 @@ public class InterventionEditorDialog extends JDialog {
                 Models.Client client = (Models.Client) clientCombo.getSelectedItem();
                 Models.Resource resource = (Models.Resource) resourceCombo.getSelectedItem();
                 if (client == null || resource == null) {
-                  notifyError("Sélectionne client et ressource");
+//                  notifyError("Sélectionne client et ressource");
                   return;
                 }
                 String driver = driverField.getText().trim();
@@ -152,7 +152,7 @@ public class InterventionEditorDialog extends JDialog {
                 }
                 String title = titleField.getText().trim();
                 if (title.isBlank()) {
-                  notifyError("Titre requis");
+//                  notifyError("Titre requis");
                   return;
                 }
                 Date sd = (Date) startSpinner.getValue();
@@ -178,8 +178,7 @@ public class InterventionEditorDialog extends JDialog {
                         title,
                         start,
                         end,
-                        notes,
-                        internalNotes);
+                        notes);
                 Models.Intervention effective = payload;
                 if (isCreation) {
                   effective = dsp.createIntervention(payload);
@@ -353,8 +352,7 @@ public class InterventionEditorDialog extends JDialog {
               title,
               start,
               end,
-              notes,
-              internalNotes);
+              notes);
 
       Models.Intervention saved =
           isCreation ? dsp.createIntervention(payload) : dsp.updateIntervention(payload);
