@@ -282,6 +282,14 @@ public interface DataSourceProvider extends AutoCloseable {
     throw new UnsupportedOperationException("setInterventionTags non disponible dans " + getLabel());
   }
 
+  default java.util.List<String> suggestTags(int limit) {
+    return java.util.List.of();
+  }
+
+  default java.util.List<String> suggestTags() {
+    return suggestTags(20);
+  }
+
   static String merge(String template, java.util.Map<String, String> context) {
     if (template == null || template.isBlank()) {
       return "";

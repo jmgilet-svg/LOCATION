@@ -1356,5 +1356,30 @@ public class MockDataSource implements DataSourceProvider {
 
   @Override
   public void close() {}
+
+  @Override
+  public java.util.List<String> suggestTags(int limit) {
+    java.util.Map<String, Integer> frequency = new java.util.HashMap<>();
+    for (java.util.List<String> tags : interventionTags.values()) {
+      for (String tag : tags) {
+        if (tag == null) {
+          continue;
+        }
+        String normalized = tag.trim();
+        if (normalized.isEmpty()) {
+          continue;
+        }
+        frequency.merge(normalized, 1, Integer::sum);
+      }
+    }
+
+    java.util.List<String> sorted = new java.util.ArrayList<>(frequency.keySet());
+    sorted.sort((a, b) -> Integer.compare(frequency.getOrDefault(b, 0), frequency.getOrDefault(a, 0)));
+    int effectiveLimit = Math.max(1, limit);
+    if (sorted.size() > effectiveLimit) {
+      sorted = sorted.subList(0, effectiveLimit);
+    }
+    return sorted;
+  }
 }
 
