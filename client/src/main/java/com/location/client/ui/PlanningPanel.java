@@ -109,6 +109,8 @@ public class PlanningPanel extends JPanel {
           return size() > 512;
         }
       };
+  private int[] rowHeights = new int[0];
+  private int[] rowYPositions = new int[0];
   private int hoverRow = -1;
   private String hoverTileKey;
   private boolean weekMode;
@@ -245,7 +247,7 @@ public class PlanningPanel extends JPanel {
     if (findTileAt(p).isPresent()) {
       return;
     }
-    int row = (p.y - HEADER_H) / ROW_H;
+    int row = rowAtY(p.y);
     if (row < 0 || row >= resources.size()) {
       Toolkit.getDefaultToolkit().beep();
       return;
@@ -478,6 +480,7 @@ public class PlanningPanel extends JPanel {
         resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
     unavailabilities =
         unav.stream().filter(u -> visibleResourceIds.contains(u.resourceId())).toList();
+    computeDynamicRows();
     notifyReloadListeners();
     fireSelectionChanged();
     repaint();
@@ -829,6 +832,7 @@ public class PlanningPanel extends JPanel {
       }
       laneCountByResource.put(resourceId, Math.max(1, laneEnds.size()));
     }
+    computeDynamicRows();
   }
 
   @Override
@@ -850,9 +854,21 @@ public class PlanningPanel extends JPanel {
     g2.fillRect(0, 0, TIME_W, h);
     g2.setColor(new Color(245, 245, 245));
     if (hoverRow >= 0) {
-      int hy = HEADER_H + hoverRow * ROW_H;
+      int hy = rowY(hoverRow);
+      int hh = rowH(hoverRow);
       g2.setColor(new Color(100, 149, 237, 28));
-      g2.fillRect(TIME_W, hy, Math.max(0, w - TIME_W), ROW_H);
+      g2.fillRect(TIME_W, hy, Math.max(0, w - TIME_W), hh);
+      g2.setColor(new Color(245, 245, 245));
+    }
+    if (!resources.isEmpty()) {
+      g2.setColor(new Color(230, 230, 230));
+      int bodyWidth = Math.max(0, w - TIME_W);
+      for (int r = 0; r < resources.size(); r++) {
+        int yRow = rowY(r);
+        g2.drawLine(TIME_W, yRow, TIME_W + bodyWidth, yRow);
+      }
+      int bottom = rowY(resources.size() - 1) + rowH(resources.size() - 1);
+      g2.drawLine(TIME_W, bottom, TIME_W + bodyWidth, bottom);
       g2.setColor(new Color(245, 245, 245));
     }
     g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), HEADER_H);
@@ -889,11 +905,15 @@ public class PlanningPanel extends JPanel {
 
     g2.setColor(Color.GRAY);
     for (int r = 0; r < resources.size(); r++) {
-      int y = HEADER_H + r * ROW_H;
+      int y = rowY(r);
       g2.drawLine(0, y, w, y);
       g2.setColor(Color.DARK_GRAY);
       g2.drawString(resources.get(r).name(), 8, y + 18);
       g2.setColor(Color.GRAY);
+    }
+    if (!resources.isEmpty()) {
+      int bottom = rowY(resources.size() - 1) + rowH(resources.size() - 1);
+      g2.drawLine(0, bottom, w, bottom);
     }
 
     for (Models.Unavailability unav : unavailabilities) {
@@ -903,8 +923,8 @@ public class PlanningPanel extends JPanel {
       }
       int x1 = xForInstant(unav.start());
       int x2 = xForInstant(unav.end());
-      int y = HEADER_H + row * ROW_H + 6;
-      int height = ROW_H - 12;
+      int y = rowY(row) + 6;
+      int height = rowH(row) - 12;
       paintHatched(g2, Math.min(x1, x2), y, Math.max(12, Math.abs(x2 - x1)), height, unav.recurring());
     }
 
@@ -926,7 +946,7 @@ public class PlanningPanel extends JPanel {
       }
       Tile t = tileFor(i, r);
       int iconX = Math.max(t.x1, t.x2) - 18;
-      int iconY = HEADER_H + r * ROW_H + 18;
+      int iconY = rowY(r) + 18;
       g2.setColor(new Color(30, 30, 30, 200));
       g2.drawString("\uD83D\uDCD3", iconX, iconY);
     }
@@ -937,8 +957,8 @@ public class PlanningPanel extends JPanel {
         Tile t = tileFor(selected, row);
         int x = Math.min(t.x1, t.x2);
         int w1 = Math.max(16, Math.abs(t.x2 - t.x1));
-        int y = HEADER_H + row * ROW_H + 4;
-        int height = ROW_H - 8;
+        int y = rowY(row) + 4;
+        int height = rowH(row) - 8;
         Stroke old = g2.getStroke();
         g2.setColor(new Color(255, 200, 0, 180));
         g2.setStroke(new BasicStroke(3f));
@@ -1147,8 +1167,8 @@ public class PlanningPanel extends JPanel {
   }
 
   private java.awt.Rectangle tileRect(Tile t) {
-    int baseY = HEADER_H + t.row * ROW_H + 6;
-    int baseHeight = ROW_H - 12;
+    int baseY = rowY(t.row) + 6;
+    int baseHeight = rowH(t.row) - 12;
     int x = Math.min(t.x1, t.x2);
     int w = Math.max(16, Math.abs(t.x2 - t.x1));
     String interventionId = t.i.id();
@@ -1332,7 +1352,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private void updateCursor(Point p) {
-    int newHoverRow = (p.y - HEADER_H) / ROW_H;
+    int newHoverRow = rowAtY(p.y);
     if (p.y < HEADER_H || p.x < TIME_W || newHoverRow < 0 || newHoverRow >= resources.size()) {
       newHoverRow = -1;
     }
@@ -1400,8 +1420,17 @@ public class PlanningPanel extends JPanel {
       tile = tile.withX2(tile.x2 + dx);
     } else {
       int dy = p.y - dragStart.y;
-      int rowDelta = Math.round(dy / (float) ROW_H);
-      int targetRow = resources.isEmpty() ? 0 : Math.max(0, Math.min(tile.row + rowDelta, resources.size() - 1));
+      int currentTop = rowY(tile.row);
+      int newCenter = currentTop + dy + rowH(tile.row) / 2;
+      int targetRow = rowAtY(newCenter);
+      if (!resources.isEmpty()) {
+        if (targetRow < 0) {
+          targetRow = newCenter < HEADER_H ? 0 : resources.size() - 1;
+        }
+        targetRow = Math.max(0, Math.min(targetRow, resources.size() - 1));
+      } else {
+        targetRow = tile.row;
+      }
       tile = tile.shift(dx, targetRow - tile.row);
     }
     int minX = TIME_W;
@@ -1834,6 +1863,55 @@ public class PlanningPanel extends JPanel {
       g2.drawRoundRect(x - r, y - r, w + 2 * r, h + 2 * r, 12, 12);
     }
     g2.setStroke(old);
+  }
+
+  private void computeDynamicRows() {
+    int n = resources == null ? 0 : resources.size();
+    rowHeights = new int[n];
+    rowYPositions = new int[n];
+    int y = HEADER_H;
+    for (int r = 0; r < n; r++) {
+      String resId = resources.get(r).id();
+      int lanes = Math.max(1, laneCountByResource.getOrDefault(resId, 1));
+      int h = Math.max(ROW_H, lanes * 56);
+      rowHeights[r] = h;
+      rowYPositions[r] = y;
+      y += h;
+    }
+  }
+
+  private int rowH(int r) {
+    if (rowHeights == null || r < 0 || r >= rowHeights.length) {
+      return ROW_H;
+    }
+    int h = rowHeights[r];
+    return h > 0 ? h : ROW_H;
+  }
+
+  private int rowY(int r) {
+    if (rowYPositions == null || r < 0 || r >= rowYPositions.length) {
+      return HEADER_H + r * ROW_H;
+    }
+    return rowYPositions[r];
+  }
+
+  private int rowAtY(int y) {
+    if (y < HEADER_H) {
+      return -1;
+    }
+    int size = resources == null ? 0 : resources.size();
+    if (rowYPositions == null || rowYPositions.length == 0) {
+      int row = (y - HEADER_H) / ROW_H;
+      return (row >= 0 && row < size) ? row : -1;
+    }
+    for (int r = 0; r < rowYPositions.length; r++) {
+      int top = rowYPositions[r];
+      int bottom = top + rowH(r);
+      if (y >= top && y < bottom) {
+        return r;
+      }
+    }
+    return -1;
   }
 
   private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {
