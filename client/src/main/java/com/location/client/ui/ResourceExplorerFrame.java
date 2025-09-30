@@ -4,6 +4,7 @@ import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.ui.accordion.CollapsibleSection;
 import com.location.client.ui.icons.SvgIconLoader;
+import com.location.client.ui.uikit.TableUtils;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -313,6 +314,7 @@ public class ResourceExplorerFrame extends JFrame {
           }
         };
     private final JTable unavailabilityTable = new JTable(unavailabilityModel);
+    private final JTextField tfUnavailabilitySearch = new JTextField(18);
     private List<Models.Unavailability> unavailabilityCache = List.of();
     private final DateTimeFormatter formatter =
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", Locale.FRENCH).withZone(ZoneId.systemDefault());
@@ -379,7 +381,15 @@ public class ResourceExplorerFrame extends JFrame {
           deleteUnavailability();
         }
       }));
-      bottom.add(toolbar, BorderLayout.NORTH);
+      JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+      searchPanel.add(new JLabel("Recherche"));
+      tfUnavailabilitySearch.setColumns(16);
+      searchPanel.add(tfUnavailabilitySearch);
+      TableUtils.applySearch(unavailabilityTable, tfUnavailabilitySearch, 250);
+      JPanel header = new JPanel(new BorderLayout(8, 0));
+      header.add(toolbar, BorderLayout.WEST);
+      header.add(searchPanel, BorderLayout.CENTER);
+      bottom.add(header, BorderLayout.NORTH);
       add(bottom, BorderLayout.CENTER);
 
       JButton btSave = new JButton(new AbstractAction("Enregistrer") {

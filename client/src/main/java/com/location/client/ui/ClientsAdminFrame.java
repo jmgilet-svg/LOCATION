@@ -19,7 +19,9 @@ import java.util.List;
 import java.util.Objects;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -53,6 +55,7 @@ public class ClientsAdminFrame extends JFrame {
   private final JTable listTable = new JTable(listModel);
   private final JTextField tfSearch = new JTextField(24);
   private final List<Models.Client> listData = new ArrayList<>();
+  private final JButton btnMerge = new JButton("Fusionner doublons");
 
   private Models.Client current;
   private final JTextField tfName = new JTextField(24);
@@ -111,6 +114,8 @@ public class ClientsAdminFrame extends JFrame {
         exportCsv();
       }
     });
+    toolbar.addSeparator();
+    toolbar.add(btnMerge);
     add(toolbar, BorderLayout.NORTH);
 
     JPanel left = new JPanel(new BorderLayout(6, 6));
@@ -131,6 +136,9 @@ public class ClientsAdminFrame extends JFrame {
     listTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     left.add(new JScrollPane(listTable), BorderLayout.CENTER);
 
+    btnMerge.addActionListener(e -> mergeSelected());
+    btnMerge.setEnabled(false);
+
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Informations", buildClientForm());
     tabs.addTab("Contacts", buildContactsTab());
@@ -145,6 +153,7 @@ public class ClientsAdminFrame extends JFrame {
             e -> {
               if (!e.getValueIsAdjusting()) {
                 loadSelected();
+                updateMergeButtonState();
               }
             });
 
@@ -334,6 +343,7 @@ public class ClientsAdminFrame extends JFrame {
     if (listData.isEmpty()) {
       newClient();
     }
+    updateMergeButtonState();
   }
 
   private void loadSelected() {
@@ -356,6 +366,7 @@ public class ClientsAdminFrame extends JFrame {
     tfVat.setText(selected.vatNumber() == null ? "" : selected.vatNumber());
     tfIban.setText(selected.iban() == null ? "" : selected.iban());
     loadContacts(selected.id());
+    updateMergeButtonState();
   }
 
   private void loadContacts(String clientId) {
@@ -524,5 +535,144 @@ public class ClientsAdminFrame extends JFrame {
 
   private static String valueOrEmpty(String value) {
     return value == null ? "" : value;
+  }
+
+  private void mergeSelected() {
+    int selectedRow = listTable.getSelectedRow();
+    if (selectedRow < 0) {
+      JOptionPane.showMessageDialog(
+          this, "Sélectionnez d'abord un client", "Fusion", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    if (listData.size() < 2) {
+      JOptionPane.showMessageDialog(
+          this,
+          "Au moins deux clients sont nécessaires pour une fusion",
+          "Fusion",
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+    int modelRow = listTable.convertRowIndexToModel(selectedRow);
+    if (modelRow < 0 || modelRow >= listData.size()) {
+      return;
+    }
+    Models.Client primary = listData.get(modelRow);
+    if (primary.id() == null) {
+      JOptionPane.showMessageDialog(
+          this,
+          "Enregistrez le client sélectionné avant de lancer une fusion",
+          "Fusion",
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+
+    List<Models.Client> candidates = new ArrayList<>();
+    for (Models.Client client : listData) {
+      if (client != primary && client.id() != null) {
+        candidates.add(client);
+      }
+    }
+    if (candidates.isEmpty()) {
+      JOptionPane.showMessageDialog(
+          this,
+          "Aucun autre client disponible pour la fusion",
+          "Fusion",
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+
+    JComboBox<Models.Client> combo = new JComboBox<>(candidates.toArray(new Models.Client[0]));
+    combo.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              javax.swing.JList<?> list,
+              Object value,
+              int index,
+              boolean isSelected,
+              boolean cellHasFocus) {
+            JLabel base =
+                (JLabel)
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            if (value instanceof Models.Client client) {
+              base.setText(formatClientChoice(client));
+            }
+            return base;
+          }
+        });
+    int option =
+        JOptionPane.showConfirmDialog(
+            this,
+            combo,
+            "Choisissez le client à fusionner",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+    if (option != JOptionPane.OK_OPTION) {
+      return;
+    }
+    Models.Client secondary = (Models.Client) combo.getSelectedItem();
+    if (secondary == null) {
+      return;
+    }
+
+    ClientsMergeDialog dialog = new ClientsMergeDialog(this, primary, secondary);
+    dialog.setVisible(true);
+    if (!dialog.isOk()) {
+      return;
+    }
+
+    Models.Client merged = dialog.merged(primary, secondary);
+    try {
+      Models.Client saved = dsp.saveClient(merged);
+      try {
+        transferContacts(secondary, saved);
+      } catch (UnsupportedOperationException ex) {
+        // Certaines implémentations ne gèrent pas les contacts, ignorer silencieusement
+      }
+      if (secondary.id() != null) {
+        dsp.deleteClient(secondary.id());
+      }
+      current = saved;
+      refreshList();
+      Toasts.success(this, "Clients fusionnés");
+    } catch (RuntimeException ex) {
+      Toasts.error(this, ex.getMessage());
+    }
+  }
+
+  private void transferContacts(Models.Client from, Models.Client to) {
+    if (from.id() == null || to.id() == null) {
+      return;
+    }
+    List<Models.Contact> contacts = dsp.listContacts(from.id());
+    for (Models.Contact contact : contacts) {
+      Models.Contact updated =
+          new Models.Contact(
+              contact.id(),
+              to.id(),
+              contact.firstName(),
+              contact.lastName(),
+              contact.email(),
+              contact.phone());
+      dsp.saveContact(updated);
+    }
+  }
+
+  private static String formatClientChoice(Models.Client client) {
+    StringBuilder sb = new StringBuilder();
+    if (client.name() != null && !client.name().isBlank()) {
+      sb.append(client.name());
+    } else {
+      sb.append("(sans nom)");
+    }
+    if (client.email() != null && !client.email().isBlank()) {
+      sb.append(" — ").append(client.email());
+    }
+    return sb.toString();
+  }
+
+  private void updateMergeButtonState() {
+    boolean enabled = listTable.getSelectedRow() >= 0 && listData.size() > 1;
+    btnMerge.setEnabled(enabled);
   }
 }
