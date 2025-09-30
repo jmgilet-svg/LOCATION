@@ -2183,4 +2183,26 @@ public class PlanningPanel extends JPanel {
   public void prevConflict() {
     centerOn(pickNextConflict(true));
   }
+
+  public java.util.Map<String, Integer> getVisibleRecapByResource() {
+    java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+    if (resources == null || interventions == null) {
+      return counts;
+    }
+    java.util.Map<String, String> nameById = new java.util.HashMap<>();
+    for (Models.Resource resource : resources) {
+      nameById.put(resource.id(), resource.name());
+      counts.put(resource.name(), 0);
+    }
+    for (Models.Intervention intervention : interventions) {
+      if (intervention.resourceId() == null) {
+        continue;
+      }
+      String name = nameById.get(intervention.resourceId());
+      if (name != null) {
+        counts.put(name, counts.getOrDefault(name, 0) + 1);
+      }
+    }
+    return counts;
+  }
 }

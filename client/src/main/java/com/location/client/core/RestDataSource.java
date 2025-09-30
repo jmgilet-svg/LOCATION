@@ -2049,6 +2049,9 @@ public class RestDataSource implements DataSourceProvider {
       String page,
       String orientation,
       Path logoPng,
+      String agency,
+      String period,
+      String recapText,
       Path targetPdf)
       throws IOException {
     String url = baseUrl + "/api/v1/planning/pdf";
@@ -2070,6 +2073,18 @@ public class RestDataSource implements DataSourceProvider {
         "orientation",
         orientation == null ? "auto" : orientation,
         ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    if (agency != null && !agency.isBlank()) {
+      builder.addTextBody(
+          "agency", agency, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    }
+    if (period != null && !period.isBlank()) {
+      builder.addTextBody(
+          "period", period, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    }
+    if (recapText != null && !recapText.isBlank()) {
+      builder.addTextBody(
+          "recapText", recapText, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    }
     if (logoPng != null) {
       byte[] logoBytes = Files.readAllBytes(logoPng);
       builder.addBinaryBody("logo", logoBytes, ContentType.IMAGE_PNG, logoPng.getFileName().toString());
