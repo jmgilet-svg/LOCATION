@@ -50,6 +50,7 @@ public class InterventionService {
       OffsetDateTime start,
       OffsetDateTime end,
       String notes,
+      String internalNotes,
       Double price) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
@@ -79,6 +80,7 @@ public class InterventionService {
             client,
             driver,
             notes,
+            internalNotes,
             price);
     return interventionRepository.save(intervention);
   }
@@ -94,6 +96,7 @@ public class InterventionService {
       OffsetDateTime start,
       OffsetDateTime end,
       String notes,
+      String internalNotes,
       Double price) {
     if (!start.isBefore(end)) {
       throw new IllegalArgumentException("start must be before end");
@@ -127,6 +130,7 @@ public class InterventionService {
     intervention.setStart(start);
     intervention.setEnd(end);
     intervention.setNotes(notes);
+    intervention.setInternalNotes(internalNotes);
     intervention.setPrice(price);
     return interventionRepository.save(intervention);
   }

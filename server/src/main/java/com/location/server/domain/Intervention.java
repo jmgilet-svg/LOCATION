@@ -49,6 +49,9 @@ public class Intervention {
   @Column(columnDefinition = "TEXT")
   private String notes;
 
+  @Column(name = "internal_notes", length = 4000)
+  private String internalNotes;
+
   @Column(name = "price_eur")
   private Double price;
 
@@ -74,7 +77,7 @@ public class Intervention {
       Resource resource,
       Client client,
       String notes) {
-    this(id, title, start, end, agency, resource, client, null, notes, null);
+    this(id, title, start, end, agency, resource, client, null, notes, null, null);
   }
 
   public Intervention(
@@ -87,6 +90,7 @@ public class Intervention {
       Client client,
       Driver driver,
       String notes,
+      String internalNotes,
       Double price) {
     this.id = id;
     this.title = title;
@@ -97,6 +101,7 @@ public class Intervention {
     this.client = client;
     this.driver = driver;
     this.notes = notes;
+    this.internalNotes = internalNotes;
     this.price = price;
   }
 
@@ -170,6 +175,14 @@ public class Intervention {
 
   public void setNotes(String notes) {
     this.notes = notes;
+  }
+
+  public String getInternalNotes() {
+    return internalNotes;
+  }
+
+  public void setInternalNotes(String internalNotes) {
+    this.internalNotes = internalNotes;
   }
 
   public Double getPrice() {

@@ -695,6 +695,7 @@ public class MockDataSource implements DataSourceProvider {
             intervention.start(),
             intervention.end(),
             intervention.notes(),
+            intervention.internalNotes(),
             intervention.price());
     interventions.add(created);
     return created;
@@ -1324,6 +1325,7 @@ public class MockDataSource implements DataSourceProvider {
             start,
             end,
             notes,
+            null,
             price));
   }
 

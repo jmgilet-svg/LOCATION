@@ -44,6 +44,7 @@ public class InterventionEditorDialog extends JDialog {
   private final JComboBox<Models.Client> clientCombo = new JComboBox<>();
   private final JComboBox<Models.Resource> resourceCombo = new JComboBox<>();
   private final JTextArea notesArea = new JTextArea(4, 24);
+  private final JTextArea internalNotesArea = new JTextArea(4, 24);
   private final JSpinner startSpinner = new JSpinner(new SpinnerDateModel());
   private final JSpinner endSpinner = new JSpinner(new SpinnerDateModel());
 
@@ -66,6 +67,8 @@ public class InterventionEditorDialog extends JDialog {
                 "Nouvelle intervention",
                 Instant.now().plus(Duration.ofHours(1)),
                 Instant.now().plus(Duration.ofHours(3)),
+                null,
+                null,
                 null);
 
     setLayout(new BorderLayout());
@@ -118,6 +121,13 @@ public class InterventionEditorDialog extends JDialog {
     form.add(new JLabel("Notes"), c);
     c.gridy++;
     form.add(new JScrollPane(notesArea), c);
+
+    c.gridy++;
+    internalNotesArea.setLineWrap(true);
+    internalNotesArea.setWrapStyleWord(true);
+    form.add(new JLabel("Notes internes"), c);
+    c.gridy++;
+    form.add(new JScrollPane(internalNotesArea), c);
 
     return form;
   }
@@ -213,6 +223,7 @@ public class InterventionEditorDialog extends JDialog {
     titleField.setText(current.title() != null ? current.title() : "");
     driverField.setText(current.driverId() != null ? current.driverId() : "");
     notesArea.setText(current.notes() != null ? current.notes() : "");
+    internalNotesArea.setText(current.internalNotes() != null ? current.internalNotes() : "");
 
     if (current.start() != null) {
       startSpinner.setValue(Date.from(current.start()));
@@ -270,6 +281,10 @@ public class InterventionEditorDialog extends JDialog {
       if (notes != null && notes.isBlank()) {
         notes = null;
       }
+      String internalNotes = internalNotesArea.getText();
+      if (internalNotes != null && internalNotes.isBlank()) {
+        internalNotes = null;
+      }
 
       boolean isCreation = current.id() == null;
       Models.Intervention payload =
@@ -282,7 +297,8 @@ public class InterventionEditorDialog extends JDialog {
               title,
               start,
               end,
-              notes);
+              notes,
+              internalNotes);
 
       Models.Intervention saved =
           isCreation ? dsp.createIntervention(payload) : dsp.updateIntervention(payload);

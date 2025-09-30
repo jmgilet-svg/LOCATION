@@ -137,6 +137,7 @@ public final class ApiV1Dtos {
       OffsetDateTime start,
       OffsetDateTime end,
       String notes,
+      String internalNotes,
       Double price) {
     public static InterventionDto of(Intervention intervention) {
       return new InterventionDto(
@@ -149,6 +150,7 @@ public final class ApiV1Dtos {
           intervention.getStart(),
           intervention.getEnd(),
           intervention.getNotes(),
+          intervention.getInternalNotes(),
           intervention.getPrice());
     }
   }
@@ -198,6 +200,7 @@ public final class ApiV1Dtos {
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end,
       @Size(max = 4000) String notes,
+      @Size(max = 4000) String internalNotes,
       @DecimalMin(value = "0.0", inclusive = true) Double price) {}
 
   public record UpdateInterventionRequest(
@@ -209,6 +212,7 @@ public final class ApiV1Dtos {
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end,
       @Size(max = 4000) String notes,
+      @Size(max = 4000) String internalNotes,
       @DecimalMin(value = "0.0", inclusive = true) Double price) {}
 
   public record CreateUnavailabilityRequest(
