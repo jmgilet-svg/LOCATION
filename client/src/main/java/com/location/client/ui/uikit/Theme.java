@@ -3,6 +3,7 @@ package com.location.client.ui.uikit;
 import javax.swing.UIManager;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 
@@ -33,9 +34,14 @@ public final class Theme {
     UIManager.put("Button.arc", 12);
     UIManager.put("TextComponent.arc", 12);
     UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
+    UIManager.put("ToolTip.hideAccelerator", Boolean.TRUE);
+    UIManager.put("Button.margin", new Insets(6, 10, 6, 10));
+    UIManager.put("Component.arrowType", "chevron");
   }
 
   private static void installInterIfPresent() {
+    System.setProperty("awt.useSystemAAFontSettings", "on");
+    System.setProperty("swing.aatext", "true");
     String[] faces = {
       "/fonts/Inter-Regular.ttf",
       "/fonts/Inter-Medium.ttf",
