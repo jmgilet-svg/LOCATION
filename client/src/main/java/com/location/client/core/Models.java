@@ -162,6 +162,19 @@ public final class Models {
   }
   public record DocTemplate(String html) {}
 
+  public enum TemplateKind {
+    QUOTE,
+    INVOICE,
+    EMAIL,
+    PARTIAL
+  }
+
+  public record Template(String id, String key, TemplateKind kind, String html) {
+    public Template(String key, TemplateKind kind, String html) {
+      this(null, key, kind, html);
+    }
+  }
+
   public record DocLine(String designation, double quantity, double unitPrice, double vatRate) {}
 
   public record Doc(

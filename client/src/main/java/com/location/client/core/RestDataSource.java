@@ -1676,6 +1676,150 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   @Override
+  public java.util.List<Models.Template> listTemplates(Models.TemplateKind kind) {
+    try {
+      ensureLogin();
+      StringBuilder url = new StringBuilder(baseUrl + "/api/v2/templates");
+      if (kind != null) {
+        url.append("?kind=").append(encode(kind.name()));
+      }
+      JsonNode node = executeForJson(() -> new HttpGet(url.toString()));
+      if (node == null || node.isNull() || !node.isArray()) {
+        return java.util.List.of();
+      }
+      java.util.List<Models.Template> templates = new java.util.ArrayList<>();
+      for (JsonNode item : node) {
+        Models.TemplateKind templateKind;
+        String kindValue = item.path("kind").asText(null);
+        try {
+          templateKind =
+              kindValue == null ? Models.TemplateKind.EMAIL : Models.TemplateKind.valueOf(kindValue);
+        } catch (IllegalArgumentException ex) {
+          templateKind = Models.TemplateKind.EMAIL;
+        }
+        templates.add(
+            new Models.Template(
+                item.path("id").asText(null),
+                item.path("key").asText(""),
+                templateKind,
+                item.path("html").asText("")));
+      }
+      return templates;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Models.Template saveTemplate(Models.Template template) {
+    if (template == null) {
+      throw new IllegalArgumentException("Template requis");
+    }
+    try {
+      ensureLogin();
+      JsonNode node =
+          executeForJson(
+              () -> {
+                HttpPost post = new HttpPost(baseUrl + "/api/v2/templates");
+                ObjectNode payload = om.createObjectNode();
+                if (template.id() != null && !template.id().isBlank()) {
+                  payload.put("id", template.id());
+                }
+                payload.put("key", template.key());
+                payload.put("kind", template.kind().name());
+                payload.put("html", template.html());
+                post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+                return post;
+              });
+      Models.TemplateKind savedKind;
+      String kindValue = node.path("kind").asText(template.kind().name());
+      try {
+        savedKind = Models.TemplateKind.valueOf(kindValue);
+      } catch (IllegalArgumentException ex) {
+        savedKind = template.kind();
+      }
+      return new Models.Template(
+          node.path("id").asText(template.id()),
+          node.path("key").asText(template.key()),
+          savedKind,
+          node.path("html").asText(template.html()));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void deleteTemplate(String templateId) {
+    if (templateId == null || templateId.isBlank()) {
+      return;
+    }
+    try {
+      ensureLogin();
+      execute(
+          () -> new HttpDelete(baseUrl + "/api/v2/templates/" + encodeSegment(templateId)),
+          res -> {
+            int code = res.getCode();
+            EntityUtils.consumeQuietly(res.getEntity());
+            if (code != 204 && code != 200) {
+              throw httpError(code, "Suppression template HTTP " + code);
+            }
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public void sendEmail(
+      java.util.List<String> to,
+      java.util.List<String> cc,
+      java.util.List<String> bcc,
+      String subject,
+      String html) {
+    if (to == null || to.isEmpty()) {
+      throw new IllegalArgumentException("Destinataires requis");
+    }
+    try {
+      ensureLogin();
+      execute(
+          () -> {
+            HttpPost post = new HttpPost(baseUrl + "/api/v2/email/send");
+            ObjectNode payload = om.createObjectNode();
+            ArrayNode toArray = payload.putArray("to");
+            to.stream().filter(s -> s != null && !s.isBlank()).forEach(toArray::add);
+            if (cc != null && !cc.isEmpty()) {
+              ArrayNode ccArray = payload.putArray("cc");
+              cc.stream().filter(s -> s != null && !s.isBlank()).forEach(ccArray::add);
+            }
+            if (bcc != null && !bcc.isEmpty()) {
+              ArrayNode bccArray = payload.putArray("bcc");
+              bcc.stream().filter(s -> s != null && !s.isBlank()).forEach(bccArray::add);
+            }
+            payload.put("subject", subject == null ? "" : subject);
+            payload.put("html", html == null ? "" : html);
+            post.setEntity(new StringEntity(payload.toString(), ContentType.APPLICATION_JSON));
+            return post;
+          },
+          res -> {
+            int code = res.getCode();
+            if (code != 202) {
+              String body =
+                  res.getEntity() == null
+                      ? ""
+                      : new String(
+                          res.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
+              throw httpError(code, "Email HTTP " + code + " → " + body);
+            }
+            EntityUtils.consumeQuietly(res.getEntity());
+            return null;
+          });
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
   public void emailDocsBatch(
       java.util.List<String> ids, String to, String subject, String message, boolean attachPdf) {
     try {

@@ -12,6 +12,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +41,7 @@ public class MockDataSource implements DataSourceProvider {
   private final Map<String, Map<String, Integer>> docSequences = new HashMap<>();
   private final Map<String, Map<String, Models.EmailTemplate>> docTemplates = new HashMap<>();
   private final Map<String, Map<String, Models.DocTemplate>> docHtmlTemplates = new HashMap<>();
+  private final Map<String, Map<String, Models.Template>> templates = new HashMap<>();
   private static final Pattern DOC_REF_PATTERN = Pattern.compile("(DV|BC|BL|FA)-(\\d{4})-(\\d{4})");
   private final List<Models.Doc> docs = new ArrayList<>();
 
@@ -100,6 +102,7 @@ public class MockDataSource implements DataSourceProvider {
     docSequences.clear();
     docTemplates.clear();
     docHtmlTemplates.clear();
+    templates.clear();
     docs.clear();
 
     var a1 =
@@ -137,6 +140,16 @@ public class MockDataSource implements DataSourceProvider {
                 "Intervention {{interventionTitle}}",
                 "Bonjour {{clientName}},\nVeuillez trouver la fiche.\nAgence : {{agencyName}}\nDu {{start}} au {{end}}"));
 
+    Map<String, Models.Template> agency2Templates =
+        templates.computeIfAbsent(a2.id(), k -> new LinkedHashMap<>());
+    Models.Template interventionSouth =
+        new Models.Template(
+            UUID.randomUUID().toString(),
+            "intervention-email",
+            Models.TemplateKind.EMAIL,
+            "<p>Bonjour {{client.name}},</p><p>Votre intervention {{intervention.title}} approche.</p>");
+    agency2Templates.put(interventionSouth.id(), interventionSouth);
+
     docTemplates
         .computeIfAbsent(a1.id(), k -> new HashMap<>())
         .put(
@@ -160,6 +173,24 @@ public class MockDataSource implements DataSourceProvider {
     docHtmlTemplates
         .computeIfAbsent(a1.id(), k -> new HashMap<>())
         .put("INVOICE", new Models.DocTemplate("<h1>Facture {{docRef}}</h1>"));
+
+    Map<String, Models.Template> agencyTemplatesTemplates =
+        templates.computeIfAbsent(a1.id(), k -> new LinkedHashMap<>());
+    Models.Template emailTemplate =
+        new Models.Template(
+            UUID.randomUUID().toString(),
+            "intervention-email",
+            Models.TemplateKind.EMAIL,
+            "<p>Bonjour {{client.name}},</p><p>Intervention : {{intervention.title}}</p>");
+    agencyTemplatesTemplates.put(emailTemplate.id(), emailTemplate);
+
+    Models.Template quoteTemplate =
+        new Models.Template(
+            UUID.randomUUID().toString(),
+            "quote-default",
+            Models.TemplateKind.QUOTE,
+            "<h1>Devis {{doc.reference}}</h1><p>Client : {{client.name}}</p>");
+    agencyTemplatesTemplates.put(quoteTemplate.id(), quoteTemplate);
 
     Models.ResourceType typeGrue =
         saveResourceType(new Models.ResourceType(null, "GRUE", "crane.svg"));
@@ -1156,6 +1187,66 @@ public class MockDataSource implements DataSourceProvider {
     Models.DocTemplate template = new Models.DocTemplate(html);
     docHtmlTemplates.computeIfAbsent(currentAgencyId, k -> new HashMap<>()).put(docType, template);
     return template;
+  }
+
+  @Override
+  public java.util.List<Models.Template> listTemplates(Models.TemplateKind kind) {
+    var agencyTemplates = templates.getOrDefault(currentAgencyId, Map.of());
+    return agencyTemplates.values().stream()
+        .filter(t -> kind == null || t.kind() == kind)
+        .sorted(
+            Comparator.comparing(Models.Template::kind, java.util.Comparator.comparing(Enum::name))
+                .thenComparing(Models.Template::key))
+        .toList();
+  }
+
+  @Override
+  public Models.Template saveTemplate(Models.Template template) {
+    if (template == null) {
+      throw new IllegalArgumentException("Template requis");
+    }
+    if (currentAgencyId == null || currentAgencyId.isBlank()) {
+      throw new IllegalStateException("Agence courante non définie (Mock)");
+    }
+    String id = template.id();
+    if (id == null || id.isBlank()) {
+      id = UUID.randomUUID().toString();
+    }
+    Models.Template saved = new Models.Template(id, template.key(), template.kind(), template.html());
+    templates.computeIfAbsent(currentAgencyId, k -> new LinkedHashMap<>()).put(id, saved);
+    return saved;
+  }
+
+  @Override
+  public void deleteTemplate(String templateId) {
+    if (templateId == null || templateId.isBlank()) {
+      return;
+    }
+    var agencyTemplates = templates.get(currentAgencyId);
+    if (agencyTemplates != null) {
+      agencyTemplates.remove(templateId);
+    }
+  }
+
+  @Override
+  public void sendEmail(
+      java.util.List<String> to,
+      java.util.List<String> cc,
+      java.util.List<String> bcc,
+      String subject,
+      String html) {
+    // Mode Mock : aucune action réelle, mais valider les entrées.
+    if (to == null || to.isEmpty()) {
+      throw new IllegalArgumentException("Destinataire requis");
+    }
+    if (subject == null) {
+      subject = "";
+    }
+    if (html == null) {
+      html = "";
+    }
+    // Simuler l'envoi en consignant éventuellement dans la console.
+    System.out.println("[MOCK] Email → " + String.join(", ", to) + " — " + subject);
   }
 
   @Override
