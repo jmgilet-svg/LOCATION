@@ -91,6 +91,7 @@ public class PlanningPanel extends JPanel {
   private String filterQuery = "";
   private String filterTags = "";
   private boolean filterNoConflicts;
+  private boolean filterOnlyConflicts;
 
   private static final int HEADER_H = 28;
   private static final int ROW_H = 60;
@@ -461,6 +462,18 @@ public class PlanningPanel extends JPanel {
       data = data.stream().filter(i -> visibleIds.contains(i.resourceId())).toList();
     }
     List<ConflictUtil.Conflict> computedConflicts = ConflictUtil.computeConflicts(data);
+    if (filterOnlyConflicts && !computedConflicts.isEmpty()) {
+      Set<String> conflictIds =
+          computedConflicts.stream()
+              .flatMap(c -> Stream.of(c.a().id(), c.b().id()))
+              .filter(id -> id != null && !id.isBlank())
+              .collect(Collectors.toSet());
+      data =
+          data.stream()
+              .filter(i -> i.id() != null && conflictIds.contains(i.id()))
+              .toList();
+      computedConflicts = ConflictUtil.computeConflicts(data);
+    }
     if (filterNoConflicts && !computedConflicts.isEmpty()) {
       Set<String> conflictIds =
           computedConflicts.stream()
@@ -665,6 +678,19 @@ public class PlanningPanel extends JPanel {
 
   public String getFilterTags() {
     return filterTags;
+  }
+
+  public boolean isFilterOnlyConflicts() {
+    return filterOnlyConflicts;
+  }
+
+  public void setFilterOnlyConflicts(boolean value) {
+    if (filterOnlyConflicts == value) {
+      return;
+    }
+    filterOnlyConflicts = value;
+    reload();
+    repaint();
   }
 
   public boolean isFilterNoConflicts() {
@@ -2129,5 +2155,13 @@ public class PlanningPanel extends JPanel {
     private Tile withAlpha(float a) {
       return new Tile(i, row, x1, x2, a);
     }
+  }
+
+  public void nextConflict() {
+    centerOn(pickNextConflict(false));
+  }
+
+  public void prevConflict() {
+    centerOn(pickNextConflict(true));
   }
 }

@@ -475,8 +475,51 @@ public class MainFrame extends JFrame {
             });
   }
 
+  private JMenu buildConflictsMenu() {
+    JMenu conflicts = new JMenu("Conflits");
+    conflicts.addMenuListener(
+        new javax.swing.event.MenuListener() {
+          @Override
+          public void menuSelected(javax.swing.event.MenuEvent e) {
+            try {
+              int n = planning.getConflicts() == null ? 0 : planning.getConflicts().size();
+              conflicts.setText("Conflits (" + n + ")");
+            } catch (Exception ignored) {
+            }
+          }
+
+          @Override
+          public void menuDeselected(javax.swing.event.MenuEvent e) {}
+
+          @Override
+          public void menuCanceled(javax.swing.event.MenuEvent e) {}
+        });
+    JMenuItem next = new JMenuItem("Aller au prochain conflit");
+    next.setAccelerator(
+        KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_RIGHT,
+            java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK));
+    next.addActionListener(e -> planning.nextConflict());
+    JMenuItem prev = new JMenuItem("Aller au conflit précédent");
+    prev.setAccelerator(
+        KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_LEFT,
+            java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK));
+    prev.addActionListener(e -> planning.prevConflict());
+    JCheckBoxMenuItem only = new JCheckBoxMenuItem("Afficher uniquement les conflits");
+    only.setSelected(planning.isFilterOnlyConflicts());
+    only.addActionListener(e -> planning.setFilterOnlyConflicts(only.isSelected()));
+    conflicts.add(next);
+    conflicts.add(prev);
+    conflicts.addSeparator();
+    conflicts.add(only);
+    planning.addReloadListener(() -> only.setSelected(planning.isFilterOnlyConflicts()));
+    return conflicts;
+  }
+
   private JMenuBar buildMenuBar() {
     JMenuBar bar = new JMenuBar();
+    bar.add(buildConflictsMenu());
 
     JMenu file = new JMenu(Language.tr("menu.file"));
     file.setMnemonic('F');
