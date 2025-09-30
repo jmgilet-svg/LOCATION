@@ -202,6 +202,8 @@ public class PlanningPanel extends JPanel {
               }
             });
 
+    registerConflictNavigationShortcuts();
+
     MouseAdapter adapter = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
@@ -1155,6 +1157,59 @@ public class PlanningPanel extends JPanel {
     return zoned.toInstant();
   }
 
+  private Models.Intervention pickNextConflict(boolean backward) {
+    if (conflicts == null || conflicts.isEmpty()) {
+      return null;
+    }
+    java.util.LinkedHashSet<Models.Intervention> unique = new java.util.LinkedHashSet<>();
+    for (ConflictUtil.Conflict conflict : conflicts) {
+      if (conflict.a() != null) {
+        unique.add(conflict.a());
+      }
+      if (conflict.b() != null) {
+        unique.add(conflict.b());
+      }
+    }
+    java.util.List<Models.Intervention> ordered = new java.util.ArrayList<>(unique);
+    ordered.sort(java.util.Comparator.comparing(Models.Intervention::start));
+    java.time.Instant pivot =
+        selected != null ? selected.start() : getViewFrom().toInstant();
+    if (backward) {
+      Models.Intervention candidate = null;
+      for (int i = ordered.size() - 1; i >= 0; i--) {
+        Models.Intervention intervention = ordered.get(i);
+        if (intervention.start().isBefore(pivot)) {
+          candidate = intervention;
+          break;
+        }
+      }
+      if (candidate == null && !ordered.isEmpty()) {
+        candidate = ordered.get(ordered.size() - 1);
+      }
+      return candidate;
+    }
+    for (Models.Intervention intervention : ordered) {
+      if (intervention.start().isAfter(pivot)) {
+        return intervention;
+      }
+    }
+    return ordered.isEmpty() ? null : ordered.get(0);
+  }
+
+  private void centerOn(Models.Intervention intervention) {
+    if (intervention == null) {
+      return;
+    }
+    java.time.ZonedDateTime zoned =
+        intervention.start().atZone(java.time.ZoneId.systemDefault());
+    setDay(zoned.toLocalDate());
+    selected = intervention;
+    if (intervention.id() != null) {
+      triggerConflictFlash(intervention.id());
+    }
+    repaint();
+  }
+
   private void triggerConflictFlash(String interventionId) {
     if (interventionId == null) {
       return;
@@ -2021,6 +2076,37 @@ public class PlanningPanel extends JPanel {
       }
     }
     return -1;
+  }
+
+  private void registerConflictNavigationShortcuts() {
+    javax.swing.InputMap inputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+    javax.swing.ActionMap actionMap = getActionMap();
+    inputMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_RIGHT,
+            java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK),
+        "nextConflict");
+    actionMap.put(
+        "nextConflict",
+        new javax.swing.AbstractAction() {
+          @Override
+          public void actionPerformed(java.awt.event.ActionEvent e) {
+            centerOn(pickNextConflict(false));
+          }
+        });
+    inputMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_LEFT,
+            java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.ALT_DOWN_MASK),
+        "prevConflict");
+    actionMap.put(
+        "prevConflict",
+        new javax.swing.AbstractAction() {
+          @Override
+          public void actionPerformed(java.awt.event.ActionEvent e) {
+            centerOn(pickNextConflict(true));
+          }
+        });
   }
 
   private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {
