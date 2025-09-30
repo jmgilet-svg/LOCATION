@@ -5,6 +5,10 @@ import com.location.client.core.Models;
 import com.location.client.core.Preferences;
 import com.location.client.core.RestDataSource;
 import com.location.client.ui.i18n.Language;
+import com.location.client.ui.uikit.EmptyState;
+import com.location.client.ui.uikit.Icons;
+import com.location.client.ui.uikit.Svg;
+import com.location.client.ui.uikit.Toasts;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
@@ -602,7 +606,7 @@ public class MainFrame extends JFrame {
                 try {
                   new ResourceExplorerFrame(dsp).setVisible(true);
                 } catch (RuntimeException ex) {
-                  Toast.error(MainFrame.this, "Explorateur indisponible: " + ex.getMessage());
+                  Toasts.error(MainFrame.this, "Explorateur indisponible: " + ex.getMessage());
                 }
               }
             });
@@ -792,7 +796,7 @@ public class MainFrame extends JFrame {
                 try {
                   new ResourceTypeManagerFrame(dsp).setVisible(true);
                 } catch (RuntimeException ex) {
-                  Toast.error(MainFrame.this, "Gestion des types indisponible: " + ex.getMessage());
+                  Toasts.error(MainFrame.this, "Gestion des types indisponible: " + ex.getMessage());
                 }
               }
             }));
@@ -859,7 +863,7 @@ public class MainFrame extends JFrame {
               : agencies.get(0);
       new AgencySettingsFrame(dsp, first).setVisible(true);
     } catch (RuntimeException ex) {
-      Toast.error(this, "Paramètres agence indisponibles: " + ex.getMessage());
+      Toasts.error(this, "Paramètres agence indisponibles: " + ex.getMessage());
     }
   }
 
@@ -998,7 +1002,7 @@ public class MainFrame extends JFrame {
     prefs.addBookmarkDay(iso);
     prefs.save();
     rebuildBookmarksMenu();
-    Toast.info(this, "Jour ajouté aux signets");
+    Toasts.info(this, "Jour ajouté aux signets");
   }
 
   private void openBookmarkDay(String iso) {
@@ -1006,7 +1010,7 @@ public class MainFrame extends JFrame {
       LocalDate date = LocalDate.parse(iso);
       topBar.jumpTo(date);
     } catch (Exception ex) {
-      Toast.error(this, "Date invalide: " + iso);
+      Toasts.error(this, "Date invalide: " + iso);
     }
   }
 
@@ -1214,12 +1218,17 @@ public class MainFrame extends JFrame {
     new DocumentsBrowserFrame(dsp).setVisible(true);
   }
 
-  private void showPlaceholder(String feature) {
-    JOptionPane.showMessageDialog(
-        this,
-        feature + " — module en préparation",
-        "Navigation",
-        JOptionPane.INFORMATION_MESSAGE);
+  private void showPlaceholder(String title) {
+    JPanel placeholder = new JPanel(new BorderLayout());
+    placeholder.setOpaque(false);
+    EmptyState emptyState =
+        new EmptyState(
+            Svg.icon(Icons.SEARCH, 48),
+            title,
+            "Aucune donnée ici pour le moment. Utilise la barre d’outils pour créer ou filtrer.");
+    placeholder.add(emptyState, BorderLayout.CENTER);
+    centerCards.add(placeholder, "placeholder-" + title);
+    showCard("placeholder-" + title);
   }
 
   private void showCard(String id) {
@@ -1844,13 +1853,10 @@ public class MainFrame extends JFrame {
 
   public void toastInfo(String message) {
     status.setText(message);
-    Toast.info(this, message);
+    Toasts.info(this, message);
   }
 
-  public void toastSuccess(String message) {
-    status.setText(message);
-    Toast.success(this, message);
-  }
+  public void toastSuccess(String message) { Toasts.success(this, message); }
 
   private void exportPlanningPdfFullDialog() {
     if (!(dsp instanceof RestDataSource rd)) {
@@ -2068,10 +2074,7 @@ public class MainFrame extends JFrame {
     }
   }
 
-  private void error(String message) {
-    status.setText("⚠️ " + message);
-    Toast.error(this, message);
-  }
+  private void error(String message) { Toasts.error(this, message); }
 
   private void startGuidedTour() {
     if (!isShowing()) {

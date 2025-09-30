@@ -8,6 +8,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 import java.util.List;
+import com.location.client.ui.uikit.Toasts;
 
 /** Composition e‑mail groupée avec autocomplete basique sur les clients connus. */
 public class EmailComposeDialog extends JDialog {
@@ -96,11 +97,11 @@ public class EmailComposeDialog extends JDialog {
         throw new IllegalArgumentException("Renseignez un destinataire.");
       }
       dsp.emailDocsBatch(ids, to, subject, body, cbAttachPdf.isSelected());
-      Toast.success(this, "E‑mail envoyé (" + ids.size() + " doc)");
+      Toasts.success(this, "E‑mail envoyé (" + ids.size() + " doc)");
       ActivityCenter.log("Email groupé → " + to + " (" + ids.size() + ")");
       dispose();
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
     }
   }
 

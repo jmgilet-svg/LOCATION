@@ -6,6 +6,7 @@ import com.location.client.core.Models;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import com.location.client.ui.uikit.Toasts;
 
 public class DocTemplatesWysiwygFrame extends JFrame {
   private final DataSourceProvider dsp;
@@ -56,7 +57,7 @@ public class DocTemplatesWysiwygFrame extends JFrame {
   private void save() {
     String type = (String) cbType.getSelectedItem();
     dsp.saveDocTemplate(type, editor.getHtml());
-    Toast.success(this, "Modèle " + type + " enregistré");
+    Toasts.success(this, "Modèle " + type + " enregistré");
   }
 
   private void preview() {

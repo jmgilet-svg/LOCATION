@@ -26,6 +26,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import com.location.client.ui.uikit.Toasts;
 
 /**
  * Éditeur rapide pour ajuster une intervention : titre, horaires et ressource.
@@ -230,7 +231,7 @@ public class QuickEditDialog extends JDialog {
       if (owner instanceof MainFrame mf) {
         mf.toastSuccess("Modifications enregistrées");
       } else {
-        Toast.success(owner, "Modifications enregistrées");
+        Toasts.success(owner, "Modifications enregistrées");
       }
       if (listener != null) {
         listener.onSaved(saved);

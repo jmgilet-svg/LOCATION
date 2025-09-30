@@ -59,6 +59,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.Timer;
 import javax.swing.ToolTipManager;
+import com.location.client.ui.uikit.Toasts;
 
 public class PlanningPanel extends JPanel {
   // --- Virtualization & caches ---
@@ -1941,7 +1942,7 @@ public class PlanningPanel extends JPanel {
     }
     java.awt.Window window = SwingUtilities.getWindowAncestor(this);
     if (window != null) {
-      Toast.info(window, prefix + ": " + label);
+      Toasts.info(window, prefix + ": " + label);
     }
   }
 
@@ -1950,7 +1951,7 @@ public class PlanningPanel extends JPanel {
     if (window instanceof MainFrame mf) {
       mf.toastSuccess(message);
     } else if (window != null) {
-      Toast.success(window, message);
+      Toasts.success(window, message);
     }
     ActivityCenter.log(activity);
   }
