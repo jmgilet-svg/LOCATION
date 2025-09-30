@@ -1,5 +1,8 @@
 package com.location.client.ui.uikit;
 
+import java.text.Normalizer;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.RowFilter;
@@ -23,29 +26,32 @@ public final class TableUtils {
   public static void applySearch(JTable table, JTextField searchField, int debounceMs) {
     enableSorting(table);
     final TableRowSorter<?> sorter = (TableRowSorter<?>) table.getRowSorter();
-    final Timer timer = new Timer(debounceMs, e -> {
-      String q = searchField.getText().trim().toLowerCase();
-      if (q.isEmpty()) {
-        sorter.setRowFilter(null);
-        return;
-      }
-      sorter.setRowFilter(
-          new RowFilter<TableModel, Integer>() {
-            @Override
-            public boolean include(Entry<? extends TableModel, ? extends Integer> entry) {
-              for (int c = 0; c < entry.getValueCount(); c++) {
-                Object v = entry.getValue(c);
-                if (v != null) {
-                  String s = v.toString().toLowerCase();
-                  if (s.contains(q) || fuzzy(s, q)) {
-                    return true;
-                  }
-                }
+    final Timer timer =
+        new Timer(
+            debounceMs,
+            e -> {
+              String q = normalize(searchField.getText());
+              if (q.isEmpty()) {
+                sorter.setRowFilter(null);
+                return;
               }
-              return false;
-            }
-          });
-    });
+              sorter.setRowFilter(
+                  new RowFilter<TableModel, Integer>() {
+                    @Override
+                    public boolean include(Entry<? extends TableModel, ? extends Integer> entry) {
+                      for (int c = 0; c < entry.getValueCount(); c++) {
+                        Object v = entry.getValue(c);
+                        if (v != null) {
+                          String s = normalize(v.toString());
+                          if (s.contains(q) || fuzzy(s, q)) {
+                            return true;
+                          }
+                        }
+                      }
+                      return false;
+                    }
+                  });
+            });
     timer.setRepeats(false);
     searchField
         .getDocument()
@@ -70,6 +76,21 @@ public final class TableUtils {
                 schedule();
               }
             });
+  }
+
+  private static final Pattern DIACRITICS = Pattern.compile("\\p{M}+");
+
+  private static String normalize(String raw) {
+    if (raw == null) {
+      return "";
+    }
+    String trimmed = raw.trim();
+    if (trimmed.isEmpty()) {
+      return "";
+    }
+    String decomposed = Normalizer.normalize(trimmed, Normalizer.Form.NFD);
+    String withoutMarks = DIACRITICS.matcher(decomposed).replaceAll("");
+    return withoutMarks.toLowerCase(Locale.ROOT);
   }
 
   // super simple fuzzy contains: all chars of needle appear in order in hay
