@@ -31,6 +31,7 @@ import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
+import com.location.client.ui.uikit.Toasts;
 
 /** Administration des clients & contacts. */
 public class ClientsAdminFrame extends JFrame {
@@ -274,9 +275,9 @@ public class ClientsAdminFrame extends JFrame {
     try {
       current = dsp.saveClient(payload);
       refreshList();
-      Toast.success(this, "Client enregistré");
+      Toasts.success(this, "Client enregistré");
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
     }
   }
 
@@ -294,11 +295,11 @@ public class ClientsAdminFrame extends JFrame {
     if (confirm == JOptionPane.OK_OPTION) {
       try {
         dsp.deleteClient(current.id());
-        Toast.success(this, "Client supprimé");
+        Toasts.success(this, "Client supprimé");
         newClient();
         refreshList();
       } catch (RuntimeException ex) {
-        Toast.error(this, ex.getMessage());
+        Toasts.error(this, ex.getMessage());
       }
     }
   }
@@ -385,7 +386,7 @@ public class ClientsAdminFrame extends JFrame {
         dsp.saveContact(edited);
         loadContacts(current.id());
       } catch (RuntimeException ex) {
-        Toast.error(this, ex.getMessage());
+        Toasts.error(this, ex.getMessage());
       }
     }
   }
@@ -405,7 +406,7 @@ public class ClientsAdminFrame extends JFrame {
         dsp.saveContact(edited);
         loadContacts(current.id());
       } catch (RuntimeException ex) {
-        Toast.error(this, ex.getMessage());
+        Toasts.error(this, ex.getMessage());
       }
     }
   }
@@ -433,7 +434,7 @@ public class ClientsAdminFrame extends JFrame {
         }
         loadContacts(current.id());
       } catch (RuntimeException ex) {
-        Toast.error(this, ex.getMessage());
+        Toasts.error(this, ex.getMessage());
       }
     }
   }

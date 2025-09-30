@@ -24,6 +24,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JToolBar;
 import javax.swing.table.DefaultTableModel;
+import com.location.client.ui.uikit.Toasts;
 
 public class UnavailabilityFrame extends JFrame {
   public static JPanel createContent(DataSourceProvider dsp) {
@@ -148,7 +149,7 @@ public class UnavailabilityFrame extends JFrame {
             });
       }
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
       return;
     }
     try {
@@ -167,7 +168,7 @@ public class UnavailabilityFrame extends JFrame {
             });
       }
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
     }
   }
 
@@ -201,9 +202,9 @@ public class UnavailabilityFrame extends JFrame {
         }
       }
       model.removeRow(row);
-      Toast.success(this, "Indisponibilité supprimée");
+      Toasts.success(this, "Indisponibilité supprimée");
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
     }
   }
 
@@ -256,13 +257,13 @@ public class UnavailabilityFrame extends JFrame {
         }
         updated = true;
       } catch (RuntimeException ex) {
-        Toast.error(this, ex.getMessage());
+        Toasts.error(this, ex.getMessage());
         table.setRowSelectionInterval(row, row);
         return;
       }
     }
     if (updated) {
-      Toast.success(this, "Indisponibilités enregistrées");
+      Toasts.success(this, "Indisponibilités enregistrées");
       refresh();
     }
   }

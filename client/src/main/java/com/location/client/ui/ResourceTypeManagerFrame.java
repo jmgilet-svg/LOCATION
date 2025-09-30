@@ -22,6 +22,7 @@ import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import com.location.client.ui.uikit.Toasts;
 
 public class ResourceTypeManagerFrame extends JFrame {
   private final DataSourceProvider dataSourceProvider;
@@ -213,7 +214,7 @@ public class ResourceTypeManagerFrame extends JFrame {
               new Models.ResourceType(current == null ? null : current.id(), name, icon));
       current = saved;
       refresh();
-      Toast.success(this, "Type enregistré");
+      Toasts.success(this, "Type enregistré");
     } catch (UnsupportedOperationException ex) {
       handleUnsupported(ex);
     } catch (RuntimeException ex) {
@@ -245,7 +246,7 @@ public class ResourceTypeManagerFrame extends JFrame {
     try {
       dataSourceProvider.deleteResourceType(id);
       refresh();
-      Toast.info(this, "Type supprimé");
+      Toasts.info(this, "Type supprimé");
     } catch (UnsupportedOperationException ex) {
       handleUnsupported(ex);
     } catch (RuntimeException ex) {

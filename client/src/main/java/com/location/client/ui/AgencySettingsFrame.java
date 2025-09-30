@@ -10,6 +10,7 @@ import java.awt.event.ActionEvent;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.Base64;
+import com.location.client.ui.uikit.Toasts;
 
 public class AgencySettingsFrame extends JFrame {
   private final DataSourceProvider dsp;
@@ -186,7 +187,7 @@ public class AgencySettingsFrame extends JFrame {
                 agency.id(), agency.name(), agency.legalFooter(), agency.iban(), dataUri);
         updateLogoLabel();
       } catch (Exception ex) {
-        Toast.error(this, "Impossible de charger le logo: " + ex.getMessage());
+        Toasts.error(this, "Impossible de charger le logo: " + ex.getMessage());
       }
     }
   }
@@ -212,15 +213,15 @@ public class AgencySettingsFrame extends JFrame {
               emptyToNull(tfIban.getText()),
               agency.logoDataUri());
       agency = dsp.saveAgency(updated);
-      Toast.success(this, "Agence enregistrée");
+      Toasts.success(this, "Agence enregistrée");
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
     }
   }
 
   private void saveTemplate() {
     if (agency == null || agency.id() == null) {
-      Toast.error(this, "Enregistrez l'agence avant le modèle e-mail.");
+      Toasts.error(this, "Enregistrez l'agence avant le modèle e-mail.");
       return;
     }
     try {
@@ -229,9 +230,9 @@ public class AgencySettingsFrame extends JFrame {
           "DOC_MAIL",
           tfTemplateSubject.getText(),
           taTemplateBody.getText());
-      Toast.success(this, "Modèle enregistré");
+      Toasts.success(this, "Modèle enregistré");
     } catch (RuntimeException ex) {
-      Toast.error(this, ex.getMessage());
+      Toasts.error(this, ex.getMessage());
     }
   }
 

@@ -29,6 +29,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerDateModel;
+import com.location.client.ui.uikit.Toasts;
 
 /** Dialogue complet pour créer ou modifier une intervention. */
 public class InterventionEditorDialog extends JDialog {
@@ -403,7 +404,7 @@ public class InterventionEditorDialog extends JDialog {
     if (owner instanceof MainFrame mf) {
       mf.toastSuccess(message);
     } else if (owner != null) {
-      Toast.success(owner, message);
+      Toasts.success(owner, message);
     }
   }
 }

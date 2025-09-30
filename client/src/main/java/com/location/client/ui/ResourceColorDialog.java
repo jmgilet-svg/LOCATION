@@ -16,6 +16,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSeparator;
 import javax.swing.SwingConstants;
+import com.location.client.ui.uikit.Toasts;
 
 public class ResourceColorDialog extends JDialog {
   private final DataSourceProvider dsp;
@@ -104,7 +105,7 @@ public class ResourceColorDialog extends JDialog {
       if (chosen != null) {
         ResourceColors.setOverride(resource.id(), chosen);
         planning.refreshResourceColors();
-        Toast.success(ResourceColorDialog.this, "Couleur enregistrée");
+        Toasts.success(ResourceColorDialog.this, "Couleur enregistrée");
         updatePreview();
       }
     }
@@ -123,7 +124,7 @@ public class ResourceColorDialog extends JDialog {
       }
       ResourceColors.clearOverride(resource.id());
       planning.refreshResourceColors();
-      Toast.info(ResourceColorDialog.this, "Couleur réinitialisée");
+      Toasts.info(ResourceColorDialog.this, "Couleur réinitialisée");
       updatePreview();
     }
   }

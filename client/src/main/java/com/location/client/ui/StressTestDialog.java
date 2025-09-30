@@ -19,6 +19,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
+import com.location.client.ui.uikit.Toasts;
 
 public class StressTestDialog extends JDialog {
   private final DataSourceProvider dsp;
@@ -130,7 +131,7 @@ public class StressTestDialog extends JDialog {
         }
       }
       planning.reload();
-      Toast.success(StressTestDialog.this, created + " interventions générées");
+      Toasts.success(StressTestDialog.this, created + " interventions générées");
       dispose();
     }
   }

@@ -15,6 +15,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JToolBar;
 import javax.swing.table.DefaultTableModel;
+import com.location.client.ui.uikit.Toasts;
 
 public class ResourceEditorFrame extends JFrame {
   private final DataSourceProvider dataSourceProvider;
@@ -111,7 +112,7 @@ public class ResourceEditorFrame extends JFrame {
         try {
           capacity = Integer.parseInt(capacityRaw.trim());
         } catch (NumberFormatException ex) {
-          Toast.error(this, "Capacité invalide (ligne " + (i + 1) + ")");
+          Toasts.error(this, "Capacité invalide (ligne " + (i + 1) + ")");
           table.setRowSelectionInterval(i, i);
           table.editCellAt(i, 3);
           return;
@@ -129,13 +130,13 @@ public class ResourceEditorFrame extends JFrame {
         originals.put(saved.id(), saved);
         updated = true;
       } catch (RuntimeException ex) {
-        Toast.error(this, "Erreur sauvegarde: " + ex.getMessage());
+        Toasts.error(this, "Erreur sauvegarde: " + ex.getMessage());
         table.setRowSelectionInterval(i, i);
         return;
       }
     }
     if (updated) {
-      Toast.success(this, "Ressources enregistrées");
+      Toasts.success(this, "Ressources enregistrées");
       refresh();
     }
   }
