@@ -134,6 +134,60 @@ public class InterventionEditorDialog extends JDialog {
 
   private JPanel buildButtons() {
     JPanel buttons = new JPanel();
+    JButton quoteButton =
+        new JButton(
+            new AbstractAction("Créer/Modifier le devis") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                Models.Client client = (Models.Client) clientCombo.getSelectedItem();
+                Models.Resource resource = (Models.Resource) resourceCombo.getSelectedItem();
+                if (client == null || resource == null) {
+                  notifyError("Sélectionne client et ressource");
+                  return;
+                }
+                String driver = driverField.getText().trim();
+                if (driver.isBlank()) {
+                  driver = null;
+                }
+                String title = titleField.getText().trim();
+                if (title.isBlank()) {
+                  notifyError("Titre requis");
+                  return;
+                }
+                Date sd = (Date) startSpinner.getValue();
+                Date ed = (Date) endSpinner.getValue();
+                Instant start = sd.toInstant();
+                Instant end = ed.toInstant();
+                String notes = notesArea.getText().trim();
+                if (notes.isBlank()) {
+                  notes = null;
+                }
+                String internalNotes = internalNotesArea.getText().trim();
+                if (internalNotes.isBlank()) {
+                  internalNotes = null;
+                }
+                boolean isCreation = current.id() == null;
+                Models.Intervention payload =
+                    new Models.Intervention(
+                        current.id(),
+                        resource.agencyId(),
+                        resource.id(),
+                        client.id(),
+                        driver,
+                        title,
+                        start,
+                        end,
+                        notes,
+                        internalNotes);
+                Models.Intervention effective = payload;
+                if (isCreation) {
+                  effective = dsp.createIntervention(payload);
+                }
+                current = effective;
+                dsp.createQuoteFromIntervention(effective);
+                notifySuccess("Devis créé/mis à jour");
+              }
+            });
     JButton cancel =
         new JButton(
             new AbstractAction("Annuler") {
@@ -151,6 +205,7 @@ public class InterventionEditorDialog extends JDialog {
               }
             });
     getRootPane().setDefaultButton(save);
+    buttons.add(quoteButton);
     buttons.add(cancel);
     buttons.add(save);
     return buttons;

@@ -26,15 +26,26 @@ import javax.swing.JToolBar;
 import javax.swing.table.DefaultTableModel;
 
 public class UnavailabilityFrame extends JFrame {
+  public static JPanel createContent(DataSourceProvider dsp) {
+    UnavailabilityFrame tmp = new UnavailabilityFrame(dsp, true);
+    return (JPanel) tmp.getContentPane();
+  }
+
   private final DataSourceProvider dataSourceProvider;
   private final JComboBox<Models.Resource> resourceCombo = new JComboBox<>();
   private final DefaultTableModel model;
   private final JTable table;
 
   public UnavailabilityFrame(DataSourceProvider dsp) {
+    this(dsp, false);
+  }
+
+  private UnavailabilityFrame(DataSourceProvider dsp, boolean forEmbedding) {
     super("Indisponibilités ressources");
     this.dataSourceProvider = dsp;
-    setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+    if (!forEmbedding) {
+      setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+    }
     setLayout(new BorderLayout(6, 6));
 
     JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -90,7 +101,9 @@ public class UnavailabilityFrame extends JFrame {
     add(new JScrollPane(table), BorderLayout.CENTER);
 
     setSize(960, 520);
-    setLocationRelativeTo(null);
+    if (!forEmbedding) {
+      setLocationRelativeTo(null);
+    }
 
     if (resourceCombo.getItemCount() > 0) {
       resourceCombo.setSelectedIndex(0);
