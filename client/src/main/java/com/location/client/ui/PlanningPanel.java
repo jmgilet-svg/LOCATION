@@ -540,6 +540,25 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  public int computeTotalHeight() {
+    if (resources == null || resources.isEmpty()) {
+      return HEADER_H + ROW_H;
+    }
+    if (rowHeights == null || rowHeights.length != resources.size()) {
+      computeDynamicRows();
+    }
+    int total = HEADER_H;
+    if (rowHeights != null && rowHeights.length == resources.size()) {
+      for (int r = 0; r < rowHeights.length; r++) {
+        int h = rowHeights[r];
+        total += h > 0 ? h : ROW_H;
+      }
+    } else {
+      total += resources.size() * ROW_H;
+    }
+    return total;
+  }
+
   private void rebuildResourceColors() {
     resourceColors.clear();
     for (Models.Resource resource : resources) {

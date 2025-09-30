@@ -22,4 +22,28 @@ public final class ImageExport {
     }
     ImageIO.write(image, "png", target.toFile());
   }
+
+  public static void exportComponentSized(JComponent component, int width, int height, Path target)
+      throws IOException {
+    int w = Math.max(1, width);
+    int h = Math.max(1, height);
+    BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    java.awt.Dimension originalSize = component.getSize();
+    boolean restoreSize = originalSize.width != w || originalSize.height != h;
+    try {
+      if (restoreSize) {
+        component.setSize(w, h);
+        component.doLayout();
+      }
+      component.printAll(graphics);
+    } finally {
+      graphics.dispose();
+      if (restoreSize) {
+        component.setSize(originalSize);
+        component.doLayout();
+      }
+    }
+    ImageIO.write(image, "png", target.toFile());
+  }
 }
