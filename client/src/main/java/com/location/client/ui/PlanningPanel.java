@@ -2205,4 +2205,21 @@ public class PlanningPanel extends JPanel {
     }
     return counts;
   }
+
+  public void quickFind(String query) {
+    if (query == null || query.isBlank() || interventions == null) {
+      return;
+    }
+    String needle = query.toLowerCase(Locale.ROOT).trim();
+    for (Models.Intervention intervention : interventions) {
+      if (intervention == null) {
+        continue;
+      }
+      String title = intervention.title();
+      if (title != null && title.toLowerCase(Locale.ROOT).contains(needle)) {
+        centerOn(intervention);
+        return;
+      }
+    }
+  }
 }
