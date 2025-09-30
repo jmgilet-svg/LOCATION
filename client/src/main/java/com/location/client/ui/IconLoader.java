@@ -1,52 +1,53 @@
 package com.location.client.ui;
 
-import com.formdev.flatlaf.extras.FlatSVGIcon;
+import com.location.client.ui.uikit.Icons;
+import com.location.client.ui.uikit.Svg;
 import javax.swing.Icon;
 
 public final class IconLoader {
   private IconLoader() {}
 
   public static Icon planning() {
-    return svg("calendar.svg");
+    return svg(Icons.CALENDAR);
   }
 
   public static Icon clients() {
-    return svg("users.svg");
+    return svg(Icons.CLIENTS);
   }
 
   public static Icon resources() {
-    return svg("toolbox.svg");
+    return svg(Icons.RESOURCES);
   }
 
   public static Icon drivers() {
-    return svg("steering.svg");
+    return svg(Icons.DRIVERS);
   }
 
   public static Icon docs() {
-    return svg("docs.svg");
+    return svg(Icons.FILE_TEXT);
   }
 
   public static Icon unavailabilities() {
-    return svg("pause.svg");
+    return svg("pause");
   }
 
   public static Icon reports() {
-    return svg("chart.svg");
+    return svg("chart");
   }
 
   public static Icon search() {
-    return svg("search.svg");
+    return svg(Icons.SEARCH);
   }
 
   public static Icon lightning() {
-    return svg("bolt.svg");
+    return svg("bolt");
   }
 
   public static Icon settings() {
-    return svg("settings.svg");
+    return svg(Icons.SETTINGS);
   }
 
   private static Icon svg(String name) {
-    return new FlatSVGIcon("icons/" + name, 16, 16);
+    return Svg.icon(name, 16);
   }
 }
