@@ -1198,6 +1198,16 @@ public class MainFrame extends JFrame {
             () -> planning.setFilterOnlyConflicts(false)));
     commands.add(
         new CommandPaletteDialog.Command(
+            "planning-duplicate-plus-one",
+            "Dupliquer +1 jour",
+            () -> planning.duplicateSelected(1)));
+    commands.add(
+        new CommandPaletteDialog.Command(
+            "planning-duplicate-plus-seven",
+            "Dupliquer +7 jours",
+            () -> planning.duplicateSelected(7)));
+    commands.add(
+        new CommandPaletteDialog.Command(
             "export-png-view", "Export PNG (vue)", this::exportPlanningPngDialog));
     commands.add(
         new CommandPaletteDialog.Command(
