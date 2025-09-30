@@ -8,6 +8,8 @@ import com.location.client.ui.i18n.Language;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -19,6 +21,7 @@ import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.time.DayOfWeek;
@@ -26,6 +29,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
@@ -1807,6 +1813,22 @@ public class MainFrame extends JFrame {
       error("Export PDF complet nécessite le mode REST");
       return;
     }
+
+    ExportOptionsDialog optionsDialog = new ExportOptionsDialog(this);
+    if (topBar.getFrom() != null) {
+      optionsDialog.setStartDate(topBar.getFrom().toLocalDate());
+    }
+    optionsDialog.setVisible(true);
+    if (!optionsDialog.isOk()) {
+      optionsDialog.dispose();
+      return;
+    }
+    LocalDate startDate = optionsDialog.getStartDate();
+    String pageChoice = optionsDialog.getPage();
+    String orientationChoice = optionsDialog.getOrientation();
+    Path logoChoice = optionsDialog.getLogoPath();
+    optionsDialog.dispose();
+
     JFileChooser chooser = new JFileChooser();
     chooser.setDialogTitle("Export PDF (planning complet)");
     if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
@@ -1814,18 +1836,31 @@ public class MainFrame extends JFrame {
     }
     Path target = ensurePdfExtension(chooser.getSelectedFile());
     Path tmp = null;
+    LocalDate previousDay = planning.getDay();
     try {
+      planning.setDay(startDate);
       int width = Math.max(800, planning.getWidth());
       int height = planning.computeTotalHeight();
       tmp = Files.createTempFile("planning-full-", ".png");
       ImageExport.exportComponentSized(planning, width, height, tmp);
       String title =
           "Planning " + topBar.getFrom().toLocalDate() + " → " + topBar.getTo().toLocalDate();
-      rd.uploadPlanningPngForPdf(tmp, title, target);
+      String page = pageChoice;
+      page = page == null ? "auto" : ("Auto".equalsIgnoreCase(page) ? "auto" : page);
+      String orientation = orientationChoice;
+      if (orientation == null || "Auto".equalsIgnoreCase(orientation)) {
+        orientation = "auto";
+      } else if ("Paysage".equalsIgnoreCase(orientation)) {
+        orientation = "landscape";
+      } else {
+        orientation = "portrait";
+      }
+      rd.uploadPlanningPngForPdf(tmp, title, page, orientation, logoChoice, target);
       toastSuccess("PDF exporté: " + target.getFileName());
     } catch (Exception ex) {
       error("Export PDF complet → " + ex.getMessage());
     } finally {
+      planning.setDay(previousDay);
       if (tmp != null) {
         try {
           Files.deleteIfExists(tmp);
@@ -1833,6 +1868,122 @@ public class MainFrame extends JFrame {
           // best effort cleanup
         }
       }
+    }
+  }
+
+  static class ExportOptionsDialog extends JDialog {
+    private final JSpinner startSpinner =
+        new JSpinner(new SpinnerDateModel(new Date(), null, null, Calendar.DAY_OF_MONTH));
+    private final JComboBox<String> pageCombo = new JComboBox<>(new String[] {"Auto", "A4", "A3"});
+    private final JComboBox<String> orientationCombo =
+        new JComboBox<>(new String[] {"Auto", "Portrait", "Paysage"});
+    private final JTextField logoField = new JTextField(24);
+    private Path logoPath;
+    private boolean ok;
+
+    ExportOptionsDialog(JFrame owner) {
+      super(owner, "Options d'export", true);
+      setLayout(new BorderLayout(10, 10));
+
+      JPanel form = new JPanel(new GridBagLayout());
+      GridBagConstraints constraints = new GridBagConstraints();
+      constraints.gridx = 0;
+      constraints.gridy = 0;
+      constraints.anchor = GridBagConstraints.WEST;
+
+      form.add(new JLabel("Date de début :"), constraints);
+      constraints.gridx = 1;
+      form.add(startSpinner, constraints);
+
+      constraints.gridx = 0;
+      constraints.gridy++;
+      form.add(new JLabel("Page :"), constraints);
+      constraints.gridx = 1;
+      form.add(pageCombo, constraints);
+
+      constraints.gridx = 0;
+      constraints.gridy++;
+      form.add(new JLabel("Orientation :"), constraints);
+      constraints.gridx = 1;
+      form.add(orientationCombo, constraints);
+
+      constraints.gridx = 0;
+      constraints.gridy++;
+      form.add(new JLabel("Logo (PNG) :"), constraints);
+      constraints.gridx = 1;
+
+      JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+      logoPanel.add(logoField);
+      JButton browseButton = new JButton("Parcourir...");
+      browseButton.addActionListener(
+          e -> {
+            JFileChooser chooser = new JFileChooser();
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+              logoPath = chooser.getSelectedFile().toPath();
+              logoField.setText(logoPath.toString());
+            }
+          });
+      logoPanel.add(browseButton);
+      form.add(logoPanel, constraints);
+
+      add(form, BorderLayout.CENTER);
+
+      JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+      JButton cancelButton = new JButton("Annuler");
+      JButton exportButton = new JButton("Exporter");
+      cancelButton.addActionListener(
+          e -> {
+            ok = false;
+            setVisible(false);
+          });
+      exportButton.addActionListener(
+          e -> {
+            ok = true;
+            setVisible(false);
+          });
+      buttons.add(cancelButton);
+      buttons.add(exportButton);
+      add(buttons, BorderLayout.SOUTH);
+
+      pack();
+      setLocationRelativeTo(owner);
+    }
+
+    void setStartDate(LocalDate date) {
+      if (date != null) {
+        startSpinner.setValue(Date.from(date.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+      }
+    }
+
+    boolean isOk() {
+      return ok;
+    }
+
+    LocalDate getStartDate() {
+      Date date = (Date) startSpinner.getValue();
+      return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+
+    String getPage() {
+      return (String) pageCombo.getSelectedItem();
+    }
+
+    String getOrientation() {
+      return (String) orientationCombo.getSelectedItem();
+    }
+
+    Path getLogoPath() {
+      String text = logoField.getText();
+      if (text != null && !text.isBlank()) {
+        if (logoPath == null || !logoPath.toString().equals(text)) {
+          try {
+            logoPath = Path.of(text.trim());
+          } catch (InvalidPathException ignored) {
+            // invalid manual entry → ignore and keep previous
+          }
+        }
+      }
+      return logoPath;
     }
   }
 

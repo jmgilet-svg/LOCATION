@@ -2043,7 +2043,14 @@ public class RestDataSource implements DataSourceProvider {
     http.close();
   }
 
-  public void uploadPlanningPngForPdf(Path png, String title, Path targetPdf) throws IOException {
+  public void uploadPlanningPngForPdf(
+      Path png,
+      String title,
+      String page,
+      String orientation,
+      Path logoPng,
+      Path targetPdf)
+      throws IOException {
     String url = baseUrl + "/api/v1/planning/pdf";
     HttpPost post = new HttpPost(url);
     applyHeaders(post);
@@ -2054,6 +2061,18 @@ public class RestDataSource implements DataSourceProvider {
             .addBinaryBody("image", bytes, ContentType.IMAGE_PNG, png.getFileName().toString());
     if (title != null && !title.isBlank()) {
       builder.addTextBody("title", title, ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    }
+    builder.addTextBody(
+        "page",
+        page == null ? "auto" : page,
+        ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    builder.addTextBody(
+        "orientation",
+        orientation == null ? "auto" : orientation,
+        ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+    if (logoPng != null) {
+      byte[] logoBytes = Files.readAllBytes(logoPng);
+      builder.addBinaryBody("logo", logoBytes, ContentType.IMAGE_PNG, logoPng.getFileName().toString());
     }
     post.setEntity(builder.build());
     try (CloseableHttpResponse response = http.execute(post)) {
