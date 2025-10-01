@@ -146,6 +146,7 @@ public class MainFrame extends JFrame {
             }
             Notify.off("network.error", networkListener);
             Notify.off("conflicts.resolve", conflictsResolver);
+
             try {
               dsp.close();
             } catch (Exception ignored) {
