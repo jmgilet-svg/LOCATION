@@ -48,10 +48,14 @@ import java.util.stream.Stream;
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
@@ -71,6 +75,7 @@ public class PlanningPanel extends JPanel {
   private java.time.OffsetDateTime lastViewTo = null;
   private int lastWidth = -1;
   private int lastHeight = -1;
+  private final java.util.Map<String, java.awt.Rectangle> badgeBounds = new java.util.HashMap<>();
 
   // Ghost drag rectangle for visual feedback
   private Rectangle ghostDragRect = null;
@@ -240,12 +245,22 @@ public class PlanningPanel extends JPanel {
 
       @Override
       public void mouseClicked(MouseEvent e) {
+        Point p = e.getPoint();
+        Models.Intervention badgeTarget = interventionAtBadge(p);
+        if (badgeTarget != null) {
+          showResourcePopover(e, badgeTarget);
+          return;
+        }
+        if (SwingUtilities.isRightMouseButton(e)) {
+          findTileAt(p).map(t -> t.i).ifPresent(it -> showResourcePopover(e, it));
+          return;
+        }
         if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-          Optional<Tile> hit = findTileAt(e.getPoint());
+          Optional<Tile> hit = findTileAt(p);
           if (hit.isPresent()) {
             openQuickEdit(hit.get().i);
           } else {
-            createAt(e.getPoint());
+            createAt(p);
           }
         }
       }
@@ -1050,6 +1065,7 @@ public class PlanningPanel extends JPanel {
     int dayWidth = colWidth * HOURS;
 
     computeLanes(viewFrom.toInstant(), viewTo.toInstant());
+    badgeBounds.clear();
 
     int firstVisibleRow = 0;
     int lastVisibleRow = resources.size() - 1;
@@ -1491,6 +1507,10 @@ public class PlanningPanel extends JPanel {
     }
 
     java.util.List<String> resourceIds = effectiveResourceIds(tile.i);
+    String interventionId = tile.i.id();
+    if (interventionId != null && resourceIds.size() <= 1) {
+      badgeBounds.remove(interventionId);
+    }
     if (resourceIds.size() > 1) {
       Graphics2D badgeGraphics = (Graphics2D) g2.create();
       try {
@@ -1506,6 +1526,9 @@ public class PlanningPanel extends JPanel {
         badgeGraphics.fillRoundRect(badgeX, badgeY, badgeWidth, badgeHeight, 8, 8);
         badgeGraphics.setColor(Color.WHITE);
         badgeGraphics.drawString(label, badgeX + 4, badgeY + fm.getAscent());
+        if (interventionId != null) {
+          badgeBounds.put(interventionId, new java.awt.Rectangle(badgeX, badgeY, badgeWidth, badgeHeight));
+        }
       } finally {
         badgeGraphics.dispose();
       }
@@ -1517,6 +1540,27 @@ public class PlanningPanel extends JPanel {
       int dotY = rect.y - 6;
       g2.fillOval(dotX, dotY, 10, 10);
     }
+  }
+
+  private Models.Intervention interventionAtBadge(Point p) {
+    if (p == null || badgeBounds.isEmpty() || interventions == null || interventions.isEmpty()) {
+      return null;
+    }
+    for (java.util.Map.Entry<String, java.awt.Rectangle> entry : badgeBounds.entrySet()) {
+      java.awt.Rectangle bounds = entry.getValue();
+      if (bounds != null && bounds.contains(p)) {
+        String id = entry.getKey();
+        if (id == null) {
+          continue;
+        }
+        for (Models.Intervention intervention : interventions) {
+          if (id.equals(intervention.id())) {
+            return intervention;
+          }
+        }
+      }
+    }
+    return null;
   }
 
   private java.util.List<String> effectiveResourceIds(Models.Intervention intervention) {
@@ -1625,7 +1669,7 @@ public class PlanningPanel extends JPanel {
     if (p == null || p.y < HEADER_H || p.x < TIME_W) {
       return Optional.empty();
     }
-    int row = (p.y - HEADER_H) / ROW_H;
+    int row = rowAtY(p.y);
     if (row < 0 || row >= resources.size()) {
       return Optional.empty();
     }
@@ -1643,6 +1687,125 @@ public class PlanningPanel extends JPanel {
       if (rect.contains(p)) return Optional.of(t);
     }
     return Optional.empty();
+  }
+
+  private void showResourcePopover(MouseEvent event, Models.Intervention target) {
+    if (event == null || target == null) {
+      return;
+    }
+    java.util.List<String> current = new java.util.ArrayList<>(effectiveResourceIds(target));
+    if (current.isEmpty()) {
+      String fallback = target.resourceId();
+      if (fallback != null && !fallback.isBlank()) {
+        current.add(fallback);
+      }
+    }
+
+    JPopupMenu menu = new JPopupMenu();
+
+    if (!current.isEmpty()) {
+      JMenu assigned = new JMenu("Ressources affectées");
+      for (String rid : current) {
+        JCheckBoxMenuItem item = new JCheckBoxMenuItem(rid, true);
+        item.addActionListener(
+            e -> {
+              if (current.size() <= 1) {
+                Toolkit.getDefaultToolkit().beep();
+                return;
+              }
+              java.util.List<String> ids = new java.util.ArrayList<>(effectiveResourceIds(target));
+              if (ids.isEmpty()) {
+                ids = new java.util.ArrayList<>(current);
+              }
+              ids.remove(rid);
+              if (ids.isEmpty()) {
+                Toolkit.getDefaultToolkit().beep();
+                return;
+              }
+              tryUpdateResources(target, ids);
+            });
+        assigned.add(item);
+      }
+      menu.add(assigned);
+    }
+
+    JMenu candidates = new JMenu("Ajouter une ressource");
+    for (Models.Resource resource : resources) {
+      if (resource == null) {
+        continue;
+      }
+      String rid = resource.id();
+      if (rid == null || rid.isBlank() || current.contains(rid)) {
+        continue;
+      }
+      JMenuItem item = new JMenuItem(resource.name() + " (" + rid + ")");
+      item.addActionListener(
+          e -> {
+            java.util.List<String> ids = new java.util.ArrayList<>(effectiveResourceIds(target));
+            if (ids.isEmpty()) {
+              ids = new java.util.ArrayList<>(current);
+            }
+            if (!ids.contains(rid)) {
+              ids.add(rid);
+            }
+            tryUpdateResources(target, ids);
+          });
+      candidates.add(item);
+    }
+    if (candidates.getItemCount() == 0) {
+      JMenuItem none = new JMenuItem("Aucune ressource disponible");
+      none.setEnabled(false);
+      candidates.add(none);
+    }
+    menu.add(candidates);
+
+    int row = rowAtY(event.getY());
+    if (row >= 0 && row < resources.size()) {
+      Models.Resource rowResource = resources.get(row);
+      if (rowResource != null && rowResource.id() != null && !rowResource.id().isBlank()) {
+        JMenuItem keepOnly = new JMenuItem("Ne garder que cette ressource (rangée)");
+        keepOnly.addActionListener(
+            e -> {
+              java.util.List<String> ids = new java.util.ArrayList<>();
+              ids.add(rowResource.id());
+              tryUpdateResources(target, ids);
+            });
+        menu.addSeparator();
+        menu.add(keepOnly);
+      }
+    }
+
+    menu.show(this, event.getX(), event.getY());
+  }
+
+  private void tryUpdateResources(Models.Intervention original, java.util.List<String> resourceIds) {
+    if (original == null || resourceIds == null) {
+      return;
+    }
+    java.util.LinkedHashSet<String> unique = new java.util.LinkedHashSet<>();
+    for (String rid : resourceIds) {
+      if (rid != null && !rid.isBlank()) {
+        unique.add(rid);
+      }
+    }
+    if (unique.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<String> sanitized = new java.util.ArrayList<>(unique);
+    try {
+      Models.Intervention updated = original.withResourceIds(sanitized);
+      Models.Intervention saved = dsp.updateIntervention(updated);
+      selected = saved;
+      reload();
+      if (saved.id() != null) {
+        selectAndRevealIntervention(saved.id());
+      }
+      notifySuccess("Affectations mises à jour", "Ressources: " + String.join(", ", sanitized));
+      pushUpdateHistory("Affectations", original, saved);
+    } catch (RuntimeException ex) {
+      notifyError("Impossible de mettre à jour les affectations");
+    }
   }
 
   public boolean deleteSelected() {
@@ -1978,13 +2141,15 @@ public class PlanningPanel extends JPanel {
     return new Models.Intervention(
         it.id(),
         it.agencyId(),
-        it.resourceId(),
+        it.resourceIds(),
         it.clientId(),
         it.driverId(),
         it.title(),
         it.start(),
         it.end(),
-        it.notes());
+        it.notes(),
+        it.internalNotes(),
+        it.price());
   }
 
   private void pushUpdateHistory(String label, Models.Intervention before, Models.Intervention after) {
@@ -2159,6 +2324,14 @@ public class PlanningPanel extends JPanel {
       Toasts.success(window, message);
     }
     ActivityCenter.log(activity);
+  }
+
+  private void notifyError(String message) {
+    Toolkit.getDefaultToolkit().beep();
+    java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+    if (window != null) {
+      Toasts.error(window, message);
+    }
   }
 
   private void ensureAvailability(String resourceId, Instant start, Instant end) {
