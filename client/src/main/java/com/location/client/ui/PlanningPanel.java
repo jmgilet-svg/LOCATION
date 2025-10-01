@@ -1196,6 +1196,33 @@ public class PlanningPanel extends JPanel {
       paintTile(g2, dragTile.withAlpha(0.6f));
     }
 
+    if (interventions != null && conflicts != null && !conflicts.isEmpty()) {
+      Graphics2D g2pulse = (Graphics2D) g2.create();
+      long now = System.currentTimeMillis() % 1200L;
+      float phase = Math.abs(600 - now) / 600f;
+      float alpha = 0.3f + 0.5f * phase;
+      g2pulse.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+      g2pulse.setColor(new Color(220, 50, 47));
+      g2pulse.setStroke(new BasicStroke(2.5f));
+      for (Models.Intervention intervention : interventions) {
+        if (!isInConflict(intervention.id())) {
+          continue;
+        }
+        int row = indexOfResource(intervention.resourceId());
+        if (row < firstVisibleRow || row > lastVisibleRow) {
+          continue;
+        }
+        java.awt.Rectangle rect = tileRect(tileFor(intervention, row));
+        if (rect == null) {
+          continue;
+        }
+        java.awt.Rectangle outline = new java.awt.Rectangle(rect);
+        outline.grow(4, 4);
+        g2pulse.drawRoundRect(outline.x, outline.y, outline.width, outline.height, 14, 14);
+      }
+      g2pulse.dispose();
+    }
+
     if (ghostDragRect != null) {
       Graphics2D ghostGraphics = (Graphics2D) g2.create();
       ghostGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.20f));
@@ -2321,6 +2348,59 @@ public class PlanningPanel extends JPanel {
             centerOn(pickNextConflict(true));
           }
         });
+  }
+
+  private boolean isInConflict(String interventionId) {
+    if (interventionId == null || conflicts == null || conflicts.isEmpty()) {
+      return false;
+    }
+    for (ConflictUtil.Conflict conflict : conflicts) {
+      if (conflict == null) {
+        continue;
+      }
+      if (conflict.a() != null && interventionId.equals(conflict.a().id())) {
+        return true;
+      }
+      if (conflict.b() != null && interventionId.equals(conflict.b().id())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public void selectAndRevealIntervention(String id) {
+    if (id == null || interventions == null || interventions.isEmpty()) {
+      return;
+    }
+    for (Models.Intervention intervention : interventions) {
+      if (!id.equals(intervention.id())) {
+        continue;
+      }
+      centerOn(intervention);
+      SwingUtilities.invokeLater(
+          () -> {
+            Models.Intervention current =
+                interventions.stream()
+                    .filter(i -> id.equals(i.id()))
+                    .findFirst()
+                    .orElse(null);
+            if (current == null) {
+              return;
+            }
+            int row = indexOfResource(current.resourceId());
+            if (row < 0) {
+              return;
+            }
+            java.awt.Rectangle rect = tileRect(tileFor(current, row));
+            if (rect == null) {
+              return;
+            }
+            java.awt.Rectangle padded = new java.awt.Rectangle(rect);
+            padded.grow(16, 16);
+            scrollRectToVisible(padded);
+          });
+      return;
+    }
   }
 
   private record Tile(Models.Intervention i, int row, int x1, int x2, float alpha) {

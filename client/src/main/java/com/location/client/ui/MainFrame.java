@@ -90,6 +90,24 @@ public class MainFrame extends JFrame {
     minimap.setWorkingHours(planning.getStartHour(), planning.getEndHour());
     planning.addReloadListener(this::updateMinimap);
 
+    final java.beans.PropertyChangeListener conflictFocusListener =
+        evt -> {
+          Object value = evt.getNewValue();
+          if (!(value instanceof ConflictUtil.Conflict conflict)) {
+            return;
+          }
+          String targetId = null;
+          if (conflict.a() != null && conflict.a().id() != null) {
+            targetId = conflict.a().id();
+          } else if (conflict.b() != null && conflict.b().id() != null) {
+            targetId = conflict.b().id();
+          }
+          if (targetId != null) {
+            Ui.ensure(() -> planning.selectAndRevealIntervention(targetId));
+          }
+        };
+    Notify.on("conflicts.focus", conflictFocusListener);
+
     initializeCurrentAgency();
 
     if (dsp instanceof RestDataSource rest) {
@@ -135,6 +153,7 @@ public class MainFrame extends JFrame {
               badgeTimer.stop();
             }
             Notify.off("network.error", networkListener);
+            Notify.off("conflicts.focus", conflictFocusListener);
             try {
               dsp.close();
             } catch (Exception ignored) {
