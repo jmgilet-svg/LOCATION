@@ -25,6 +25,7 @@ import java.awt.FontMetrics;
 import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -176,6 +177,10 @@ public class PlanningPanel extends JPanel {
   private static final int ROW_H = 60;
   private static final int TIME_W = 80;
   private static final int HOURS = 12;
+  // S14: horizontal zoom (1.0 = default)
+  private static final double MIN_ZOOM_X = 0.4d;
+  private static final double MAX_ZOOM_X = 4.0d;
+  private double zoomX = 1.0;
   private static final int START_HOUR = 7;
   private static final int SLOT_MINUTES = 15;
   private static final DayOfWeek WEEK_START = DayOfWeek.MONDAY;
@@ -212,6 +217,49 @@ public class PlanningPanel extends JPanel {
   private Timer flashingTimer;
 
   public PlanningPanel(DataSourceProvider dsp) {
+    // S14: zoom handlers
+    addMouseWheelListener(
+        e -> {
+          if (!e.isControlDown()) {
+            return;
+          }
+          double factor = e.getWheelRotation() < 0 ? 1.1 : 0.9;
+          setZoomX(zoomX * factor);
+          e.consume();
+        });
+
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PLUS, 0), "zoomIn");
+    getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_EQUALS, java.awt.event.InputEvent.SHIFT_DOWN_MASK),
+            "zoomIn");
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ADD, 0), "zoomIn");
+    getActionMap()
+        .put(
+            "zoomIn",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                setZoomX(zoomX * 1.1);
+              }
+            });
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_MINUS, 0), "zoomOut");
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_SUBTRACT, 0), "zoomOut");
+    getActionMap()
+        .put(
+            "zoomOut",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                setZoomX(zoomX * 0.9);
+              }
+            });
+
     this.dsp = dsp;
     setLayout(null);
 
@@ -793,6 +841,42 @@ public class PlanningPanel extends JPanel {
 
   public boolean isWeekMode() {
     return weekMode;
+  }
+
+  public double getZoomX() {
+    return zoomX;
+  }
+
+  private void setZoomX(double value) {
+    double clamped = Math.max(MIN_ZOOM_X, Math.min(MAX_ZOOM_X, value));
+    if (Math.abs(clamped - zoomX) < 0.0001d) {
+      return;
+    }
+    java.awt.Rectangle vis = getVisibleRect();
+    Instant focusInstant = null;
+    int focusOffset = 0;
+    if (vis.width > 0) {
+      focusOffset = vis.width / 2;
+      focusInstant = instantForX(vis.x + focusOffset);
+    }
+    zoomX = clamped;
+    int inspectorWidth =
+        inspectorPanel != null && inspectorPanel.isVisible() ? inspectorPanel.getWidth() : 0;
+    int w = Math.max(0, getWidth() - inspectorWidth);
+    int availableWidth = Math.max(0, w - TIME_W);
+    int viewDays = Math.max(1, getViewDays());
+    int totalCols = Math.max(1, HOURS * viewDays);
+    double baseColWidth = totalCols == 0 ? 0d : availableWidth / (double) totalCols;
+    colWidth = Math.max(1, (int) Math.round(baseColWidth * zoomX));
+    invalidateLayoutCaches();
+    revalidate();
+    repaint();
+    if (focusInstant != null && vis.width > 0) {
+      int centerX = xForInstant(focusInstant);
+      java.awt.Rectangle target =
+          new java.awt.Rectangle(Math.max(0, centerX - focusOffset), vis.y, vis.width, vis.height);
+      scrollRectToVisible(target);
+    }
   }
 
   private int getViewDays() {
@@ -1775,9 +1859,21 @@ public class PlanningPanel extends JPanel {
     int viewDays = Math.max(1, getViewDays());
     int totalCols = Math.max(1, HOURS * viewDays);
     int availableWidth = Math.max(0, w - TIME_W);
-    colWidth = Math.max(1, availableWidth / totalCols);
+    double baseColWidth = totalCols == 0 ? 0d : availableWidth / (double) totalCols;
+    colWidth = Math.max(1, (int) Math.round(baseColWidth * zoomX));
     updateLayoutCacheState(w, h, colWidth, viewFrom, viewTo);
     int dayWidth = colWidth * HOURS;
+    int timelineWidth = TIME_W + dayWidth * viewDays;
+    Dimension pref = getPreferredSize();
+    int preferredHeight = pref != null ? pref.height : getHeight();
+    if (preferredHeight <= 0) {
+      preferredHeight = h;
+    }
+    int desiredWidth = Math.max(MIN_TIMELINE_WIDTH, timelineWidth + inspectorWidth);
+    if (pref == null || pref.width != desiredWidth || pref.height != preferredHeight) {
+      setPreferredSize(new Dimension(desiredWidth, preferredHeight));
+      revalidate();
+    }
 
     computeLanes(viewFrom.toInstant(), viewTo.toInstant());
     ensureRowLayout();
@@ -1839,6 +1935,8 @@ public class PlanningPanel extends JPanel {
     g2.setColor(Color.GRAY);
     g2.drawLine(0, headerH, w, headerH);
     g2.drawLine(TIME_W, 0, TIME_W, h);
+    String zoomLabel = String.format("Zoom %.0f%%", zoomX * 100);
+    g2.drawString(zoomLabel, Math.max(TIME_W + 8, w - 120), headerH - 8);
 
     if (chipBar > 0) {
       g2.setColor(new Color(242, 247, 255));
@@ -1977,6 +2075,13 @@ public class PlanningPanel extends JPanel {
         if (!isResourceVisibleInRect(r, vis)) {
           continue;
         }
+        int x1 = xForInstant(i.start());
+        int x2 = xForInstant(i.end());
+        int minX = Math.min(x1, x2);
+        int maxX = Math.max(x1, x2);
+        if (maxX < vis.x || minX > vis.x + vis.width) {
+          continue;
+        }
         Tile t = tileFor(i, r);
         paintTile(g2, t);
       }
@@ -1990,6 +2095,13 @@ public class PlanningPanel extends JPanel {
       for (String rid : effectiveResourceIds(i)) {
         int r = indexOfResource(rid);
         if (!isResourceVisibleInRect(r, vis)) {
+          continue;
+        }
+        int x1 = xForInstant(i.start());
+        int x2 = xForInstant(i.end());
+        int minX = Math.min(x1, x2);
+        int maxX = Math.max(x1, x2);
+        if (maxX < vis.x || minX > vis.x + vis.width) {
           continue;
         }
         Tile t = tileFor(i, r);
