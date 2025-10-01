@@ -38,6 +38,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -75,6 +76,7 @@ public class PlanningPanel extends JPanel {
   private java.time.OffsetDateTime lastViewTo = null;
   private int lastWidth = -1;
   private int lastHeight = -1;
+  private final java.util.Map<String, java.awt.Rectangle> chipRects = new java.util.HashMap<>();
   private final java.util.Map<String, java.awt.Rectangle> badgeBounds = new java.util.HashMap<>();
 
   // Ghost drag rectangle for visual feedback
@@ -83,6 +85,9 @@ public class PlanningPanel extends JPanel {
   private final DataSourceProvider dsp;
   private List<Models.Agency> agencies = List.of();
   private List<Models.Resource> resources = List.of();
+  private List<Models.ResourceType> resourceTypes = List.of();
+  private final java.util.Set<String> collapsedTypes = new LinkedHashSet<>();
+  private final java.util.Map<String, String> resourceTypeIdByResource = new java.util.HashMap<>();
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
   private List<Models.Unavailability> unavailabilities = List.of();
@@ -106,7 +111,8 @@ public class PlanningPanel extends JPanel {
   private boolean filterNoConflicts;
   private boolean filterOnlyConflicts;
 
-  private static final int HEADER_H = 28;
+  private static final int BASE_HEADER_H = 28;
+  private static final int CHIP_BAR_H = 24;
   private static final int ROW_H = 60;
   private static final int TIME_W = 80;
   private static final int HOURS = 12;
@@ -246,6 +252,24 @@ public class PlanningPanel extends JPanel {
       @Override
       public void mouseClicked(MouseEvent e) {
         Point p = e.getPoint();
+        if (SwingUtilities.isLeftMouseButton(e)) {
+          for (java.util.Map.Entry<String, java.awt.Rectangle> entry : new java.util.HashMap<>(chipRects).entrySet()) {
+            java.awt.Rectangle rect = entry.getValue();
+            if (rect != null && rect.contains(p)) {
+              String typeId = entry.getKey();
+              if (typeId != null) {
+                if (collapsedTypes.contains(typeId)) {
+                  collapsedTypes.remove(typeId);
+                } else {
+                  collapsedTypes.add(typeId);
+                }
+                reload();
+                repaint();
+                return;
+              }
+            }
+          }
+        }
         Models.Intervention badgeTarget = interventionAtBadge(p);
         if (badgeTarget != null) {
           showResourcePopover(e, badgeTarget);
@@ -279,7 +303,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private void createAt(Point p) {
-    if (p.y < HEADER_H || resources.isEmpty() || clients.isEmpty()) {
+    if (p.y < headerHeight() || resources.isEmpty() || clients.isEmpty()) {
       Toolkit.getDefaultToolkit().beep();
       return;
     }
@@ -434,6 +458,17 @@ public class PlanningPanel extends JPanel {
     return start.plusDays(getViewDays()).atTime(0, 0).atOffset(ZoneOffset.UTC);
   }
 
+  private int chipBarHeight() {
+    if (resourceTypes == null || resourceTypes.isEmpty()) {
+      return 0;
+    }
+    return CHIP_BAR_H;
+  }
+
+  private int headerHeight() {
+    return BASE_HEADER_H + chipBarHeight();
+  }
+
   public void reload() {
     invalidateLayoutCaches();
     String selectedId = getSelectedInterventionId();
@@ -462,7 +497,86 @@ public class PlanningPanel extends JPanel {
       String rid = filterResourceId;
       fetchedResources = fetchedResources.stream().filter(r -> rid.equals(r.id())).toList();
     }
-    resources = fetchedResources;
+    List<Models.ResourceType> fetchedTypes;
+    try {
+      fetchedTypes = dsp.listResourceTypes();
+    } catch (RuntimeException ex) {
+      fetchedTypes = List.of();
+    }
+    if (fetchedTypes == null) {
+      fetchedTypes = List.of();
+    }
+    resourceTypes = fetchedTypes;
+    java.util.Set<String> knownTypeIds =
+        resourceTypes.stream()
+            .map(Models.ResourceType::id)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    collapsedTypes.retainAll(knownTypeIds);
+
+    resourceTypeIdByResource.clear();
+    for (Models.Resource resource : fetchedResources) {
+      if (resource == null) {
+        continue;
+      }
+      String id = resource.id();
+      if (id == null) {
+        continue;
+      }
+      String typeId = null;
+      try {
+        typeId = dsp.getResourceTypeForResource(id);
+      } catch (RuntimeException ignored) {
+        typeId = null;
+      }
+      resourceTypeIdByResource.put(id, typeId);
+    }
+
+    if (filterResourceId != null && !filterResourceId.isBlank()) {
+      String forcedType = resourceTypeIdByResource.get(filterResourceId);
+      if (forcedType != null) {
+        collapsedTypes.remove(forcedType);
+      }
+    }
+
+    java.util.Map<String, Integer> typeOrder = new java.util.HashMap<>();
+    for (int i = 0; i < resourceTypes.size(); i++) {
+      Models.ResourceType type = resourceTypes.get(i);
+      if (type != null && type.id() != null) {
+        typeOrder.put(type.id(), i);
+      }
+    }
+
+    java.text.Collator collator = java.text.Collator.getInstance();
+    List<Models.Resource> sortedResources =
+        fetchedResources.stream()
+            .filter(
+                r -> {
+                  if (r == null || r.id() == null) {
+                    return true;
+                  }
+                  String typeId = resourceTypeIdByResource.get(r.id());
+                  return typeId == null || !collapsedTypes.contains(typeId);
+                })
+            .sorted(
+                (a, b) -> {
+                  if (a == null || b == null) {
+                    return a == null ? (b == null ? 0 : -1) : 1;
+                  }
+                  String ta = a.id() == null ? null : resourceTypeIdByResource.get(a.id());
+                  String tb = b.id() == null ? null : resourceTypeIdByResource.get(b.id());
+                  int oa = typeOrder.getOrDefault(ta, Integer.MAX_VALUE / 2);
+                  int ob = typeOrder.getOrDefault(tb, Integer.MAX_VALUE / 2);
+                  if (oa != ob) {
+                    return Integer.compare(oa, ob);
+                  }
+                  String an = a.name() == null ? "" : a.name();
+                  String bn = b.name() == null ? "" : b.name();
+                  return collator.compare(an, bn);
+                })
+            .toList();
+
+    resources = sortedResources;
     rebuildResourceColors();
 
     clients = dsp.listClients();
@@ -578,12 +692,12 @@ public class PlanningPanel extends JPanel {
 
   public int computeTotalHeight() {
     if (resources == null || resources.isEmpty()) {
-      return HEADER_H + ROW_H;
+      return headerHeight() + ROW_H;
     }
     if (rowHeights == null || rowHeights.length != resources.size()) {
       computeDynamicRows();
     }
-    int total = HEADER_H;
+    int total = headerHeight();
     if (rowHeights != null && rowHeights.length == resources.size()) {
       for (int r = 0; r < rowHeights.length; r++) {
         int h = rowHeights[r];
@@ -1055,6 +1169,8 @@ public class PlanningPanel extends JPanel {
     if (vis.width <= 0 || vis.height <= 0) {
       return;
     }
+    int headerH = headerHeight();
+    int chipBar = chipBarHeight();
     java.time.OffsetDateTime viewFrom = getViewFrom();
     java.time.OffsetDateTime viewTo = getViewTo();
     int viewDays = Math.max(1, getViewDays());
@@ -1066,13 +1182,14 @@ public class PlanningPanel extends JPanel {
 
     computeLanes(viewFrom.toInstant(), viewTo.toInstant());
     badgeBounds.clear();
+    chipRects.clear();
 
     int firstVisibleRow = 0;
     int lastVisibleRow = resources.size() - 1;
     if (resources.isEmpty()) {
       lastVisibleRow = -1;
     } else {
-      int bodyTop = HEADER_H;
+      int bodyTop = headerH;
       int bodyBottom = bodyTop + resources.size() * ROW_H;
       int viewStartY = Math.max(bodyTop, vis.y);
       int viewEndY = Math.min(bodyBottom, vis.y + vis.height);
@@ -1091,7 +1208,7 @@ public class PlanningPanel extends JPanel {
     g2.fillRect(0, 0, TIME_W, h);
     g2.setColor(new Color(245, 245, 245));
     if (hoverRow >= firstVisibleRow && hoverRow <= lastVisibleRow) {
-      int hy = HEADER_H + hoverRow * ROW_H;
+      int hy = headerH + hoverRow * ROW_H;
       g2.setColor(new Color(100, 149, 237, 28));
       g2.fillRect(TIME_W, hy, Math.max(0, w - TIME_W), h);
       g2.setColor(new Color(245, 245, 245));
@@ -1107,14 +1224,65 @@ public class PlanningPanel extends JPanel {
       g2.drawLine(TIME_W, bottom, TIME_W + bodyWidth, bottom);
       g2.setColor(new Color(245, 245, 245));
     }
-    g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), HEADER_H);
+    g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), headerH);
     g2.setColor(Color.GRAY);
-    g2.drawLine(0, HEADER_H, w, HEADER_H);
+    g2.drawLine(0, headerH, w, headerH);
     g2.drawLine(TIME_W, 0, TIME_W, h);
+
+    if (chipBar > 0) {
+      g2.setColor(new Color(242, 247, 255));
+      g2.fillRect(TIME_W, 0, Math.max(0, w - TIME_W), chipBar);
+      java.awt.FontMetrics fm = g2.getFontMetrics();
+      int chipX = TIME_W + 8;
+      int chipY = Math.max(2, (chipBar - (fm.getHeight() + 6)) / 2);
+      int chipHeight = Math.min(chipBar - chipY * 2, fm.getHeight() + 6);
+      if (chipHeight < fm.getHeight()) {
+        chipHeight = fm.getHeight() + 4;
+      }
+      for (Models.ResourceType type : resourceTypes) {
+        if (type == null || type.id() == null) {
+          continue;
+        }
+        long total =
+            resourceTypeIdByResource.entrySet().stream()
+                .filter(e -> type.id().equals(e.getValue()))
+                .count();
+        if (total <= 0) {
+          continue;
+        }
+        long visible =
+            resources.stream()
+                .filter(r -> type.id().equals(resourceTypeIdByResource.get(r.id())))
+                .count();
+        boolean collapsed = collapsedTypes.contains(type.id());
+        String baseLabel = type.label() == null || type.label().isBlank() ? type.code() : type.label();
+        if (baseLabel == null || baseLabel.isBlank()) {
+          baseLabel = type.id();
+        }
+        String label = baseLabel + " (" + visible + "/" + total + ")";
+        String text = (collapsed ? "\u25B6 " : "\u25BC ") + label;
+        int textWidth = fm.stringWidth(text);
+        int chipWidth = Math.min(Math.max(64, textWidth + 16), Math.max(64, w - chipX - 8));
+        java.awt.Rectangle rect = new java.awt.Rectangle(chipX, chipY, chipWidth, chipHeight);
+        chipRects.put(type.id(), rect);
+        g2.setColor(collapsed ? new Color(228, 232, 240) : new Color(204, 221, 255));
+        g2.fillRoundRect(rect.x, rect.y, rect.width, rect.height, 12, 12);
+        g2.setColor(collapsed ? new Color(150, 160, 180) : new Color(130, 150, 190));
+        g2.drawRoundRect(rect.x, rect.y, rect.width, rect.height, 12, 12);
+        g2.setColor(Color.DARK_GRAY);
+        int textY = rect.y + (rect.height + fm.getAscent() - fm.getDescent()) / 2;
+        g2.drawString(text, rect.x + 8, textY);
+        chipX += rect.width + 8;
+        if (chipX > w - 80) {
+          break;
+        }
+      }
+    }
 
     paintHeatmap(g2, viewDays, dayWidth, h);
 
     LocalDate headerStart = getViewStart();
+    int dayLabelY = (chipBar > 0 ? chipBar + 16 : 16);
     for (int d = 0; d < viewDays; d++) {
       int xDay = TIME_W + d * dayWidth;
       g2.setColor(new Color(230, 230, 230));
@@ -1125,14 +1293,14 @@ public class PlanningPanel extends JPanel {
           current.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.getDefault())
               + " "
               + current;
-      g2.drawString(label, xDay + 6, 16);
+      g2.drawString(label, xDay + 6, dayLabelY);
       g2.setColor(Color.GRAY);
       for (int i = 0; i <= HOURS; i++) {
         int x = xDay + i * colWidth;
-        g2.drawLine(x, HEADER_H, x, h);
+        g2.drawLine(x, headerH, x, h);
         if (d == 0 && i < HOURS) {
           String txt = (START_HOUR + i) + ":00";
-          g2.drawString(txt, x + 4, HEADER_H - 8);
+          g2.drawString(txt, x + 4, headerH - 8);
         }
       }
     }
@@ -1142,7 +1310,7 @@ public class PlanningPanel extends JPanel {
     g2.setColor(Color.GRAY);
     if (lastVisibleRow >= firstVisibleRow && lastVisibleRow >= 0) {
       for (int r = firstVisibleRow; r <= lastVisibleRow; r++) {
-        int y = HEADER_H + r * ROW_H;
+        int y = headerHeight() + r * ROW_H;
         g2.drawLine(0, y, w, y);
         g2.setColor(Color.DARK_GRAY);
         g2.drawString(resources.get(r).name(), 8, y + 18);
@@ -1257,7 +1425,7 @@ public class PlanningPanel extends JPanel {
       return;
     }
     int stepsPerDay = HOURS * 2;
-    int bodyHeight = Math.max(0, height - HEADER_H);
+    int bodyHeight = Math.max(0, height - headerHeight());
     if (bodyHeight <= 0) {
       return;
     }
@@ -1290,7 +1458,7 @@ public class PlanningPanel extends JPanel {
                 + dayIndex * dayWidth
                 + Math.round(dayWidth * ((step + 1) / (float) stepsPerDay));
         g2.setColor(new Color(255, 140, 0, alpha));
-        g2.fillRect(x1, HEADER_H, Math.max(1, x2 - x1), bodyHeight);
+        g2.fillRect(x1, headerHeight(), Math.max(1, x2 - x1), bodyHeight);
       }
     }
   }
@@ -1605,7 +1773,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private java.awt.Rectangle buildTileRect(Tile t, int laneIndex, int laneCount) {
-    int baseY = HEADER_H + t.row * ROW_H + 6;
+    int baseY = headerHeight() + t.row * ROW_H + 6;
     int baseHeight = ROW_H - 12;
     int x = Math.min(t.x1, t.x2);
     int w = Math.max(16, Math.abs(t.x2 - t.x1));
@@ -1666,7 +1834,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private Optional<Tile> findTileAt(Point p) {
-    if (p == null || p.y < HEADER_H || p.x < TIME_W) {
+    if (p == null || p.y < headerHeight() || p.x < TIME_W) {
       return Optional.empty();
     }
     int row = rowAtY(p.y);
@@ -1918,7 +2086,7 @@ public class PlanningPanel extends JPanel {
 
   private void updateCursor(Point p) {
     int newHoverRow = rowAtY(p.y);
-    if (p.y < HEADER_H || p.x < TIME_W || newHoverRow < 0 || newHoverRow >= resources.size()) {
+    if (p.y < headerHeight() || p.x < TIME_W || newHoverRow < 0 || newHoverRow >= resources.size()) {
       newHoverRow = -1;
     }
     Optional<Tile> otHover = findTileAt(p);
@@ -1999,7 +2167,7 @@ public class PlanningPanel extends JPanel {
       int targetRow = rowAtY(newCenter);
       if (!resources.isEmpty()) {
         if (targetRow < 0) {
-          targetRow = newCenter < HEADER_H ? 0 : resources.size() - 1;
+          targetRow = newCenter < headerHeight() ? 0 : resources.size() - 1;
         }
         targetRow = Math.max(0, Math.min(targetRow, resources.size() - 1));
       } else {
@@ -2457,7 +2625,7 @@ public class PlanningPanel extends JPanel {
     int n = resources == null ? 0 : resources.size();
     rowHeights = new int[n];
     rowYPositions = new int[n];
-    int y = HEADER_H;
+    int y = headerHeight();
     for (int r = 0; r < n; r++) {
       String resId = resources.get(r).id();
       int lanes = Math.max(1, laneCountByResource.getOrDefault(resId, 1));
@@ -2478,18 +2646,18 @@ public class PlanningPanel extends JPanel {
 
   private int rowY(int r) {
     if (rowYPositions == null || r < 0 || r >= rowYPositions.length) {
-      return HEADER_H + r * ROW_H;
+      return headerHeight() + r * ROW_H;
     }
     return rowYPositions[r];
   }
 
   private int rowAtY(int y) {
-    if (y < HEADER_H) {
+    if (y < headerHeight()) {
       return -1;
     }
     int size = resources == null ? 0 : resources.size();
     if (rowYPositions == null || rowYPositions.length == 0) {
-      int row = (y - HEADER_H) / ROW_H;
+      int row = (y - headerHeight()) / ROW_H;
       return (row >= 0 && row < size) ? row : -1;
     }
     for (int r = 0; r < rowYPositions.length; r++) {
