@@ -1,87 +1,159 @@
 package com.location.client.ui;
 
-import com.location.client.core.Models;
+import com.location.client.ui.uikit.Notify;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.event.ItemListener;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import javax.swing.AbstractAction;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JCheckBox;
-import javax.swing.JLabel;
+import javax.swing.JComponent;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.ListCellRenderer;
+import javax.swing.KeyStroke;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 
+/**
+ * Simple panel that lists detected conflicts and allows focusing them in the planning.
+ */
 public class ConflictsPanel extends JPanel {
   private final DefaultListModel<ConflictRow> model = new DefaultListModel<>();
   private final JList<ConflictRow> list = new JList<>(model);
-  private final JCheckBox onlyVisible = new JCheckBox("Ressources visibles", true);
-  private final JCheckBox onlySelectedDay = new JCheckBox("Jour courant", false);
+  private final JCheckBox onlyVisible = new JCheckBox("Ressources visibles");
+  private final JCheckBox onlySelectedDay = new JCheckBox("Jour sélectionné");
+  private final DateTimeFormatter formatter =
+      DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.systemDefault());
 
   public ConflictsPanel() {
-    super(new BorderLayout(6, 6));
-    list.setCellRenderer(new Renderer());
+    super(new BorderLayout(8, 8));
+    list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    list.setCellRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public Component getListCellRendererComponent(
+              JList<?> list,
+              Object value,
+              int index,
+              boolean isSelected,
+              boolean cellHasFocus) {
+            Component c =
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            if (value instanceof ConflictRow row) {
+              setText(row.label);
+            }
+            return c;
+          }
+        });
     add(new JScrollPane(list), BorderLayout.CENTER);
-    JPanel north = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
-    north.add(new JLabel("Conflits"));
+
+    JPanel north = new JPanel();
     north.add(onlyVisible);
     north.add(onlySelectedDay);
     add(north, BorderLayout.NORTH);
+
+    list.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e.getClickCount() == 2) {
+              int index = list.locationToIndex(e.getPoint());
+              if (index >= 0) {
+                ConflictRow row = model.getElementAt(index);
+                focusConflict(row);
+              }
+            }
+          }
+        });
+
+    list.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke("ENTER"), "focusConflict");
+    list.getActionMap()
+        .put(
+            "focusConflict",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                ConflictRow row = list.getSelectedValue();
+                focusConflict(row);
+              }
+            });
   }
 
   public void setConflicts(List<ConflictUtil.Conflict> conflicts) {
-    model.clear();
-    if (conflicts == null) {
+    SwingUtilities.invokeLater(
+        () -> {
+          model.clear();
+          if (conflicts == null || conflicts.isEmpty()) {
+            return;
+          }
+          for (ConflictUtil.Conflict conflict : conflicts) {
+            if (conflict == null) {
+              continue;
+            }
+            String start =
+                conflict.a() != null && conflict.a().start() != null
+                    ? formatter.format(conflict.a().start())
+                    : "?";
+            String end =
+                conflict.a() != null && conflict.a().end() != null
+                    ? formatter.format(conflict.a().end())
+                    : "?";
+            String aTitle = conflict.a() != null ? safeTitle(conflict.a().title()) : "?";
+            String bTitle = conflict.b() != null ? safeTitle(conflict.b().title()) : "?";
+            String resource = conflict.resourceId() == null ? "?" : conflict.resourceId();
+            model.addElement(
+                new ConflictRow(
+                    conflict,
+                    String.format("[%s - %s] %s — %s (%s)", start, end, aTitle, bTitle, resource)));
+          }
+        });
+  }
+
+  public boolean isOnlyVisible() {
+    return onlyVisible.isSelected();
+  }
+
+  public void setOnlyVisible(boolean value) {
+    onlyVisible.setSelected(value);
+  }
+
+  public void addOnlyVisibleListener(ItemListener listener) {
+    onlyVisible.addItemListener(listener);
+  }
+
+  public boolean isOnlySelectedDay() {
+    return onlySelectedDay.isSelected();
+  }
+
+  public void setOnlySelectedDay(boolean value) {
+    onlySelectedDay.setSelected(value);
+  }
+
+  public void addOnlySelectedDayListener(ItemListener listener) {
+    onlySelectedDay.addItemListener(listener);
+  }
+
+  private void focusConflict(ConflictRow row) {
+    if (row == null || row.conflict == null) {
       return;
     }
-    for (ConflictUtil.Conflict c : conflicts) {
-      model.addElement(new ConflictRow(c));
-    }
+    Notify.post("conflicts.focus", row.conflict);
   }
 
-  private static class ConflictRow {
-    final ConflictUtil.Conflict conflict;
-
-    ConflictRow(ConflictUtil.Conflict c) {
-      this.conflict = c;
-    }
+  private static String safeTitle(String title) {
+    return title == null || title.isBlank() ? "(Sans titre)" : title;
   }
 
-  private static class Renderer extends JLabel implements ListCellRenderer<ConflictRow> {
-    private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM HH:mm");
-
+  private record ConflictRow(ConflictUtil.Conflict conflict, String label) {
     @Override
-    public Component getListCellRendererComponent(
-        JList<? extends ConflictRow> list,
-        ConflictRow value,
-        int index,
-        boolean isSelected,
-        boolean cellHasFocus) {
-      setOpaque(true);
-      if (value == null) {
-        setText("");
-        return this;
-      }
-      Models.Intervention a = value.conflict.a();
-      Models.Intervention b = value.conflict.b();
-      String who =
-          (a.clientName() != null ? a.clientName() : "?")
-              + " ↔ "
-              + (b.clientName() != null ? b.clientName() : "?");
-      String when = "";
-      if (a.start() != null && a.end() != null) {
-        when = fmt.format(a.start()) + "–" + fmt.format(a.end());
-      }
-      setText("<html><b>" + who + "</b><br/>" + when + "</html>");
-      if (isSelected) {
-        setBackground(list.getSelectionBackground());
-        setForeground(list.getSelectionForeground());
-      } else {
-        setBackground(list.getBackground());
-        setForeground(list.getForeground());
-      }
-      return this;
+    public String toString() {
+      return label;
     }
   }
 }
