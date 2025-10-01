@@ -3,18 +3,21 @@ package com.location.client.core;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -83,6 +86,100 @@ public class MockDataSource implements DataSourceProvider {
       return;
     }
     interventionTags.put(interventionId, tags == null ? List.of() : new ArrayList<>(tags));
+  }
+
+  @Override
+  public void generateCurrentMonthDemo() {
+    YearMonth currentMonth = YearMonth.now();
+    LocalDate firstDay = currentMonth.atDay(1);
+    LocalDate lastDay = currentMonth.atEndOfMonth();
+    Random random = new Random(firstDay.toEpochDay());
+
+    interventions.clear();
+
+    for (LocalDate day = firstDay; !day.isAfter(lastDay); day = day.plusDays(1)) {
+      if (day.getDayOfWeek() == DayOfWeek.SATURDAY || day.getDayOfWeek() == DayOfWeek.SUNDAY) {
+        continue;
+      }
+      int interventionCount = 4 + random.nextInt(4);
+      for (int idx = 0; idx < interventionCount; idx++) {
+        if (resources.isEmpty() || clients.isEmpty() || agencies.isEmpty()) {
+          break;
+        }
+        Models.Agency agency = agencies.get(random.nextInt(agencies.size()));
+        Models.Client client = clients.get(random.nextInt(clients.size()));
+        Models.Resource resource = resources.get(random.nextInt(resources.size()));
+        String resourceId = resource.id();
+        String agencyId = agency.id();
+        if (resourceId == null || agencyId == null || client.id() == null) {
+          continue;
+        }
+        int resourceCount = 1 + random.nextInt(Math.max(1, Math.min(3, resources.size())));
+        List<String> resourceIds = new ArrayList<>(resourceCount);
+        while (resourceIds.size() < resourceCount) {
+          Models.Resource pick = resources.get(random.nextInt(resources.size()));
+          String rid = pick.id();
+          if (rid != null && !resourceIds.contains(rid)) {
+            resourceIds.add(rid);
+          }
+        }
+        LocalTime startTime = LocalTime.of(7 + random.nextInt(6), random.nextBoolean() ? 30 : 0);
+        Duration duration = Duration.ofHours(2 + random.nextInt(5));
+        OffsetDateTime start = day.atTime(startTime).atOffset(ZoneOffset.UTC);
+        OffsetDateTime end = start.plus(duration);
+        String title;
+        switch (random.nextInt(5)) {
+          case 0 -> title = "Montage";
+          case 1 -> title = "Livraison";
+          case 2 -> title = "Maintenance";
+          case 3 -> title = "Déchargement";
+          default -> title = "Opération";
+        }
+        interventions.add(
+            new Models.Intervention(
+                UUID.randomUUID().toString(),
+                agencyId,
+                resourceIds,
+                client.id(),
+                null,
+                title,
+                start.toInstant(),
+                end.toInstant(),
+                random.nextInt(10) == 0 ? "Chevauchement volontaire" : null));
+      }
+
+      if (!resources.isEmpty() && !clients.isEmpty() && !agencies.isEmpty() && random.nextInt(3) == 0) {
+        Models.Resource resource = resources.get(random.nextInt(resources.size()));
+        String resourceId = resource.id();
+        Models.Agency agency = agencies.get(0);
+        Models.Client client = clients.get(0);
+        if (resourceId != null && agency != null && client != null) {
+          OffsetDateTime start = day.atTime(9, 0).atOffset(ZoneOffset.UTC);
+          interventions.add(
+              new Models.Intervention(
+                  UUID.randomUUID().toString(),
+                  agency.id(),
+                  List.of(resourceId),
+                  client.id(),
+                  null,
+                  "Chevauchement contrôle",
+                  start.toInstant(),
+                  start.plusHours(3).toInstant(),
+                  "Conflit intentionnel"));
+          interventions.add(
+              new Models.Intervention(
+                  UUID.randomUUID().toString(),
+                  agency.id(),
+                  List.of(resourceId),
+                  client.id(),
+                  null,
+                  "Chevauchement contrôle (bis)",
+                  start.plusMinutes(90).toInstant(),
+                  start.plusHours(5).toInstant(),
+                  "Conflit intentionnel"));
+        }
+      }
+    }
   }
 
   @Override
