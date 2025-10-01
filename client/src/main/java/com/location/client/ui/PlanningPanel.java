@@ -60,6 +60,7 @@ import javax.swing.JTextField;
 import javax.swing.Timer;
 import javax.swing.ToolTipManager;
 import com.location.client.ui.uikit.Toasts;
+import com.location.client.ui.uikit.Notify;
 
 public class PlanningPanel extends JPanel {
   // --- Virtualization & caches ---
@@ -69,6 +70,9 @@ public class PlanningPanel extends JPanel {
   private java.time.OffsetDateTime lastViewTo = null;
   private int lastWidth = -1;
   private int lastHeight = -1;
+
+  // Ghost drag rectangle for visual feedback
+  private Rectangle ghostDragRect = null;
 
   private final DataSourceProvider dsp;
   private List<Models.Agency> agencies = List.of();
@@ -499,6 +503,10 @@ public class PlanningPanel extends JPanel {
     }
     retainInterventionTagsFor(data);
     conflicts = computedConflicts;
+    try {
+      Notify.post("conflicts.update", conflicts);
+    } catch (Throwable ignore) {
+    }
     interventions = data;
     if (selectedId != null) {
       selected =
@@ -1186,6 +1194,17 @@ public class PlanningPanel extends JPanel {
         && dragTile.row >= firstVisibleRow
         && dragTile.row <= lastVisibleRow) {
       paintTile(g2, dragTile.withAlpha(0.6f));
+    }
+
+    if (ghostDragRect != null) {
+      Graphics2D ghostGraphics = (Graphics2D) g2.create();
+      ghostGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.20f));
+      ghostGraphics.setColor(new Color(0, 120, 215));
+      ghostGraphics.fill(ghostDragRect);
+      ghostGraphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.8f));
+      ghostGraphics.setStroke(new BasicStroke(2f));
+      ghostGraphics.draw(ghostDragRect);
+      ghostGraphics.dispose();
     }
   }
 
@@ -2370,6 +2389,18 @@ public class PlanningPanel extends JPanel {
         centerOn(intervention);
         return;
       }
+    }
+  }
+
+  private void setGhostDrag(Rectangle r) {
+    this.ghostDragRect = r;
+    repaint();
+  }
+
+  private void clearGhostDrag() {
+    if (this.ghostDragRect != null) {
+      this.ghostDragRect = null;
+      repaint();
     }
   }
 }
