@@ -1,6 +1,5 @@
 package com.location.client.ui;
 
-import com.location.client.core.ConflictUtil;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.ui.icons.SvgIconLoader;
@@ -2111,7 +2110,7 @@ public class PlanningPanel extends JPanel {
                 .filter(r -> type.id().equals(resourceTypeIdByResource.get(r.id())))
                 .count();
         boolean collapsed = collapsedTypes.contains(type.id());
-        String baseLabel = type.label() == null || type.label().isBlank() ? type.code() : type.label();
+        String baseLabel = type.name() == null || type.name().isBlank() ? type.id() : type.name();
         if (baseLabel == null || baseLabel.isBlank()) {
           baseLabel = type.id();
         }
@@ -2381,9 +2380,9 @@ public class PlanningPanel extends JPanel {
           if (type == null || type.id() == null) {
             continue;
           }
-          String label = type.label();
+          String label = type.name();
           if (label == null || label.isBlank()) {
-            label = type.code();
+            label = type.id();
           }
           if (label == null || label.isBlank()) {
             label = type.id();
@@ -2654,7 +2653,7 @@ public class PlanningPanel extends JPanel {
 
     boolean conflict = hasConflict(t);
     String resourceId = resourceIdAtRow(t.row);
-    Color base = tileColorFor(tile.i, resourceId);
+    Color base = tileColorFor(t.i, resourceId);
     if (t.alpha < 1f) {
       g2.setComposite(AlphaComposite.SrcOver.derive(t.alpha));
     }
@@ -4325,9 +4324,9 @@ public class PlanningPanel extends JPanel {
     }
     Models.ResourceType type = findResourceType(typeId);
     if (type != null) {
-      String label = type.label();
+      String label = type.name();
       if (label == null || label.isBlank()) {
-        label = type.code();
+        label = type.id();
       }
       if (label != null && !label.isBlank()) {
         return label;

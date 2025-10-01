@@ -1,7 +1,6 @@
 package com.location.client.ui;
 
 
-import com.location.client.core.ConflictUtil;
 import com.location.client.core.Models;
 
 import java.awt.BorderLayout;
