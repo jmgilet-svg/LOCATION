@@ -103,6 +103,8 @@ public class PlanningPanel extends JPanel {
   private final DataSourceProvider dsp;
   private List<Models.Agency> agencies = List.of();
   private List<Models.Resource> resources = List.of();
+  private final java.util.Map<String, Integer> resourceIndexById = new java.util.HashMap<>();
+  private String selectedResourceIdForUI;
   private List<Models.ResourceType> resourceTypes = List.of();
   private final java.util.Set<String> collapsedTypes = new LinkedHashSet<>();
   private final java.util.Set<String> pinnedTypes = new LinkedHashSet<>();
@@ -603,7 +605,7 @@ public class PlanningPanel extends JPanel {
     try {
       ensureAvailability(resource.id(), start, end);
       Models.Intervention created = dsp.createIntervention(payload);
-      selected = created;
+      setSelected(created, resource.id());
       reload();
       notifySuccess("Intervention créée", "Création intervention " + created.id());
       maybeOfferQuote(created);
@@ -625,7 +627,7 @@ public class PlanningPanel extends JPanel {
                 SwingUtilities.getWindowAncestor(this), dsp, intervention, allResources)
             .onSavedPair(
                 (original, saved) -> {
-                  selected = saved;
+                  setSelected(saved);
                   reload();
                   pushUpdateHistory("Édition", copyOf(original), saved);
                 });
@@ -680,6 +682,7 @@ public class PlanningPanel extends JPanel {
   public void reload() {
     invalidateLayoutCaches();
     String selectedId = getSelectedInterventionId();
+    String selectedResourceId = selectedResourceId();
     agencies = dsp.listAgencies();
     List<Models.Resource> fetchedResources = dsp.listResources();
     String agency = filterAgencyId;
@@ -805,6 +808,7 @@ public class PlanningPanel extends JPanel {
             .toList();
 
     resources = sortedResources;
+    rebuildResourceIndex();
     rebuildDisplayIndex();
     rebuildResourceColors();
 
@@ -833,7 +837,10 @@ public class PlanningPanel extends JPanel {
     }
     if (filterTags != null && !filterTags.isBlank()) {
       Set<String> visibleIds = resources.stream().map(Models.Resource::id).collect(Collectors.toSet());
-      data = data.stream().filter(i -> visibleIds.contains(i.resourceId())).toList();
+      data =
+          data.stream()
+              .filter(i -> effectiveResourceIds(i).stream().anyMatch(visibleIds::contains))
+              .toList();
     }
     List<ConflictUtil.Conflict> computedConflicts = ConflictUtil.computeConflicts(data);
     if (filterOnlyConflicts && !computedConflicts.isEmpty()) {
@@ -868,13 +875,14 @@ public class PlanningPanel extends JPanel {
     }
     interventions = data;
     if (selectedId != null) {
-      selected =
+      Models.Intervention restored =
           interventions.stream()
               .filter(i -> selectedId.equals(i.id()))
               .findFirst()
               .orElse(null);
+      setSelected(restored, selectedResourceId);
     } else {
-      selected = null;
+      setSelected(null);
     }
 
     List<Models.Unavailability> unav =
@@ -1018,6 +1026,23 @@ public class PlanningPanel extends JPanel {
 
     displayRowHeights = new int[displayToResource.size()];
     displayRowYPositions = new int[displayToResource.size()];
+  }
+
+  private void rebuildResourceIndex() {
+    resourceIndexById.clear();
+    if (resources == null) {
+      return;
+    }
+    for (int i = 0; i < resources.size(); i++) {
+      Models.Resource resource = resources.get(i);
+      if (resource == null) {
+        continue;
+      }
+      String id = resource.id();
+      if (id != null) {
+        resourceIndexById.put(id, i);
+      }
+    }
   }
 
   private void invalidateLayoutCaches() {
@@ -1282,6 +1307,73 @@ public class PlanningPanel extends JPanel {
     return selected == null ? null : selected.id();
   }
 
+  private void setSelected(Models.Intervention intervention) {
+    setSelected(intervention, null);
+  }
+
+  private void setSelected(Models.Intervention intervention, String resourceIdForUi) {
+    selected = intervention;
+    if (intervention == null) {
+      selectedResourceIdForUI = null;
+      return;
+    }
+    java.util.List<String> ids = effectiveResourceIds(intervention);
+    if (resourceIdForUi != null && ids.contains(resourceIdForUi)) {
+      selectedResourceIdForUI = resourceIdForUi;
+      return;
+    }
+    if (selectedResourceIdForUI != null && ids.contains(selectedResourceIdForUI)) {
+      return;
+    }
+    if (!ids.isEmpty()) {
+      selectedResourceIdForUI = ids.get(0);
+      return;
+    }
+    selectedResourceIdForUI = intervention.resourceId();
+  }
+
+  private String selectedResourceId() {
+    if (selected == null) {
+      return null;
+    }
+    java.util.List<String> ids = effectiveResourceIds(selected);
+    if (selectedResourceIdForUI != null && ids.contains(selectedResourceIdForUI)) {
+      return selectedResourceIdForUI;
+    }
+    if (!ids.isEmpty()) {
+      selectedResourceIdForUI = ids.get(0);
+      return selectedResourceIdForUI;
+    }
+    selectedResourceIdForUI = selected.resourceId();
+    return selectedResourceIdForUI;
+  }
+
+  private String resourceIdAtRow(int row) {
+    if (row < 0 || row >= resources.size()) {
+      return null;
+    }
+    Models.Resource resource = resources.get(row);
+    return resource == null ? null : resource.id();
+  }
+
+  private Models.Resource resourceById(String resourceId) {
+    if (resourceId == null) {
+      return null;
+    }
+    Integer idx = resourceIndexById.get(resourceId);
+    if (idx == null || idx < 0 || idx >= resources.size()) {
+      return null;
+    }
+    return resources.get(idx);
+  }
+
+  private String laneKey(String interventionId, String resourceId) {
+    if (interventionId == null) {
+      return null;
+    }
+    return interventionId + "@" + (resourceId == null ? "" : resourceId);
+  }
+
   public boolean hasSelection() {
     return selected != null;
   }
@@ -1302,6 +1394,12 @@ public class PlanningPanel extends JPanel {
       return false;
     }
     Models.Intervention base = selected;
+    String resourceId = selectedResourceId();
+    if (resourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return false;
+    }
+    Models.Resource resource = resourceById(resourceId);
     Instant start = base.start().plus(delta);
     Instant end = base.end().plus(delta);
     if (!end.isAfter(start)) {
@@ -1318,8 +1416,8 @@ public class PlanningPanel extends JPanel {
     Models.Intervention payload =
         new Models.Intervention(
             null,
-            base.agencyId(),
-            base.resourceId(),
+            resource != null ? resource.agencyId() : base.agencyId(),
+            resourceId,
             base.clientId(),
             base.driverId(),
             title,
@@ -1327,9 +1425,9 @@ public class PlanningPanel extends JPanel {
             end,
             base.notes());
     try {
-      ensureAvailability(base.resourceId(), start, end);
+      ensureAvailability(resourceId, start, end);
       Models.Intervention created = dsp.createIntervention(payload);
-      selected = created;
+      setSelected(created, resourceId);
       reload();
       notifySuccess("Intervention dupliquée", "Duplication intervention " + created.id());
       pushCreationHistory("Duplication", created);
@@ -1351,6 +1449,12 @@ public class PlanningPanel extends JPanel {
       return false;
     }
     Models.Intervention before = copyOf(selected);
+    String resourceId = selectedResourceId();
+    if (resourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return false;
+    }
+    Models.Resource resource = resourceById(resourceId);
     Instant start = selected.start().plus(delta);
     Instant end = selected.end().plus(delta);
     if (!end.isAfter(start)) {
@@ -1360,8 +1464,8 @@ public class PlanningPanel extends JPanel {
     Models.Intervention updated =
         new Models.Intervention(
             selected.id(),
-            selected.agencyId(),
-            selected.resourceId(),
+            resource != null ? resource.agencyId() : selected.agencyId(),
+            resourceId,
             selected.clientId(),
             selected.driverId(),
             selected.title(),
@@ -1369,9 +1473,9 @@ public class PlanningPanel extends JPanel {
             end,
             selected.notes());
     try {
-      ensureAvailability(selected.resourceId(), start, end);
+      ensureAvailability(resourceId, start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
-      selected = persisted;
+      setSelected(persisted, resourceId);
       reload();
       notifySuccess("Intervention décalée", "Déplacement intervention " + persisted.id());
       pushUpdateHistory("Déplacement", before, persisted);
@@ -1409,7 +1513,7 @@ public class PlanningPanel extends JPanel {
 
   public void clearSelection() {
     if (selected != null) {
-      selected = null;
+      setSelected(null);
       repaint();
       fireSelectionChanged();
     }
@@ -1420,13 +1524,18 @@ public class PlanningPanel extends JPanel {
     laneCountByResource.clear();
     java.util.Map<String, java.util.List<Models.Intervention>> byResource = new java.util.HashMap<>();
     for (Models.Intervention intervention : interventions) {
-      if (intervention == null || intervention.resourceId() == null) {
+      if (intervention == null) {
         continue;
       }
       if (intervention.end().isAfter(from) && intervention.start().isBefore(to)) {
-        byResource
-            .computeIfAbsent(intervention.resourceId(), key -> new java.util.ArrayList<>())
-            .add(intervention);
+        for (String resourceId : effectiveResourceIds(intervention)) {
+          if (resourceId == null) {
+            continue;
+          }
+          byResource
+              .computeIfAbsent(resourceId, key -> new java.util.ArrayList<>())
+              .add(intervention);
+        }
       }
     }
     for (java.util.Map.Entry<String, java.util.List<Models.Intervention>> entry : byResource.entrySet()) {
@@ -1452,7 +1561,10 @@ public class PlanningPanel extends JPanel {
           }
         }
         if (intervention.id() != null) {
-          laneIndexById.put(intervention.id(), laneIndex);
+          String key = laneKey(intervention.id(), resourceId);
+          if (key != null) {
+            laneIndexById.put(key, laneIndex);
+          }
         }
       }
       laneCountByResource.put(resourceId, Math.max(1, laneEnds.size()));
@@ -1674,12 +1786,14 @@ public class PlanningPanel extends JPanel {
     }
 
     for (Models.Intervention i : interventions) {
-      int r = indexOfResource(i.resourceId());
-      if (!isResourceVisibleInRect(r, vis)) {
-        continue;
+      for (String rid : effectiveResourceIds(i)) {
+        int r = indexOfResource(rid);
+        if (!isResourceVisibleInRect(r, vis)) {
+          continue;
+        }
+        Tile t = tileFor(i, r);
+        paintTile(g2, t);
       }
-      Tile t = tileFor(i, r);
-      paintTile(g2, t);
     }
 
     g2.setFont(getFont());
@@ -1687,19 +1801,21 @@ public class PlanningPanel extends JPanel {
       if (i.notes() == null || i.notes().isBlank()) {
         continue;
       }
-      int r = indexOfResource(i.resourceId());
-      if (!isResourceVisibleInRect(r, vis)) {
-        continue;
+      for (String rid : effectiveResourceIds(i)) {
+        int r = indexOfResource(rid);
+        if (!isResourceVisibleInRect(r, vis)) {
+          continue;
+        }
+        Tile t = tileFor(i, r);
+        int iconX = Math.max(t.x1, t.x2) - 18;
+        int iconY = rowY(r) + 18;
+        g2.setColor(new Color(30, 30, 30, 200));
+        g2.drawString("\uD83D\uDCD3", iconX, iconY);
       }
-      Tile t = tileFor(i, r);
-      int iconX = Math.max(t.x1, t.x2) - 18;
-      int iconY = rowY(r) + 18;
-      g2.setColor(new Color(30, 30, 30, 200));
-      g2.drawString("\uD83D\uDCD3", iconX, iconY);
     }
 
     if (selected != null) {
-      int row = indexOfResource(selected.resourceId());
+      int row = indexOfResource(selectedResourceId());
       if (isResourceVisibleInRect(row, vis)) {
         Tile t = tileFor(selected, row);
         int x = Math.min(t.x1, t.x2);
@@ -1801,10 +1917,11 @@ public class PlanningPanel extends JPanel {
   }
 
   private int indexOfResource(String id) {
-    for (int i = 0; i < resources.size(); i++) {
-      if (resources.get(i).id().equals(id)) return i;
+    if (id == null) {
+      return -1;
     }
-    return -1;
+    Integer idx = resourceIndexById.get(id);
+    return idx == null ? -1 : idx;
   }
 
   private Tile tileFor(Models.Intervention i, int row) {
@@ -1916,7 +2033,7 @@ public class PlanningPanel extends JPanel {
     java.time.ZonedDateTime zoned =
         intervention.start().atZone(java.time.ZoneId.systemDefault());
     setDay(zoned.toLocalDate());
-    selected = intervention;
+    setSelected(intervention);
     if (intervention.id() != null) {
       triggerConflictFlash(intervention.id());
     }
@@ -1955,7 +2072,8 @@ public class PlanningPanel extends JPanel {
     int height = rect.height;
 
     boolean conflict = hasConflict(t);
-    Color base = resourceColors.get(t.i.resourceId());
+    String resourceId = resourceIdAtRow(t.row);
+    Color base = resourceColors.get(resourceId);
     if (base == null) {
       base = ResourceColors.colorFor(null);
     }
@@ -2084,12 +2202,15 @@ public class PlanningPanel extends JPanel {
     if (t == null) {
       return new java.awt.Rectangle();
     }
-    String resourceId = t.i.resourceId();
+    String resourceId = resourceIdAtRow(t.row);
     int laneCount = Math.max(1, laneCountByResource.getOrDefault(resourceId, 1));
     int laneIndex = 0;
     String interventionId = t.i.id();
     if (interventionId != null) {
-      laneIndex = laneIndexById.getOrDefault(interventionId, 0);
+      String key = laneKey(interventionId, resourceId);
+      if (key != null) {
+        laneIndex = laneIndexById.getOrDefault(key, 0);
+      }
     }
     laneIndex = Math.max(0, Math.min(laneCount - 1, laneIndex));
     if (t.alpha != 1f) {
@@ -2139,7 +2260,7 @@ public class PlanningPanel extends JPanel {
     if (t == null || t.i == null) {
       return false;
     }
-    String resourceId = t.i.resourceId();
+    String resourceId = resourceIdAtRow(t.row);
     String id = t.i.id();
     if (!conflicts.isEmpty() && id != null) {
       for (ConflictUtil.Conflict conflict : conflicts) {
@@ -2161,7 +2282,7 @@ public class PlanningPanel extends JPanel {
       if (Objects.equals(intervention.id(), id)) {
         continue;
       }
-      if (!intervention.resourceIds().contains(resourceId)) {
+      if (!effectiveResourceIds(intervention).contains(resourceId)) {
         continue;
       }
       if (intervention.end().isAfter(s) && intervention.start().isBefore(e)) {
@@ -2185,12 +2306,14 @@ public class PlanningPanel extends JPanel {
     }
     String resourceId = resource.id();
     for (Models.Intervention i : interventions) {
-      if (!Objects.equals(i.resourceId(), resourceId)) {
+      if (!effectiveResourceIds(i).contains(resourceId)) {
         continue;
       }
       Tile t = tileFor(i, row);
       Rectangle rect = tileRect(t);
-      if (rect.contains(p)) return Optional.of(t);
+      if (rect.contains(p)) {
+        return Optional.of(t);
+      }
     }
     return Optional.empty();
   }
@@ -2302,7 +2425,7 @@ public class PlanningPanel extends JPanel {
     try {
       Models.Intervention updated = original.withResourceIds(sanitized);
       Models.Intervention saved = dsp.updateIntervention(updated);
-      selected = saved;
+      setSelected(saved);
       reload();
       if (saved.id() != null) {
         selectAndRevealIntervention(saved.id());
@@ -2321,7 +2444,7 @@ public class PlanningPanel extends JPanel {
     try {
       Models.Intervention removed = copyOf(selected);
       dsp.deleteIntervention(selected.id());
-      selected = null;
+      setSelected(null);
       reload();
       pushDeletionHistory("Suppression", removed);
       return true;
@@ -2349,7 +2472,12 @@ public class PlanningPanel extends JPanel {
       return;
     }
     Models.Intervention before = copyOf(selected);
-    int resourceIndex = indexOfResource(selected.resourceId());
+    String resourceId = selectedResourceId();
+    if (resourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    int resourceIndex = indexOfResource(resourceId);
     if (resourceIndex < 0) {
       Toolkit.getDefaultToolkit().beep();
       return;
@@ -2375,7 +2503,7 @@ public class PlanningPanel extends JPanel {
     try {
       ensureAvailability(resource.id(), newStart, newEnd);
       Models.Intervention persisted = dsp.updateIntervention(updated);
-      selected = persisted;
+      setSelected(persisted, resource.id());
       reload();
       pushUpdateHistory("Déplacement", before, persisted);
     } catch (RuntimeException ex) {
@@ -2389,7 +2517,12 @@ public class PlanningPanel extends JPanel {
       return;
     }
     Models.Intervention before = copyOf(selected);
-    int current = indexOfResource(selected.resourceId());
+    String currentResourceId = selectedResourceId();
+    if (currentResourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    int current = indexOfResource(currentResourceId);
     if (current < 0) {
       Toolkit.getDefaultToolkit().beep();
       return;
@@ -2414,7 +2547,7 @@ public class PlanningPanel extends JPanel {
     try {
       ensureAvailability(resource.id(), selected.start(), selected.end());
       Models.Intervention persisted = dsp.updateIntervention(updated);
-      selected = persisted;
+      setSelected(persisted, resource.id());
       reload();
       pushUpdateHistory("Changement ressource", before, persisted);
     } catch (RuntimeException ex) {
@@ -2458,7 +2591,7 @@ public class PlanningPanel extends JPanel {
     dragResizeRight = false;
     if (ot.isPresent()) {
       Tile tile = ot.get();
-      selected = tile.i;
+      setSelected(tile.i, resourceIdAtRow(tile.row));
       dragTile = tile;
       repaint();
       fireSelectionChanged();
@@ -2472,7 +2605,7 @@ public class PlanningPanel extends JPanel {
     } else {
       dragTile = null;
       if (selected != null) {
-        selected = null;
+        setSelected(null);
         repaint();
         fireSelectionChanged();
       }
@@ -2568,13 +2701,13 @@ public class PlanningPanel extends JPanel {
     try {
       ensureAvailability(resource.id(), start, end);
       Models.Intervention persisted = dsp.updateIntervention(updated);
-      selected = persisted;
+      setSelected(persisted, resource.id());
       reload();
       notifySuccess("Déplacement appliqué", "Déplacement intervention " + persisted.id());
       pushUpdateHistory("Déplacement", before, persisted);
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
-      selected = original;
+      setSelected(original);
       triggerConflictFlash(original.id());
       JOptionPane.showMessageDialog(
           this, "Erreur de sauvegarde: " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
@@ -2669,7 +2802,7 @@ public class PlanningPanel extends JPanel {
         () -> {
           try {
             dsp.updateIntervention(beforeCopy);
-            selected = beforeCopy;
+            setSelected(beforeCopy);
           } catch (RuntimeException ex) {
             Toolkit.getDefaultToolkit().beep();
           }
@@ -2678,7 +2811,7 @@ public class PlanningPanel extends JPanel {
         () -> {
           try {
             dsp.updateIntervention(afterCopy);
-            selected = afterCopy;
+            setSelected(afterCopy);
           } catch (RuntimeException ex) {
             Toolkit.getDefaultToolkit().beep();
           }
@@ -2755,14 +2888,14 @@ public class PlanningPanel extends JPanel {
               Toolkit.getDefaultToolkit().beep();
             }
           }
-          selected = null;
+          setSelected(null);
           reload();
         },
         () -> {
           try {
             Models.Intervention recreated = dsp.createIntervention(template);
             idRef[0] = recreated.id();
-            selected = recreated;
+            setSelected(recreated);
           } catch (RuntimeException ex) {
             Toolkit.getDefaultToolkit().beep();
           }
@@ -2792,7 +2925,7 @@ public class PlanningPanel extends JPanel {
           try {
             Models.Intervention recreated = dsp.createIntervention(template);
             idRef[0] = recreated.id();
-            selected = recreated;
+            setSelected(recreated);
           } catch (RuntimeException ex) {
             Toolkit.getDefaultToolkit().beep();
           }
@@ -2807,7 +2940,7 @@ public class PlanningPanel extends JPanel {
               Toolkit.getDefaultToolkit().beep();
             }
           }
-          selected = null;
+          setSelected(null);
           reload();
         });
   }
@@ -2877,7 +3010,10 @@ public class PlanningPanel extends JPanel {
     if (id != null) {
       return id;
     }
-    String resource = t.i.resourceId() == null ? "" : t.i.resourceId();
+    String resource = resourceIdAtRow(t.row);
+    if (resource == null) {
+      resource = t.i.resourceId() == null ? "" : t.i.resourceId();
+    }
     String start = t.i.start() == null ? "" : t.i.start().toString();
     String end = t.i.end() == null ? "" : t.i.end().toString();
     return resource + "|" + start + "|" + end;
@@ -3451,7 +3587,7 @@ public class PlanningPanel extends JPanel {
           try {
             Models.Intervention before = copyOf(later);
             Models.Intervention saved = dsp.updateIntervention(moved);
-            selected = saved;
+            setSelected(saved);
             reload();
             notifySuccess("Conflit résolu", "Intervention " + saved.id() + " décalée");
             pushUpdateHistory("Résolution conflit", before, saved);
