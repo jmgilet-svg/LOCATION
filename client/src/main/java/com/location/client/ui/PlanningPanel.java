@@ -261,6 +261,30 @@ public class PlanningPanel extends JPanel {
               }
             });
 
+    // S14.2: zoom-to-selection (Z) and fit-day (F)
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke('Z'), "zoomSelection");
+    getActionMap()
+        .put(
+            "zoomSelection",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                zoomToSelection();
+              }
+            });
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke('F'), "fitDay");
+    getActionMap()
+        .put(
+            "fitDay",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                fitDay();
+              }
+            });
+
     this.dsp = dsp;
     setLayout(null);
 
@@ -912,6 +936,65 @@ public class PlanningPanel extends JPanel {
       java.awt.Rectangle target =
           new java.awt.Rectangle(Math.max(0, centerX - focusOffset), vis.y, vis.width, vis.height);
       scrollRectToVisible(target);
+    }
+  }
+
+  private void zoomToSelection() {
+    if (selected == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String resourceId = selectedResourceId();
+    if (resourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    int row = indexOfResource(resourceId);
+    if (row < 0) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.awt.Rectangle vis = getVisibleRect();
+    int viewportWidth = vis.width;
+    if (viewportWidth <= 0) {
+      javax.swing.JViewport viewport = findEnclosingViewport();
+      if (viewport != null) {
+        viewportWidth = viewport.getExtentSize().width;
+      }
+    }
+    if (viewportWidth <= 0) {
+      return;
+    }
+    Tile tile = tileFor(selected, row);
+    int tileWidth = Math.max(1, Math.abs(tile.x2 - tile.x1));
+    double targetWidth = Math.max(120d, viewportWidth * 0.6d);
+    double newZoom = zoomX * (targetWidth / tileWidth);
+    double clamped = Math.max(MIN_ZOOM_X, Math.min(MAX_ZOOM_X, newZoom));
+    setZoomX(clamped);
+    final String targetResourceId = resourceId;
+    SwingUtilities.invokeLater(
+        () -> {
+          if (selected == null) {
+            return;
+          }
+          int targetRow = indexOfResource(targetResourceId);
+          if (targetRow < 0) {
+            return;
+          }
+          Tile updated = tileFor(selected, targetRow);
+          int minX = Math.min(updated.x1, updated.x2);
+          int width = Math.max(1, Math.abs(updated.x2 - updated.x1));
+          centerViewportOnX(minX + width / 2);
+        });
+  }
+
+  private void fitDay() {
+    boolean zoomChanged = Math.abs(zoomX - 1.0d) > 0.0001d;
+    if (zoomChanged) {
+      setZoomX(1.0d);
+      SwingUtilities.invokeLater(this::alignViewportToStart);
+    } else {
+      alignViewportToStart();
     }
   }
 
@@ -2323,6 +2406,41 @@ public class PlanningPanel extends JPanel {
     LocalDateTime ldt =
         LocalDateTime.of(targetDay, LocalTime.of(START_HOUR, 0)).plusMinutes(minsInDay);
     return ldt.atZone(ZoneId.systemDefault()).toInstant();
+  }
+
+  private javax.swing.JViewport findEnclosingViewport() {
+    java.awt.Container parent = getParent();
+    while (parent != null && !(parent instanceof javax.swing.JViewport)) {
+      parent = parent.getParent();
+    }
+    return parent instanceof javax.swing.JViewport ? (javax.swing.JViewport) parent : null;
+  }
+
+  private void setViewportX(javax.swing.JViewport viewport, int x) {
+    if (viewport == null) {
+      return;
+    }
+    int extent = viewport.getExtentSize().width;
+    int max = Math.max(0, getWidth() - extent);
+    int clamped = Math.max(0, Math.min(x, max));
+    viewport.setViewPosition(new java.awt.Point(clamped, viewport.getViewPosition().y));
+  }
+
+  private void centerViewportOnX(int centerX) {
+    javax.swing.JViewport viewport = findEnclosingViewport();
+    if (viewport == null) {
+      return;
+    }
+    int half = viewport.getExtentSize().width / 2;
+    setViewportX(viewport, centerX - half);
+  }
+
+  private void alignViewportToStart() {
+    javax.swing.JViewport viewport = findEnclosingViewport();
+    if (viewport == null) {
+      return;
+    }
+    setViewportX(viewport, 0);
   }
 
   private Instant alignToSlot(Instant instant) {
