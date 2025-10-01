@@ -167,7 +167,32 @@ public class MainFrame extends JFrame {
     JPanel planningContainer = new JPanel(new BorderLayout());
     inspector.setPreferredSize(new Dimension(320, 600));
     planningContainer.add(planning, BorderLayout.CENTER);
-    planningContainer.add(inspector, BorderLayout.EAST);
+    JTabbedPane eastTabs = new JTabbedPane();
+    ConflictsPanel conflictsPanel = new ConflictsPanel();
+    eastTabs.addTab("Inspecteur", inspector);
+    eastTabs.addTab("Conflits", conflictsPanel);
+    planningContainer.add(eastTabs, BorderLayout.EAST);
+    java.beans.PropertyChangeListener l_conf =
+        evt -> {
+          Object v = evt.getNewValue();
+          if (v instanceof java.util.List<?> list
+              && (list.isEmpty() || list.get(0) instanceof ConflictUtil.Conflict)) {
+            conflictsPanel.setConflicts((java.util.List<ConflictUtil.Conflict>) v);
+            eastTabs.setTitleAt(
+                1, list.isEmpty() ? "Conflits" : "Conflits (" + list.size() + ")");
+          } else if (v == null) {
+            conflictsPanel.setConflicts(null);
+            eastTabs.setTitleAt(1, "Conflits");
+          }
+        };
+    Notify.on("conflicts.update", l_conf);
+    this.addWindowListener(
+        new java.awt.event.WindowAdapter() {
+          @Override
+          public void windowClosed(java.awt.event.WindowEvent e) {
+            Notify.off("conflicts.update", l_conf);
+          }
+        });
     planningContainer.add(minimap, BorderLayout.SOUTH);
 
     centerCards.add(planningContainer, "planning");
