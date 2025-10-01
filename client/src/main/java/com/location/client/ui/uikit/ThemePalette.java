@@ -8,6 +8,9 @@ public final class ThemePalette {
   public static void apply(String accentHex){
     Color accent = parse(accentHex, new Color(0,122,255));
     UIManager.put("Component.arc", 16);
+    UIManager.put("Button.arc", 18);
+    UIManager.put("TextComponent.arc", 14);
+    UIManager.put("ScrollBar.thumbArc", 14);
     UIManager.put("Component.focusColor", accent);
     UIManager.put("Button.hoverBackground", withAlpha(accent, 30));
     UIManager.put("Button.pressedBackground", withAlpha(accent, 60));

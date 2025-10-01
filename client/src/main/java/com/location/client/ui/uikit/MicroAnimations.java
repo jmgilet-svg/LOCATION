@@ -2,11 +2,11 @@ package com.location.client.ui.uikit;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.*;
 
 public final class MicroAnimations {
   private MicroAnimations(){}
 
-  /** Simple pulsing border around a component. Call stop() on the returned timer to end. */
   public static Timer pulseBorder(JComponent c){
     long start = System.currentTimeMillis();
     Timer t = new Timer(40, e -> c.repaint());
@@ -16,7 +16,6 @@ public final class MicroAnimations {
     return t;
   }
 
-  /** Paint a pulse using this in component's paint after super.paint(g). */
   public static void paintPulse(JComponent c, Graphics g){
     Object v = c.getClientProperty("pulse.start");
     if (!(v instanceof Long)) return;
