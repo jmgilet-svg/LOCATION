@@ -4,6 +4,7 @@ import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.ui.uikit.TableUtils;
 import com.location.client.ui.uikit.Toasts;
+import com.location.client.ui.uikit.Ui;
 
 import java.awt.BorderLayout;
 import java.awt.Desktop;
@@ -269,7 +270,10 @@ public class ClientsAdminFrame extends JFrame {
   private void saveClient() {
     String name = tfName.getText().trim();
     if (name.isEmpty()) {
-      JOptionPane.showMessageDialog(this, "Le nom est obligatoire", "Validation", JOptionPane.WARNING_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, "Le nom est obligatoire", "Validation", JOptionPane.WARNING_MESSAGE));
       return;
     }
     Models.Client payload =
@@ -386,8 +390,13 @@ public class ClientsAdminFrame extends JFrame {
 
   private void addContact() {
     if (current == null || current.id() == null) {
-      JOptionPane.showMessageDialog(
-          this, "Enregistrez d'abord le client", "Information", JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Enregistrez d'abord le client",
+                  "Information",
+                  JOptionPane.INFORMATION_MESSAGE));
       return;
     }
     Models.Contact edited = editContactDialog(null);
@@ -493,8 +502,13 @@ public class ClientsAdminFrame extends JFrame {
             JOptionPane.PLAIN_MESSAGE);
     if (result == JOptionPane.OK_OPTION) {
       if (fn.getText().trim().isEmpty() && ln.getText().trim().isEmpty()) {
-        JOptionPane.showMessageDialog(
-            this, "Renseignez au moins un prénom ou un nom", "Validation", JOptionPane.WARNING_MESSAGE);
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Renseignez au moins un prénom ou un nom",
+                    "Validation",
+                    JOptionPane.WARNING_MESSAGE));
         return null;
       }
       return new Models.Contact(
@@ -512,7 +526,8 @@ public class ClientsAdminFrame extends JFrame {
     try {
       File tmp = File.createTempFile("clients-", ".csv");
       CsvUtil.exportClients(dsp, tmp.toPath());
-      JOptionPane.showMessageDialog(this, "Export CSV généré : " + tmp.getAbsolutePath());
+      String message = "Export CSV généré : " + tmp.getAbsolutePath();
+      Ui.ensure(() -> JOptionPane.showMessageDialog(this, message));
       if (Desktop.isDesktopSupported()) {
         try {
           Desktop.getDesktop().open(tmp.getParentFile());
@@ -521,7 +536,11 @@ public class ClientsAdminFrame extends JFrame {
         }
       }
     } catch (IOException ex) {
-      JOptionPane.showMessageDialog(this, "Erreur export : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      String message = "Erreur export : " + ex.getMessage();
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
     }
   }
 
@@ -540,16 +559,23 @@ public class ClientsAdminFrame extends JFrame {
   private void mergeSelected() {
     int selectedRow = listTable.getSelectedRow();
     if (selectedRow < 0) {
-      JOptionPane.showMessageDialog(
-          this, "Sélectionnez d'abord un client", "Fusion", JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Sélectionnez d'abord un client",
+                  "Fusion",
+                  JOptionPane.INFORMATION_MESSAGE));
       return;
     }
     if (listData.size() < 2) {
-      JOptionPane.showMessageDialog(
-          this,
-          "Au moins deux clients sont nécessaires pour une fusion",
-          "Fusion",
-          JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Au moins deux clients sont nécessaires pour une fusion",
+                  "Fusion",
+                  JOptionPane.INFORMATION_MESSAGE));
       return;
     }
     int modelRow = listTable.convertRowIndexToModel(selectedRow);
@@ -558,11 +584,13 @@ public class ClientsAdminFrame extends JFrame {
     }
     Models.Client primary = listData.get(modelRow);
     if (primary.id() == null) {
-      JOptionPane.showMessageDialog(
-          this,
-          "Enregistrez le client sélectionné avant de lancer une fusion",
-          "Fusion",
-          JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Enregistrez le client sélectionné avant de lancer une fusion",
+                  "Fusion",
+                  JOptionPane.INFORMATION_MESSAGE));
       return;
     }
 
@@ -573,11 +601,13 @@ public class ClientsAdminFrame extends JFrame {
       }
     }
     if (candidates.isEmpty()) {
-      JOptionPane.showMessageDialog(
-          this,
-          "Aucun autre client disponible pour la fusion",
-          "Fusion",
-          JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Aucun autre client disponible pour la fusion",
+                  "Fusion",
+                  JOptionPane.INFORMATION_MESSAGE));
       return;
     }
 

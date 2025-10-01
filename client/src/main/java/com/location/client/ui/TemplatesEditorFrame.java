@@ -3,6 +3,7 @@ package com.location.client.ui;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.ui.uikit.MailFavorites;
+import com.location.client.ui.uikit.Ui;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -161,11 +162,11 @@ public class TemplatesEditorFrame extends JFrame {
     try {
       templates = dsp.listTemplates();
     } catch (Exception ex) {
-      JOptionPane.showMessageDialog(
-          this,
-          "Impossible de charger les templates : " + ex.getMessage(),
-          "Erreur",
-          JOptionPane.ERROR_MESSAGE);
+      String message = "Impossible de charger les templates : " + ex.getMessage();
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
       templates = List.of();
     }
     templates =
@@ -215,7 +216,7 @@ public class TemplatesEditorFrame extends JFrame {
         keyField.setText("");
         kindCombo.setSelectedIndex(0);
         editor.setText("");
-        preview.setText("");
+        Ui.ensure(() -> preview.setText(""));
       } else {
         currentKey = selected.key();
         keyField.setText(selected.key());
@@ -236,8 +237,10 @@ public class TemplatesEditorFrame extends JFrame {
   private void doSave() {
     String key = keyField.getText().trim();
     if (key.isBlank()) {
-      JOptionPane.showMessageDialog(
-          this, "La clé du template est requise.", "Templates", JOptionPane.WARNING_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, "La clé du template est requise.", "Templates", JOptionPane.WARNING_MESSAGE));
       keyField.requestFocusInWindow();
       return;
     }
@@ -253,11 +256,19 @@ public class TemplatesEditorFrame extends JFrame {
       currentTemplate = saved;
       currentKey = saved.key();
       refreshList(saved.id());
-      JOptionPane.showMessageDialog(
-          this, "Template enregistré.", "Templates", JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Template enregistré.",
+                  "Templates",
+                  JOptionPane.INFORMATION_MESSAGE));
     } catch (Exception ex) {
-      JOptionPane.showMessageDialog(
-          this, "Erreur lors de l'enregistrement : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      String message = "Erreur lors de l'enregistrement : " + ex.getMessage();
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
     }
   }
 
@@ -270,8 +281,11 @@ public class TemplatesEditorFrame extends JFrame {
       html = "";
     }
     String merged = applySampleContext(html);
-    preview.setText(merged);
-    preview.setCaretPosition(0);
+    Ui.ensure(
+        () -> {
+          preview.setText(merged);
+          preview.setCaretPosition(0);
+        });
   }
 
   private String applySampleContext(String template) {
@@ -310,11 +324,19 @@ public class TemplatesEditorFrame extends JFrame {
       if (choice.remember()) {
         MailFavorites.add(choice.email());
       }
-      JOptionPane.showMessageDialog(
-          this, "Email (test) envoyé (stub).", "Email", JOptionPane.INFORMATION_MESSAGE);
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this,
+                  "Email (test) envoyé (stub).",
+                  "Email",
+                  JOptionPane.INFORMATION_MESSAGE));
     } catch (Exception ex) {
-      JOptionPane.showMessageDialog(
-          this, "Envoi impossible : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      String message = "Envoi impossible : " + ex.getMessage();
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
     }
   }
 
@@ -325,7 +347,7 @@ public class TemplatesEditorFrame extends JFrame {
     keyField.setText("");
     kindCombo.setSelectedIndex(0);
     editor.setText("");
-    preview.setText("");
+    Ui.ensure(() -> preview.setText(""));
     keyField.requestFocusInWindow();
   }
 
@@ -351,8 +373,11 @@ public class TemplatesEditorFrame extends JFrame {
       refreshList(null);
       newTemplate();
     } catch (Exception ex) {
-      JOptionPane.showMessageDialog(
-          this, "Suppression impossible : " + ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+      String message = "Suppression impossible : " + ex.getMessage();
+      Ui.ensure(
+          () ->
+              JOptionPane.showMessageDialog(
+                  this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
     }
   }
 
