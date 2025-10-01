@@ -3,6 +3,7 @@ package com.location.client.ui;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.ui.uikit.Chip;
+import com.location.client.ui.uikit.Ui;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -158,8 +159,11 @@ public class PlanningInspector extends JPanel {
           });
       chipPanel.add(chip);
     }
-    chipPanel.revalidate();
-    chipPanel.repaint();
+    Ui.ensure(
+        () -> {
+          chipPanel.revalidate();
+          chipPanel.repaint();
+        });
   }
 
   private void loadSuggestions() {

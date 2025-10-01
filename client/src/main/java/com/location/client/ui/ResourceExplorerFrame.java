@@ -5,6 +5,8 @@ import com.location.client.core.Models;
 import com.location.client.ui.accordion.CollapsibleSection;
 import com.location.client.ui.icons.SvgIconLoader;
 import com.location.client.ui.uikit.TableUtils;
+import com.location.client.ui.uikit.Toasts;
+import com.location.client.ui.uikit.Ui;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -46,7 +48,6 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
-import com.location.client.ui.uikit.Toasts;
 
 public class ResourceExplorerFrame extends JFrame {
   private final DataSourceProvider dataSourceProvider;
@@ -174,10 +175,13 @@ public class ResourceExplorerFrame extends JFrame {
       accordion.add(section);
     }
     accordion.add(javax.swing.Box.createVerticalGlue());
-    accordion.revalidate();
-    accordion.repaint();
-    detailPanel.revalidate();
-    detailPanel.repaint();
+    Ui.ensure(
+        () -> {
+          accordion.revalidate();
+          accordion.repaint();
+          detailPanel.revalidate();
+          detailPanel.repaint();
+        });
   }
 
   private Models.ResourceType findTypeByName(String name) {
@@ -533,12 +537,20 @@ public class ResourceExplorerFrame extends JFrame {
         start = parseDateTime(startRaw);
         end = parseDateTime(endRaw);
       } catch (DateTimeParseException ex) {
-        JOptionPane.showMessageDialog(this, "Format de date invalide", "Erreur", JOptionPane.ERROR_MESSAGE);
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this, "Format de date invalide", "Erreur", JOptionPane.ERROR_MESSAGE));
         return;
       }
       if (!end.isAfter(start)) {
-        JOptionPane.showMessageDialog(
-            this, "La date de fin doit être postérieure au début", "Erreur", JOptionPane.ERROR_MESSAGE);
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this,
+                    "La date de fin doit être postérieure au début",
+                    "Erreur",
+                    JOptionPane.ERROR_MESSAGE));
         return;
       }
       String reason =
@@ -554,7 +566,11 @@ public class ResourceExplorerFrame extends JFrame {
         loadUnavailabilities();
         Toasts.success(SwingUtilities.getWindowAncestor(this), "Indisponibilité ajoutée");
       } catch (RuntimeException ex) {
-        JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+        String message = ex.getMessage();
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
       }
     }
 
@@ -574,7 +590,11 @@ public class ResourceExplorerFrame extends JFrame {
         loadUnavailabilities();
         Toasts.info(SwingUtilities.getWindowAncestor(this), "Indisponibilité supprimée");
       } catch (RuntimeException ex) {
-        JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+        String message = ex.getMessage();
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
       }
     }
 
@@ -603,7 +623,10 @@ public class ResourceExplorerFrame extends JFrame {
     private void save() {
       String name = tfName.getText().trim();
       if (name.isEmpty()) {
-        JOptionPane.showMessageDialog(this, "Nom obligatoire", "Validation", JOptionPane.WARNING_MESSAGE);
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this, "Nom obligatoire", "Validation", JOptionPane.WARNING_MESSAGE));
         return;
       }
       String plate = tfPlate.getText().trim();
@@ -619,8 +642,10 @@ public class ResourceExplorerFrame extends JFrame {
           try {
             rateValue = Double.parseDouble(rateRaw);
           } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(
-                this, "Prix invalide", "Validation", JOptionPane.WARNING_MESSAGE);
+            Ui.ensure(
+                () ->
+                    JOptionPane.showMessageDialog(
+                        this, "Prix invalide", "Validation", JOptionPane.WARNING_MESSAGE));
             return;
           }
         }
@@ -650,9 +675,17 @@ public class ResourceExplorerFrame extends JFrame {
           callback.accept(resource);
         }
       } catch (UnsupportedOperationException ex) {
-        JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+        String message = ex.getMessage();
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
       } catch (RuntimeException ex) {
-        JOptionPane.showMessageDialog(this, ex.getMessage(), "Erreur", JOptionPane.ERROR_MESSAGE);
+        String message = ex.getMessage();
+        Ui.ensure(
+            () ->
+                JOptionPane.showMessageDialog(
+                    this, message, "Erreur", JOptionPane.ERROR_MESSAGE));
       }
     }
   }
