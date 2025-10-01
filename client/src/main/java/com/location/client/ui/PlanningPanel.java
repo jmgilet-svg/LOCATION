@@ -183,6 +183,7 @@ public class PlanningPanel extends JPanel {
   private double zoomX = 1.0;
   private static final int START_HOUR = 7;
   private static final int SLOT_MINUTES = 15;
+  private int slotMinutes = SLOT_MINUTES;
   private static final DayOfWeek WEEK_START = DayOfWeek.MONDAY;
   private static final Duration DEFAULT_CREATE_DURATION = Duration.ofHours(2);
   private static final Icon CONFLICT_ICON = SvgIconLoader.load("conflict.svg", 16);
@@ -385,6 +386,41 @@ public class PlanningPanel extends JPanel {
     setFocusable(true);
     setFocusTraversalKeysEnabled(false);
 
+    // S14.1: slot granularity toggles (Ctrl+1=5, Ctrl+2=15, Ctrl+3=30)
+    getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK), "slot5");
+    getActionMap()
+        .put(
+            "slot5",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                setSlotMinutes(5);
+              }
+            });
+    getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_2, InputEvent.CTRL_DOWN_MASK), "slot15");
+    getActionMap()
+        .put(
+            "slot15",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                setSlotMinutes(15);
+              }
+            });
+    getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_3, InputEvent.CTRL_DOWN_MASK), "slot30");
+    getActionMap()
+        .put(
+            "slot30",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                setSlotMinutes(30);
+              }
+            });
+
     getInputMap(JComponent.WHEN_FOCUSED)
         .put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "nudgeLeft");
     getActionMap()
@@ -393,7 +429,7 @@ public class PlanningPanel extends JPanel {
             new AbstractAction() {
               @Override
               public void actionPerformed(ActionEvent e) {
-                nudgeTime(-SLOT_MINUTES);
+                nudgeTime(-slotMinutes);
               }
             });
     getInputMap(JComponent.WHEN_FOCUSED)
@@ -404,7 +440,7 @@ public class PlanningPanel extends JPanel {
             new AbstractAction() {
               @Override
               public void actionPerformed(ActionEvent e) {
-                nudgeTime(SLOT_MINUTES);
+                nudgeTime(slotMinutes);
               }
             });
     getInputMap(JComponent.WHEN_FOCUSED)
@@ -415,7 +451,7 @@ public class PlanningPanel extends JPanel {
             new AbstractAction() {
               @Override
               public void actionPerformed(ActionEvent e) {
-                nudgeTime(-SLOT_MINUTES);
+                nudgeTime(-slotMinutes);
               }
             });
     getInputMap(JComponent.WHEN_FOCUSED)
@@ -426,7 +462,7 @@ public class PlanningPanel extends JPanel {
             new AbstractAction() {
               @Override
               public void actionPerformed(ActionEvent e) {
-                nudgeTime(SLOT_MINUTES);
+                nudgeTime(slotMinutes);
               }
             });
     getInputMap(JComponent.WHEN_FOCUSED)
@@ -746,9 +782,9 @@ public class PlanningPanel extends JPanel {
         new JSpinner(
             new SpinnerNumberModel(
                 (int) DEFAULT_CREATE_DURATION.toMinutes(),
-                SLOT_MINUTES,
+                slotMinutes,
                 HOURS * 60,
-                SLOT_MINUTES));
+                slotMinutes));
 
     ZonedDateTime zonedStart = start.atZone(ZoneId.systemDefault());
     JPanel panel = new JPanel(new GridLayout(0, 2, 6, 6));
@@ -877,6 +913,20 @@ public class PlanningPanel extends JPanel {
           new java.awt.Rectangle(Math.max(0, centerX - focusOffset), vis.y, vis.width, vis.height);
       scrollRectToVisible(target);
     }
+  }
+
+  private void setSlotMinutes(int minutes) {
+    if (minutes == slotMinutes) {
+      return;
+    }
+    if (minutes <= 0 || minutes > 60 || 60 % minutes != 0) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    slotMinutes = minutes;
+    invalidateLayoutCaches();
+    revalidate();
+    repaint();
   }
 
   private int getViewDays() {
@@ -2175,7 +2225,7 @@ public class PlanningPanel extends JPanel {
     if (interventions.isEmpty() || dayWidth <= 0) {
       return;
     }
-    int stepsPerDay = HOURS * 2;
+    int stepsPerDay = Math.max(1, (HOURS * 60) / slotMinutes);
     int bodyHeight = Math.max(0, height - headerHeight());
     if (bodyHeight <= 0) {
       return;
@@ -2186,9 +2236,9 @@ public class PlanningPanel extends JPanel {
       LocalDate currentDay = startDate.plusDays(dayIndex);
       for (int step = 0; step < stepsPerDay; step++) {
         java.time.ZonedDateTime slotStartZdt =
-            currentDay.atTime(START_HOUR, 0).atZone(zone).plusMinutes(30L * step);
+            currentDay.atTime(START_HOUR, 0).atZone(zone).plusMinutes((long) slotMinutes * step);
         Instant slotStart = slotStartZdt.toInstant();
-        Instant slotEnd = slotStartZdt.plusMinutes(30).toInstant();
+        Instant slotEnd = slotStartZdt.plusMinutes(slotMinutes).toInstant();
         int count = 0;
         for (Models.Intervention intervention : interventions) {
           if (intervention.end().isAfter(slotStart)
@@ -2278,7 +2328,7 @@ public class PlanningPanel extends JPanel {
   private Instant alignToSlot(Instant instant) {
     ZonedDateTime zoned = instant.atZone(ZoneId.systemDefault()).withSecond(0).withNano(0);
     int minute = zoned.getMinute();
-    int remainder = minute % SLOT_MINUTES;
+    int remainder = minute % slotMinutes;
     if (remainder != 0) {
       zoned = zoned.minusMinutes(remainder);
     }
@@ -4270,8 +4320,10 @@ public class PlanningPanel extends JPanel {
     }
   }
 
-  /** Try to resolve a specific conflict by moving the later-starting intervention right after the other's end.
-   *  Uses 15-min steps up to 96 tries, checks unavailabilities and recomputed conflicts, persists on success. */
+  /**
+   * Try to resolve a specific conflict by moving the later-starting intervention right after the other's end.
+   * Uses slot-sized steps, checks unavailabilities and recomputed conflicts, persists on success.
+   */
   public void resolveConflict(ConflictUtil.Conflict conflict) {
     if (conflict == null) {
       return;
@@ -4303,8 +4355,9 @@ public class PlanningPanel extends JPanel {
     }
     java.time.Duration dur = java.time.Duration.between(later.start(), later.end());
     java.time.Instant targetStart = first.end();
-    for (int i = 0; i < 96; i++) {
-      java.time.Instant candStart = targetStart.plus(java.time.Duration.ofMinutes(15L * i));
+    int maxSteps = Math.max(1, (24 * 60) / slotMinutes);
+    for (int i = 0; i < maxSteps; i++) {
+      java.time.Instant candStart = targetStart.plus(java.time.Duration.ofMinutes((long) slotMinutes * i));
       java.time.Instant candEnd = candStart.plus(dur);
       try {
         ensureAvailability(later.resourceId(), candStart, candEnd);
