@@ -1,6 +1,9 @@
 package com.location.client.ui;
 
-import com.location.client.ui.uikit.Notify;
+
+import com.location.client.core.ConflictUtil;
+import com.location.client.core.Models;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.event.ItemListener;
@@ -10,8 +13,12 @@ import java.util.List;
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JComponent;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.JLabel;
+
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -19,9 +26,9 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 
-/**
- * Simple panel that lists detected conflicts and allows focusing them in the planning.
- */
+import com.location.client.ui.uikit.Notify;
+
+
 public class ConflictsPanel extends JPanel {
   private final DefaultListModel<ConflictRow> model = new DefaultListModel<>();
   private final JList<ConflictRow> list = new JList<>(model);
@@ -55,34 +62,32 @@ public class ConflictsPanel extends JPanel {
     JPanel north = new JPanel();
     north.add(onlyVisible);
     north.add(onlySelectedDay);
+    JButton btnResolve = new JButton("Résoudre automatiquement");
+    north.add(btnResolve);
+    btnResolve.addActionListener(e -> {
+      int idx = list.getSelectedIndex();
+      if (idx >= 0) {
+        ConflictRow row = model.get(idx);
+        if (row != null && row.conflict != null) {
+          Notify.post("conflicts.resolve", row.conflict);
+        }
+      }
+    });
     add(north, BorderLayout.NORTH);
 
-    list.addMouseListener(
-        new java.awt.event.MouseAdapter() {
-          @Override
-          public void mouseClicked(java.awt.event.MouseEvent e) {
-            if (e.getClickCount() == 2) {
-              int index = list.locationToIndex(e.getPoint());
-              if (index >= 0) {
-                ConflictRow row = model.getElementAt(index);
-                focusConflict(row);
-              }
-            }
-          }
-        });
-
-    list.getInputMap(JComponent.WHEN_FOCUSED)
-        .put(KeyStroke.getKeyStroke("ENTER"), "focusConflict");
-    list.getActionMap()
-        .put(
-            "focusConflict",
-            new AbstractAction() {
-              @Override
-              public void actionPerformed(java.awt.event.ActionEvent e) {
-                ConflictRow row = list.getSelectedValue();
-                focusConflict(row);
-              }
-            });
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem miResolve = new JMenuItem("Résoudre ce conflit");
+    miResolve.addActionListener(e -> {
+      int idx = list.getSelectedIndex();
+      if (idx >= 0) {
+        ConflictRow row = model.get(idx);
+        if (row != null && row.conflict != null) {
+          Notify.post("conflicts.resolve", row.conflict);
+        }
+      }
+    });
+    menu.add(miResolve);
+    list.setComponentPopupMenu(menu);
   }
 
   public void setConflicts(List<ConflictUtil.Conflict> conflicts) {

@@ -1,5 +1,6 @@
 package com.location.client.ui;
 
+import com.location.client.core.ConflictUtil;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.core.Preferences;
@@ -90,23 +91,14 @@ public class MainFrame extends JFrame {
     minimap.setWorkingHours(planning.getStartHour(), planning.getEndHour());
     planning.addReloadListener(this::updateMinimap);
 
-    final java.beans.PropertyChangeListener conflictFocusListener =
+    final java.beans.PropertyChangeListener conflictsResolver =
         evt -> {
-          Object value = evt.getNewValue();
-          if (!(value instanceof ConflictUtil.Conflict conflict)) {
-            return;
-          }
-          String targetId = null;
-          if (conflict.a() != null && conflict.a().id() != null) {
-            targetId = conflict.a().id();
-          } else if (conflict.b() != null && conflict.b().id() != null) {
-            targetId = conflict.b().id();
-          }
-          if (targetId != null) {
-            Ui.ensure(() -> planning.selectAndRevealIntervention(targetId));
+          Object v = evt.getNewValue();
+          if (v instanceof ConflictUtil.Conflict c) {
+            Ui.ensure(() -> planning.resolveConflict(c));
           }
         };
-    Notify.on("conflicts.focus", conflictFocusListener);
+    Notify.on("conflicts.resolve", conflictsResolver);
 
     initializeCurrentAgency();
 
@@ -153,7 +145,8 @@ public class MainFrame extends JFrame {
               badgeTimer.stop();
             }
             Notify.off("network.error", networkListener);
-            Notify.off("conflicts.focus", conflictFocusListener);
+            Notify.off("conflicts.resolve", conflictsResolver);
+
             try {
               dsp.close();
             } catch (Exception ignored) {

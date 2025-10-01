@@ -1,5 +1,6 @@
 package com.location.client.ui;
 
+import com.location.client.core.ConflictUtil;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.ui.icons.SvgIconLoader;
@@ -2476,6 +2477,99 @@ public class PlanningPanel extends JPanel {
         return;
       }
     }
+  }
+
+  /** Try to resolve a specific conflict by moving the later-starting intervention right after the other's end.
+   *  Uses 15-min steps up to 96 tries, checks unavailabilities and recomputed conflicts, persists on success. */
+  public void resolveConflict(ConflictUtil.Conflict conflict) {
+    if (conflict == null) {
+      return;
+    }
+    Models.Intervention a = conflict.a();
+    Models.Intervention b = conflict.b();
+    if (a == null || b == null) {
+      return;
+    }
+    if (a.start() == null || b.start() == null || a.end() == null || b.end() == null) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible de résoudre automatiquement ce conflit à proximité.",
+          "Conflit",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    Models.Intervention first = a.start().isBefore(b.start()) ? a : b;
+    Models.Intervention later = a.start().isBefore(b.start()) ? b : a;
+    if (first.end() == null || later.start() == null || later.end() == null || later.resourceId() == null) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible de résoudre automatiquement ce conflit à proximité.",
+          "Conflit",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+    java.time.Duration dur = java.time.Duration.between(later.start(), later.end());
+    java.time.Instant targetStart = first.end();
+    for (int i = 0; i < 96; i++) {
+      java.time.Instant candStart = targetStart.plus(java.time.Duration.ofMinutes(15L * i));
+      java.time.Instant candEnd = candStart.plus(dur);
+      try {
+        ensureAvailability(later.resourceId(), candStart, candEnd);
+      } catch (RuntimeException ex) {
+        continue;
+      }
+      java.util.List<Models.Intervention> tmp = new java.util.ArrayList<>(interventions);
+      int idx = -1;
+      for (int k = 0; k < tmp.size(); k++) {
+        if (tmp.get(k).id().equals(later.id())) {
+          idx = k;
+          break;
+        }
+      }
+      if (idx >= 0) {
+        Models.Intervention moved = new Models.Intervention(
+            later.id(),
+            later.agencyId(),
+            later.resourceId(),
+            later.clientId(),
+            later.driverId(),
+            later.title(),
+            candStart,
+            candEnd,
+            later.notes());
+        tmp.set(idx, moved);
+        var newConf = ConflictUtil.computeConflicts(tmp);
+        boolean ok = true;
+        for (var c : newConf) {
+          if ((c.a() != null && later.id().equals(c.a().id()))
+              || (c.b() != null && later.id().equals(c.b().id()))) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          try {
+            Models.Intervention before = copyOf(later);
+            Models.Intervention saved = dsp.updateIntervention(moved);
+            selected = saved;
+            reload();
+            notifySuccess("Conflit résolu", "Intervention " + saved.id() + " décalée");
+            pushUpdateHistory("Résolution conflit", before, saved);
+            return;
+          } catch (RuntimeException ex) {
+            // Try next slot
+          }
+        }
+      }
+    }
+    Toolkit.getDefaultToolkit().beep();
+    JOptionPane.showMessageDialog(
+        this,
+        "Impossible de résoudre automatiquement ce conflit à proximité.",
+        "Conflit",
+        JOptionPane.WARNING_MESSAGE);
   }
 
   private void setGhostDrag(Rectangle r) {
