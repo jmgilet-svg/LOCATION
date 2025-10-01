@@ -1,5 +1,6 @@
 package com.location.client.ui;
 
+import com.location.client.core.ConflictUtil;
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
 import com.location.client.core.Preferences;
@@ -90,6 +91,15 @@ public class MainFrame extends JFrame {
     minimap.setWorkingHours(planning.getStartHour(), planning.getEndHour());
     planning.addReloadListener(this::updateMinimap);
 
+    final java.beans.PropertyChangeListener conflictsResolver =
+        evt -> {
+          Object v = evt.getNewValue();
+          if (v instanceof ConflictUtil.Conflict c) {
+            Ui.ensure(() -> planning.resolveConflict(c));
+          }
+        };
+    Notify.on("conflicts.resolve", conflictsResolver);
+
     initializeCurrentAgency();
 
     if (dsp instanceof RestDataSource rest) {
@@ -135,6 +145,7 @@ public class MainFrame extends JFrame {
               badgeTimer.stop();
             }
             Notify.off("network.error", networkListener);
+            Notify.off("conflicts.resolve", conflictsResolver);
             try {
               dsp.close();
             } catch (Exception ignored) {

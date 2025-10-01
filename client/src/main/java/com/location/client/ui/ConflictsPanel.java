@@ -1,17 +1,23 @@
 package com.location.client.ui;
 
+import com.location.client.core.ConflictUtil;
 import com.location.client.core.Models;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import javax.swing.DefaultListModel;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListCellRenderer;
+
+import com.location.client.ui.uikit.Notify;
 
 public class ConflictsPanel extends JPanel {
   private final DefaultListModel<ConflictRow> model = new DefaultListModel<>();
@@ -27,7 +33,32 @@ public class ConflictsPanel extends JPanel {
     north.add(new JLabel("Conflits"));
     north.add(onlyVisible);
     north.add(onlySelectedDay);
+    JButton btnResolve = new JButton("Résoudre automatiquement");
+    north.add(btnResolve);
+    btnResolve.addActionListener(e -> {
+      int idx = list.getSelectedIndex();
+      if (idx >= 0) {
+        ConflictRow row = model.get(idx);
+        if (row != null && row.conflict != null) {
+          Notify.post("conflicts.resolve", row.conflict);
+        }
+      }
+    });
     add(north, BorderLayout.NORTH);
+
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem miResolve = new JMenuItem("Résoudre ce conflit");
+    miResolve.addActionListener(e -> {
+      int idx = list.getSelectedIndex();
+      if (idx >= 0) {
+        ConflictRow row = model.get(idx);
+        if (row != null && row.conflict != null) {
+          Notify.post("conflicts.resolve", row.conflict);
+        }
+      }
+    });
+    menu.add(miResolve);
+    list.setComponentPopupMenu(menu);
   }
 
   public void setConflicts(List<ConflictUtil.Conflict> conflicts) {
