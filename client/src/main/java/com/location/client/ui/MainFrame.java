@@ -6,6 +6,7 @@ import com.location.client.core.Models;
 import com.location.client.core.Preferences;
 import com.location.client.core.RestDataSource;
 import com.location.client.ui.i18n.Language;
+import com.location.client.ui.PlanningToolbar;
 import com.location.client.ui.uikit.EmptyState;
 import com.location.client.ui.uikit.Icons;
 import com.location.client.ui.uikit.Notify;
@@ -159,6 +160,7 @@ public class MainFrame extends JFrame {
     add(sidebar, BorderLayout.WEST);
     JPanel planningContainer = new JPanel(new BorderLayout());
     inspector.setPreferredSize(new Dimension(320, 600));
+    planningContainer.add(new PlanningToolbar(planning), BorderLayout.NORTH);
     planningContainer.add(planning, BorderLayout.CENTER);
     JTabbedPane eastTabs = new JTabbedPane();
     ConflictsPanel conflictsPanel = new ConflictsPanel();

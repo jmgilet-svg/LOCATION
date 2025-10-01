@@ -74,6 +74,30 @@ public final class Theme {
     view.add(reset);
   }
 
+  public static void apply(String mode, float scale, boolean animate) {
+    Runnable task = () -> {
+      if (Math.abs(scale - com.location.client.ui.Theme.getFontScale()) > 0.001f) {
+        com.location.client.ui.Theme.setFontScale(scale);
+      }
+      com.location.client.ui.Theme.apply(parseMode(mode));
+    };
+    if (animate) {
+      animate(task);
+    } else {
+      task.run();
+    }
+  }
+
+  private static com.location.client.ui.Theme.Mode parseMode(String mode) {
+    if (mode == null) {
+      return com.location.client.ui.Theme.Mode.LIGHT;
+    }
+    return switch (mode.toLowerCase()) {
+      case "dark" -> com.location.client.ui.Theme.Mode.DARK;
+      default -> com.location.client.ui.Theme.Mode.LIGHT;
+    };
+  }
+
   private static void apply(JFrame frame, com.location.client.ui.Theme.Mode mode) {
     animate(() -> com.location.client.ui.Theme.apply(mode));
   }

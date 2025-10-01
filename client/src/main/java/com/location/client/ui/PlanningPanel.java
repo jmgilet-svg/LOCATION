@@ -2583,4 +2583,72 @@ public class PlanningPanel extends JPanel {
       repaint();
     }
   }
+
+  public void addQuickTagToSelection(String tag) {
+    if (selected == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String id = selected.id();
+    if (id == null || id.isBlank()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String trimmed = tag == null ? "" : tag.trim();
+    if (trimmed.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<String> before = interventionTags.getOrDefault(id, java.util.List.of());
+    boolean alreadyPresent = before.stream().anyMatch(t -> t != null && t.equalsIgnoreCase(trimmed));
+    if (alreadyPresent) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<String> after = new java.util.ArrayList<>(before);
+    after.add(trimmed);
+    try {
+      dsp.setInterventionTags(id, after);
+      interventionTags.put(id, java.util.List.copyOf(after));
+      notifySuccess("Tag ajouté", "Tag " + trimmed + " ajouté à " + id);
+      java.util.List<String> beforeSnapshot = java.util.List.copyOf(before);
+      java.util.List<String> afterSnapshot = java.util.List.copyOf(after);
+      history.push(
+          "Tag " + trimmed,
+          () -> {
+            try {
+              dsp.setInterventionTags(id, beforeSnapshot);
+            } catch (RuntimeException ex) {
+              Toolkit.getDefaultToolkit().beep();
+            }
+            reload();
+            selectAndRevealIntervention(id);
+          },
+          () -> {
+            try {
+              dsp.setInterventionTags(id, afterSnapshot);
+            } catch (RuntimeException ex) {
+              Toolkit.getDefaultToolkit().beep();
+            }
+            reload();
+            selectAndRevealIntervention(id);
+          });
+      reload();
+      selectAndRevealIntervention(id);
+    } catch (UnsupportedOperationException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "La source de données ne permet pas de modifier les tags d'intervention.",
+          "Fonctionnalité indisponible",
+          JOptionPane.INFORMATION_MESSAGE);
+    } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "Impossible d'ajouter le tag : " + ex.getMessage(),
+          "Erreur",
+          JOptionPane.ERROR_MESSAGE);
+    }
+  }
 }

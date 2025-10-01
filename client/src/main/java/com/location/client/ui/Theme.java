@@ -4,6 +4,8 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.location.client.core.Preferences;
+import com.location.client.ui.uikit.ThemeFonts;
+import com.location.client.ui.uikit.ThemePalette;
 import java.awt.Font;
 import java.awt.Window;
 import java.util.Enumeration;
@@ -51,9 +53,7 @@ public final class Theme {
       } else {
         UIManager.setLookAndFeel(new FlatLightLaf());
       }
-      installDefaults();
-      applyHighContrastDefaults();
-      resetFontDefaults();
+      applyUiDefaults();
       current = mode;
       if (persist && preferences != null) {
         preferences.setThemeMode(mode.name());
@@ -61,8 +61,7 @@ public final class Theme {
       }
       if (updateUI) {
         FlatLaf.updateUI();
-        applyHighContrastDefaults();
-        resetFontDefaults();
+        applyUiDefaults();
         for (Window window : Window.getWindows()) {
           SwingUtilities.updateComponentTreeUI(window);
         }
@@ -96,12 +95,18 @@ public final class Theme {
     }
   }
 
+  private static void applyUiDefaults() {
+    installDefaults();
+    ThemePalette.apply("#3D7EFF");
+    ThemeFonts.applyDefaultFont();
+    applyHighContrastDefaults();
+    resetFontDefaults();
+  }
+
   public static void installDefaults() {
-    UIManager.put("Component.arc", 12);
-    UIManager.put("Button.arc", 16);
-    UIManager.put("TextComponent.arc", 12);
     UIManager.put("ScrollBar.width", 14);
     UIManager.put("TitlePane.unifiedBackground", true);
+    UIManager.put("TitlePane.menuBarEmbedded", true);
   }
 
   private static void applyHighContrastDefaults() {
