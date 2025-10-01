@@ -339,7 +339,7 @@ public class ApiV1Controller {
     return InterventionDto.of(
         interventionService.create(
             request.agencyId(),
-            request.resourceId(),
+            primaryResourceId(request.resourceIds(), request.resourceId()),
             request.driverId(),
             request.clientId(),
             request.title(),
@@ -357,7 +357,7 @@ public class ApiV1Controller {
         interventionService.update(
             id,
             request.agencyId(),
-            request.resourceId(),
+            primaryResourceId(request.resourceIds(), request.resourceId()),
             request.driverId(),
             request.clientId(),
             request.title(),
@@ -379,7 +379,10 @@ public class ApiV1Controller {
       @Valid @RequestBody CreateUnavailabilityRequest request) {
     return UnavailabilityDto.of(
         unavailabilityService.create(
-            request.resourceId(), request.start(), request.end(), request.reason()));
+            primaryResourceId(request.resourceIds(), request.resourceId()),
+            request.start(),
+            request.end(),
+            request.reason()));
   }
 
   @GetMapping("/recurring-unavailabilities")
@@ -397,11 +400,22 @@ public class ApiV1Controller {
       @Valid @RequestBody CreateRecurringUnavailabilityRequest request) {
     return RecurringUnavailabilityDto.of(
         unavailabilityService.createRecurring(
-            request.resourceId(),
+            primaryResourceId(request.resourceIds(), request.resourceId()),
             request.dayOfWeek(),
             request.start(),
             request.end(),
             request.reason()));
+  }
+
+  private static String primaryResourceId(
+      java.util.List<String> resourceIds, String legacyResourceId) {
+    if (resourceIds != null
+        && !resourceIds.isEmpty()
+        && resourceIds.get(0) != null
+        && !resourceIds.get(0).isBlank()) {
+      return resourceIds.get(0);
+    }
+    return legacyResourceId;
   }
 
   @GetMapping(value = "/interventions/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)

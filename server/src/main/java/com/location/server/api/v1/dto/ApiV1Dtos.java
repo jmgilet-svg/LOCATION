@@ -138,7 +138,8 @@ public final class ApiV1Dtos {
       OffsetDateTime end,
       String notes,
       String internalNotes,
-      Double price) {
+      Double price,
+      java.util.List<String> resourceIds) {
     public static InterventionDto of(Intervention intervention) {
       return new InterventionDto(
           intervention.getId(),
@@ -151,7 +152,8 @@ public final class ApiV1Dtos {
           intervention.getEnd(),
           intervention.getNotes(),
           intervention.getInternalNotes(),
-          intervention.getPrice());
+          intervention.getPrice(),
+          java.util.List.of(intervention.getResource().getId()));
     }
   }
 
@@ -192,6 +194,7 @@ public final class ApiV1Dtos {
   }
 
   public record CreateInterventionRequest(
+      java.util.List<String> resourceIds,
       @NotBlank String agencyId,
       @NotBlank String resourceId,
       String driverId,
@@ -204,6 +207,7 @@ public final class ApiV1Dtos {
       @DecimalMin(value = "0.0", inclusive = true) Double price) {}
 
   public record UpdateInterventionRequest(
+      java.util.List<String> resourceIds,
       @NotBlank String agencyId,
       @NotBlank String resourceId,
       String driverId,
@@ -216,12 +220,14 @@ public final class ApiV1Dtos {
       @DecimalMin(value = "0.0", inclusive = true) Double price) {}
 
   public record CreateUnavailabilityRequest(
+      java.util.List<String> resourceIds,
       @NotBlank String resourceId,
       @NotNull OffsetDateTime start,
       @NotNull OffsetDateTime end,
       @NotBlank @Size(max = 140) String reason) {}
 
   public record CreateRecurringUnavailabilityRequest(
+      java.util.List<String> resourceIds,
       @NotBlank String resourceId,
       @NotNull DayOfWeek dayOfWeek,
       @NotNull LocalTime start,
