@@ -2,6 +2,7 @@ package com.location.client.ui;
 
 import com.location.client.core.DataSourceProvider;
 import com.location.client.core.Models;
+import com.location.client.ui.uikit.Icons;
 import com.location.client.ui.uikit.MailFavorites;
 import com.location.client.ui.uikit.Ui;
 import java.awt.BorderLayout;
@@ -66,8 +67,8 @@ public class TemplatesEditorFrame extends JFrame {
     top.add(new JLabel("Clé:"));
     keyField.setColumns(14);
     top.add(keyField);
-    JButton save = new JButton("Enregistrer");
-    JButton render = new JButton("Prévisualiser");
+    JButton save = new JButton("Enregistrer", Icons.of("save", 16));
+    JButton render = new JButton("Prévisualiser", Icons.of("preview", 16));
     JButton sendTest = new JButton("Envoyer test...");
     JButton insertVar = new JButton("Insérer variable");
     JButton btNew = new JButton("Nouveau");

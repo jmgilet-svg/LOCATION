@@ -1,62 +1,93 @@
 package com.location.client.ui.uikit;
 
-import javax.swing.UIManager;
-import java.awt.Font;
-import java.awt.GraphicsEnvironment;
-import java.awt.Insets;
-import java.io.InputStream;
-import java.lang.reflect.Method;
+import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
+import javax.swing.ButtonGroup;
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JRadioButtonMenuItem;
+import javax.swing.event.MenuEvent;
+import javax.swing.event.MenuListener;
 
 public final class Theme {
   private Theme() {}
 
-  public static void applyLight() {
-    apply("com.formdev.flatlaf.FlatLightLaf");
+  public static JMenu buildViewMenu(JFrame frame) {
+    JMenu view = new JMenu("Affichage");
+    attach(view, frame);
+    return view;
   }
 
-  public static void applyDark() {
-    apply("com.formdev.flatlaf.FlatDarkLaf");
+  public static void attach(JMenu view, JFrame frame) {
+    if (view == null) {
+      return;
+    }
+    if (view.getMenuComponentCount() > 0) {
+      view.addSeparator();
+    }
+
+    JMenu themeMenu = new JMenu("Thème");
+    ButtonGroup group = new ButtonGroup();
+    JRadioButtonMenuItem light = new JRadioButtonMenuItem("Clair");
+    JRadioButtonMenuItem dark = new JRadioButtonMenuItem("Sombre");
+    group.add(light);
+    group.add(dark);
+
+    light.addActionListener(e -> apply(frame, com.location.client.ui.Theme.Mode.LIGHT));
+    dark.addActionListener(e -> apply(frame, com.location.client.ui.Theme.Mode.DARK));
+
+    themeMenu.add(light);
+    themeMenu.add(dark);
+    view.add(themeMenu);
+
+    view.addMenuListener(
+        new MenuListener() {
+          @Override
+          public void menuSelected(MenuEvent e) {
+            com.location.client.ui.Theme.Mode mode = com.location.client.ui.Theme.currentMode();
+            light.setSelected(mode == com.location.client.ui.Theme.Mode.LIGHT);
+            dark.setSelected(mode == com.location.client.ui.Theme.Mode.DARK);
+          }
+
+          @Override
+          public void menuDeselected(MenuEvent e) {}
+
+          @Override
+          public void menuCanceled(MenuEvent e) {}
+        });
+
+    view.addSeparator();
+
+    JMenuItem bigger = new JMenuItem("Augmenter la taille UI");
+    bigger.addActionListener(
+        e -> adjustScale(frame, com.location.client.ui.Theme.getFontScale() + 0.1f));
+
+    JMenuItem smaller = new JMenuItem("Diminuer la taille UI");
+    smaller.addActionListener(
+        e -> adjustScale(frame, com.location.client.ui.Theme.getFontScale() - 0.1f));
+
+    JMenuItem reset = new JMenuItem("Taille par défaut");
+    reset.addActionListener(e -> adjustScale(frame, 1.0f));
+
+    view.add(bigger);
+    view.add(smaller);
+    view.add(reset);
   }
 
-  private static void apply(String lafClassName) {
+  private static void apply(JFrame frame, com.location.client.ui.Theme.Mode mode) {
+    animate(() -> com.location.client.ui.Theme.apply(mode));
+  }
+
+  private static void adjustScale(JFrame frame, float scale) {
+    animate(() -> com.location.client.ui.Theme.setFontScale(scale));
+  }
+
+  private static void animate(Runnable action) {
+    FlatAnimatedLafChange.showSnapshot();
     try {
-      Class<?> laf = Class.forName(lafClassName);
-      Method setup = laf.getMethod("setup");
-      setup.invoke(null);
-    } catch (Throwable t) {
-      try {
-        UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-      } catch (Exception ignore) {
-      }
+      action.run();
+    } finally {
+      FlatAnimatedLafChange.hideSnapshotWithAnimation();
     }
-    installInterIfPresent();
-    UIManager.put("Component.arc", 12);
-    UIManager.put("Button.arc", 12);
-    UIManager.put("TextComponent.arc", 12);
-    UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
-    UIManager.put("ToolTip.hideAccelerator", Boolean.TRUE);
-    UIManager.put("Button.margin", new Insets(6, 10, 6, 10));
-    UIManager.put("Component.arrowType", "chevron");
-  }
-
-  private static void installInterIfPresent() {
-    System.setProperty("awt.useSystemAAFontSettings", "on");
-    System.setProperty("swing.aatext", "true");
-    String[] faces = {
-      "/fonts/Inter-Regular.ttf",
-      "/fonts/Inter-Medium.ttf",
-      "/fonts/Inter-SemiBold.ttf"
-    };
-    for (String face : faces) {
-      try (InputStream in = Theme.class.getResourceAsStream(face)) {
-        if (in != null) {
-          Font font = Font.createFont(Font.TRUETYPE_FONT, in);
-          GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
-        }
-      } catch (Exception ignore) {
-      }
-    }
-    Font base = new Font("Inter", Font.PLAIN, 13);
-    UIManager.put("defaultFont", base);
   }
 }
