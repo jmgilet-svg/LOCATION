@@ -68,8 +68,10 @@ import javax.swing.Timer;
 import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import com.location.client.ui.uikit.Toasts;
+import com.location.client.ui.uikit.AgencyPalette;
+import com.location.client.ui.uikit.Icons;
 import com.location.client.ui.uikit.Notify;
+import com.location.client.ui.uikit.Toasts;
 
 public class PlanningPanel extends JPanel {
   // --- Virtualization & caches ---
@@ -81,6 +83,8 @@ public class PlanningPanel extends JPanel {
   private int lastHeight = -1;
   private final java.util.Map<String, java.awt.Rectangle> chipRects = new java.util.HashMap<>();
   private final java.util.Map<String, java.awt.Rectangle> badgeBounds = new java.util.HashMap<>();
+  private final java.util.Map<String, java.util.List<TagBadge>> tagBoundsByKey =
+      new java.util.HashMap<>();
   private javax.swing.JTextField searchField;
   private String searchQuery = "";
   private final Preferences prefs =
@@ -119,6 +123,15 @@ public class PlanningPanel extends JPanel {
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
   private final java.util.Map<String, List<String>> interventionTags = new HashMap<>();
   private String interventionTagFilter = "";
+  private static final class TagBadge {
+    final java.awt.Rectangle bounds;
+    final String tag;
+
+    TagBadge(java.awt.Rectangle bounds, String tag) {
+      this.bounds = bounds;
+      this.tag = tag;
+    }
+  }
   public interface SelectionListener {
     void onSelection(List<Models.Intervention> selection, List<Models.Intervention> dayItems);
   }
@@ -294,7 +307,9 @@ public class PlanningPanel extends JPanel {
 
       @Override
       public void mouseMoved(MouseEvent e) {
-        updateCursor(e.getPoint());
+        Point point = e.getPoint();
+        updateTagTooltip(point);
+        updateCursor(point);
       }
 
       @Override
@@ -1636,6 +1651,7 @@ public class PlanningPanel extends JPanel {
     ensureRowLayout();
     badgeBounds.clear();
     chipRects.clear();
+    tagBoundsByKey.clear();
 
     int displayCount = displayToResource.size();
     int firstVisibleDisplayRow = 0;
@@ -2111,10 +2127,7 @@ public class PlanningPanel extends JPanel {
 
     boolean conflict = hasConflict(t);
     String resourceId = resourceIdAtRow(t.row);
-    Color base = resourceColors.get(resourceId);
-    if (base == null) {
-      base = ResourceColors.colorFor(null);
-    }
+    Color base = withAgencyAccent(resourceColors.get(resourceId), tile.i.agencyId());
     if (t.alpha < 1f) {
       g2.setComposite(AlphaComposite.SrcOver.derive(t.alpha));
     }
@@ -2169,6 +2182,11 @@ public class PlanningPanel extends JPanel {
 
     java.util.List<String> resourceIds = effectiveResourceIds(tile.i);
     String interventionId = tile.i.id();
+    String resourceId = resourceIdAtRow(tile.row);
+    String tagKey = laneKey(interventionId, resourceId);
+    if (tagKey != null) {
+      tagBoundsByKey.remove(tagKey);
+    }
     if (interventionId != null && resourceIds.size() <= 1) {
       badgeBounds.remove(interventionId);
     }
@@ -2201,6 +2219,131 @@ public class PlanningPanel extends JPanel {
       int dotY = rect.y - 6;
       g2.fillOval(dotX, dotY, 10, 10);
     }
+
+    java.util.List<String> tags = interventionId == null ? null : interventionTags.get(interventionId);
+    if (tags == null || tags.isEmpty()) {
+      return;
+    }
+
+    int padding = 4;
+    int badgeSize = Math.max(12, Math.min(18, rect.height / 3));
+    int badgeInner = Math.max(8, badgeSize - 6);
+    int startX = rect.x + padding;
+    int y = rect.y + rect.height - badgeSize - padding;
+    if (y < rect.y + padding) {
+      y = rect.y + padding;
+    }
+    java.util.List<TagBadge> drawn = new java.util.ArrayList<>();
+    for (String tag : tags) {
+      if (tag == null || tag.isBlank()) {
+        continue;
+      }
+      java.awt.Rectangle badgeRect = new java.awt.Rectangle(startX - 2, y - 2, badgeSize + 4, badgeSize + 4);
+      if (badgeRect.x + badgeRect.width > rect.x + rect.width) {
+        break;
+      }
+      g2.setColor(new Color(0, 0, 0, 90));
+      g2.fillRoundRect(badgeRect.x, badgeRect.y, badgeRect.width, badgeRect.height, badgeRect.height, badgeRect.height);
+      Icon icon = Icons.of(iconNameForTag(tag), badgeInner);
+      int iconX = startX + (badgeSize - icon.getIconWidth()) / 2;
+      int iconY = y + (badgeSize - icon.getIconHeight()) / 2;
+      icon.paintIcon(PlanningPanel.this, g2, iconX, iconY);
+      drawn.add(new TagBadge(badgeRect, tag));
+      startX += badgeSize + padding;
+    }
+    if (tagKey != null) {
+      if (drawn.isEmpty()) {
+        tagBoundsByKey.remove(tagKey);
+      } else {
+        tagBoundsByKey.put(tagKey, drawn);
+      }
+    }
+  }
+
+  private Color withAgencyAccent(Color base, String agencyId) {
+    if (base == null) {
+      base = ResourceColors.colorFor(null);
+    }
+    if (agencyId == null || agencyId.isBlank()) {
+      return base;
+    }
+    try {
+      String hex = AgencyPalette.get(agencyId);
+      if (hex == null || hex.isBlank()) {
+        return base;
+      }
+      Color accent = Color.decode(hex);
+      return blendColors(base, accent, 0.30f);
+    } catch (RuntimeException ex) {
+      return base;
+    }
+  }
+
+  private static Color blendColors(Color base, Color accent, float ratioAccent) {
+    if (base == null) {
+      return accent;
+    }
+    if (accent == null) {
+      return base;
+    }
+    float ratio = Math.max(0f, Math.min(1f, ratioAccent));
+    int red = Math.round(base.getRed() * (1f - ratio) + accent.getRed() * ratio);
+    int green = Math.round(base.getGreen() * (1f - ratio) + accent.getGreen() * ratio);
+    int blue = Math.round(base.getBlue() * (1f - ratio) + accent.getBlue() * ratio);
+    int alpha = Math.max(base.getAlpha(), accent.getAlpha());
+    return new Color(red, green, blue, alpha);
+  }
+
+  private static String escapeHtml(String text) {
+    if (text == null || text.isEmpty()) {
+      return "";
+    }
+    return text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;");
+  }
+
+  private String iconNameForTag(String tag) {
+    if (tag == null) {
+      return "tag";
+    }
+    String lower = tag.toLowerCase(Locale.ROOT);
+    if (lower.contains("urgent") || lower.contains("prior")) {
+      return "alert-octagon";
+    }
+    if (lower.contains("maint") || lower.contains("sav") || lower.contains("revis")) {
+      return "toolbox";
+    }
+    if (lower.contains("livr") || lower.contains("trans") || lower.contains("camion")) {
+      return Icons.DRIVERS;
+    }
+    if (lower.contains("zone") || lower.contains("site") || lower.contains("chantier")) {
+      return "map-pin";
+    }
+    return "tag";
+  }
+
+  private String tagDescription(String tag) {
+    if (tag == null || tag.isBlank()) {
+      return "";
+    }
+    String lower = tag.toLowerCase(Locale.ROOT);
+    if (lower.contains("urgent") || lower.contains("prior")) {
+      return "Priorité haute / délai court";
+    }
+    if (lower.contains("maint") || lower.contains("sav") || lower.contains("revis")) {
+      return "Maintenance / SAV / révision";
+    }
+    if (lower.contains("livr") || lower.contains("trans")) {
+      return "Transport / livraison";
+    }
+    if (lower.contains("zone") || lower.contains("site") || lower.contains("chantier")) {
+      return "Secteur géographique";
+    }
+    return "Tag";
   }
 
   private Models.Intervention interventionAtBadge(Point p) {
@@ -2622,6 +2765,57 @@ public class PlanningPanel extends JPanel {
     } catch (RuntimeException ex) {
       Toolkit.getDefaultToolkit().beep();
     }
+  }
+
+  private void updateTagTooltip(Point p) {
+    if (p == null) {
+      setToolTipText(null);
+      return;
+    }
+    Optional<Tile> tileOpt = findTileAt(p);
+    if (tileOpt.isEmpty()) {
+      setToolTipText(null);
+      return;
+    }
+    Tile tile = tileOpt.get();
+    String resourceId = resourceIdAtRow(tile.row);
+    String key = laneKey(tile.i.id(), resourceId);
+    if (key == null) {
+      setToolTipText(null);
+      return;
+    }
+    java.util.List<TagBadge> badges = tagBoundsByKey.get(key);
+    if (badges == null || badges.isEmpty()) {
+      setToolTipText(null);
+      return;
+    }
+    for (TagBadge badge : badges) {
+      if (badge == null || badge.bounds == null) {
+        continue;
+      }
+      if (badge.bounds.contains(p)) {
+        String tag = badge.tag;
+        String description = tagDescription(tag);
+        StringBuilder tooltip = new StringBuilder("<html>");
+        if (description != null && !description.isBlank()) {
+          tooltip.append("<b>").append(escapeHtml(description)).append("</b>");
+        }
+        if (tag != null && !tag.isBlank()) {
+          if (tooltip.length() > "<html>".length()) {
+            tooltip.append("<br/>");
+          }
+          tooltip.append(escapeHtml(tag));
+        }
+        tooltip.append("</html>");
+        String text = tooltip.toString();
+        if ("<html></html>".equals(text)) {
+          text = null;
+        }
+        setToolTipText(text);
+        return;
+      }
+    }
+    setToolTipText(null);
   }
 
   private void updateCursor(Point p) {
