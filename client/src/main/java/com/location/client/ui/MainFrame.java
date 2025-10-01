@@ -740,6 +740,7 @@ public class MainFrame extends JFrame {
     view.add(viewActivity);
     view.addSeparator();
     view.add(bookmarksMenu);
+    com.location.client.ui.uikit.Theme.attach(view, this);
 
     JMenu settings = new JMenu(Language.tr("menu.settings"));
     settings.setMnemonic(Language.isEnglish() ? 'S' : 'P');
@@ -747,22 +748,6 @@ public class MainFrame extends JFrame {
     switchSrc.addActionListener(e -> switchSource());
     JMenuItem cfg = new JMenuItem("Configurer le backend (URL/Login)");
     cfg.addActionListener(e -> showBackendConfig());
-    JMenuItem themeLight =
-        new JMenuItem(
-            new AbstractAction("Thème clair (Ctrl+Alt+L)") {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                Theme.apply(Theme.Mode.LIGHT);
-              }
-            });
-    JMenuItem themeDark =
-        new JMenuItem(
-            new AbstractAction("Thème sombre (Ctrl+Alt+D)") {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                Theme.apply(Theme.Mode.DARK);
-              }
-            });
     JMenuItem tmpl = new JMenuItem("Modèle email (Agence)");
     tmpl.addActionListener(e -> editAgencyTemplate());
     JMenuItem loginItem =
@@ -799,33 +784,6 @@ public class MainFrame extends JFrame {
             });
     settings.add(switchSrc);
     settings.add(cfg);
-    settings.add(themeLight);
-    settings.add(themeDark);
-    settings.addSeparator();
-    settings.add(
-        new JMenuItem(
-            new AbstractAction(Language.tr("font.increase")) {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                Theme.setFontScale(Theme.getFontScale() + 0.1f);
-              }
-            }));
-    settings.add(
-        new JMenuItem(
-            new AbstractAction(Language.tr("font.decrease")) {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                Theme.setFontScale(Theme.getFontScale() - 0.1f);
-              }
-            }));
-    settings.add(
-        new JMenuItem(
-            new AbstractAction(Language.tr("font.reset")) {
-              @Override
-              public void actionPerformed(ActionEvent e) {
-                Theme.setFontScale(1.0f);
-              }
-            }));
     JCheckBoxMenuItem highContrastItem = new JCheckBoxMenuItem(Language.tr("contrast.toggle"), Theme.isHighContrast());
     highContrastItem.addActionListener(e -> Theme.setHighContrast(highContrastItem.isSelected()));
     settings.add(highContrastItem);
