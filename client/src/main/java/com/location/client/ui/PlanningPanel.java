@@ -44,6 +44,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
+import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.swing.AbstractAction;
@@ -65,6 +66,8 @@ import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.Timer;
 import javax.swing.ToolTipManager;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import com.location.client.ui.uikit.Toasts;
 import com.location.client.ui.uikit.Notify;
 
@@ -78,6 +81,14 @@ public class PlanningPanel extends JPanel {
   private int lastHeight = -1;
   private final java.util.Map<String, java.awt.Rectangle> chipRects = new java.util.HashMap<>();
   private final java.util.Map<String, java.awt.Rectangle> badgeBounds = new java.util.HashMap<>();
+  private javax.swing.JTextField searchField;
+  private String searchQuery = "";
+  private final Preferences prefs =
+      Preferences.userRoot().node("com.location.client.ui.accordion");
+  private String animTid = null;
+  private float animFactor = 1f;
+  private boolean animClosing = false;
+  private Timer accordionTimer;
   // S12.1: accordion mapping between display rows and resource rows
   private final java.util.List<Integer> displayToResource = new java.util.ArrayList<>(); // -1 for headers
   private final java.util.List<String> displayHeaderType = new java.util.ArrayList<>();
@@ -94,6 +105,7 @@ public class PlanningPanel extends JPanel {
   private List<Models.Resource> resources = List.of();
   private List<Models.ResourceType> resourceTypes = List.of();
   private final java.util.Set<String> collapsedTypes = new LinkedHashSet<>();
+  private final java.util.Set<String> pinnedTypes = new LinkedHashSet<>();
   private final java.util.Map<String, String> resourceTypeIdByResource = new java.util.HashMap<>();
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
@@ -158,6 +170,30 @@ public class PlanningPanel extends JPanel {
 
   public PlanningPanel(DataSourceProvider dsp) {
     this.dsp = dsp;
+    setLayout(null);
+    searchField = new JTextField();
+    searchField.setColumns(18);
+    searchField.putClientProperty("JTextField.placeholderText", "Recherche ressources...");
+    searchField.getDocument()
+        .addDocumentListener(
+            new DocumentListener() {
+              @Override
+              public void insertUpdate(DocumentEvent e) {
+                onSearchChanged();
+              }
+
+              @Override
+              public void removeUpdate(DocumentEvent e) {
+                onSearchChanged();
+              }
+
+              @Override
+              public void changedUpdate(DocumentEvent e) {
+                onSearchChanged();
+              }
+            });
+    add(searchField);
+    loadAccordionPreferences();
     setBackground(Color.WHITE);
     setOpaque(true);
     reload();
@@ -260,36 +296,25 @@ public class PlanningPanel extends JPanel {
       @Override
       public void mouseClicked(MouseEvent e) {
         Point p = e.getPoint();
+        if (SwingUtilities.isRightMouseButton(e)) {
+          String headerType = headerTypeAtPoint(p);
+          if (headerType != null) {
+            showHeaderMenu(e, headerType);
+            return;
+          }
+        }
         if (SwingUtilities.isLeftMouseButton(e)) {
-          int displayIndex = displayRowAtY(p.y);
-          if (displayIndex >= 0 && displayIndex < displayToResource.size()) {
-            Integer mapped = displayToResource.get(displayIndex);
-            if (mapped == null || mapped < 0) {
-              String typeId = displayHeaderType.size() > displayIndex ? displayHeaderType.get(displayIndex) : null;
-              if (isHeaderCollapsible(typeId)) {
-                if (collapsedTypes.contains(typeId)) {
-                  collapsedTypes.remove(typeId);
-                } else {
-                  collapsedTypes.add(typeId);
-                }
-                reload();
-                repaint();
-                return;
-              }
-            }
+          String headerType = headerTypeAtPoint(p);
+          if (headerType != null && isHeaderCollapsible(headerType)) {
+            toggleTypeCollapse(headerType);
+            return;
           }
           for (java.util.Map.Entry<String, java.awt.Rectangle> entry : new java.util.HashMap<>(chipRects).entrySet()) {
             java.awt.Rectangle rect = entry.getValue();
             if (rect != null && rect.contains(p)) {
               String typeId = entry.getKey();
-              if (typeId != null) {
-                if (collapsedTypes.contains(typeId)) {
-                  collapsedTypes.remove(typeId);
-                } else {
-                  collapsedTypes.add(typeId);
-                }
-                reload();
-                repaint();
+              if (typeId != null && isHeaderCollapsible(typeId)) {
+                toggleTypeCollapse(typeId);
                 return;
               }
             }
@@ -325,6 +350,164 @@ public class PlanningPanel extends JPanel {
     addMouseListener(adapter);
     addMouseMotionListener(adapter);
     registerUndoShortcuts();
+  }
+
+  private void onSearchChanged() {
+    if (searchField == null) {
+      return;
+    }
+    String text = searchField.getText();
+    if (text == null) {
+      text = "";
+    }
+    String normalized = text.trim().toLowerCase(Locale.ROOT);
+    if (Objects.equals(normalized, searchQuery)) {
+      return;
+    }
+    searchQuery = normalized;
+    reload();
+    repaint();
+  }
+
+  private void loadAccordionPreferences() {
+    collapsedTypes.clear();
+    pinnedTypes.clear();
+    String collapsedPref = prefs.get("collapsedTypes", "");
+    if (collapsedPref != null && !collapsedPref.isBlank()) {
+      for (String token : collapsedPref.split(",")) {
+        String trimmed = token.trim();
+        if (!trimmed.isEmpty()) {
+          collapsedTypes.add(trimmed);
+        }
+      }
+    }
+    String pinnedPref = prefs.get("pinnedTypes", "");
+    if (pinnedPref != null && !pinnedPref.isBlank()) {
+      for (String token : pinnedPref.split(",")) {
+        String trimmed = token.trim();
+        if (!trimmed.isEmpty()) {
+          pinnedTypes.add(trimmed);
+        }
+      }
+    }
+  }
+
+  private void saveCollapsedTypes() {
+    prefs.put("collapsedTypes", String.join(",", collapsedTypes));
+  }
+
+  private void savePinnedTypes() {
+    prefs.put("pinnedTypes", String.join(",", pinnedTypes));
+  }
+
+  private void toggleTypeCollapse(String typeId) {
+    if (!isHeaderCollapsible(typeId)) {
+      return;
+    }
+    boolean nowCollapsed;
+    if (collapsedTypes.contains(typeId)) {
+      collapsedTypes.remove(typeId);
+      nowCollapsed = false;
+    } else {
+      collapsedTypes.add(typeId);
+      nowCollapsed = true;
+    }
+    saveCollapsedTypes();
+    startAccordionAnim(typeId, nowCollapsed);
+  }
+
+  private void startAccordionAnim(String typeId, boolean closing) {
+    if (accordionTimer != null && accordionTimer.isRunning()) {
+      accordionTimer.stop();
+    }
+    animTid = typeId;
+    animClosing = closing;
+    animFactor = closing ? 1f : 0f;
+    reload();
+    repaint();
+    final long start = System.currentTimeMillis();
+    final int durationMs = 120;
+    accordionTimer =
+        new Timer(
+            15,
+            evt -> {
+              long elapsed = System.currentTimeMillis() - start;
+              float progress = Math.min(1f, Math.max(0f, elapsed / (float) durationMs));
+              animFactor = closing ? 1f - progress : progress;
+              if (progress >= 1f) {
+                ((Timer) evt.getSource()).stop();
+                accordionTimer = null;
+                animTid = null;
+                animFactor = 1f;
+                animClosing = false;
+              }
+              repaint();
+            });
+    accordionTimer.setRepeats(true);
+    accordionTimer.start();
+  }
+
+  private String headerTypeAtPoint(Point p) {
+    int displayIndex = displayRowAtY(p.y);
+    if (displayIndex < 0 || displayIndex >= displayToResource.size()) {
+      return null;
+    }
+    Integer mapped = displayToResource.get(displayIndex);
+    if (mapped != null && mapped >= 0) {
+      return null;
+    }
+    if (displayIndex >= displayHeaderType.size()) {
+      return null;
+    }
+    return displayHeaderType.get(displayIndex);
+  }
+
+  private void showHeaderMenu(MouseEvent e, String typeId) {
+    if (typeId == null) {
+      return;
+    }
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem pinItem =
+        new JMenuItem(pinnedTypes.contains(typeId) ? "Désépingler" : "Épingler en haut");
+    pinItem.addActionListener(
+        ev -> {
+          if (pinnedTypes.contains(typeId)) {
+            pinnedTypes.remove(typeId);
+          } else {
+            pinnedTypes.add(typeId);
+          }
+          savePinnedTypes();
+          reload();
+          repaint();
+        });
+    menu.add(pinItem);
+    if (isHeaderCollapsible(typeId)) {
+      boolean collapsed = collapsedTypes.contains(typeId);
+      JMenuItem toggleItem = new JMenuItem(collapsed ? "Développer" : "Réduire");
+      toggleItem.addActionListener(ev -> toggleTypeCollapse(typeId));
+      menu.add(toggleItem);
+    }
+    menu.show(this, e.getX(), e.getY());
+  }
+
+  @Override
+  public void doLayout() {
+    super.doLayout();
+    if (searchField != null) {
+      int prefHeight = searchField.getPreferredSize().height;
+      int available = Math.max(140, getWidth() - (TIME_W + 32));
+      int width = Math.min(280, available);
+      int x = TIME_W + 16;
+      if (x + width > getWidth() - 8) {
+        width = Math.max(120, getWidth() - x - 8);
+      }
+      int headerZone = chipBarHeight();
+      if (headerZone <= 0) {
+        headerZone = BASE_HEADER_H;
+      }
+      int y = Math.max(4, (headerZone - prefHeight) / 2);
+      searchField.setBounds(x, y, width, prefHeight);
+    }
   }
 
   private void createAt(Point p) {
@@ -522,6 +705,20 @@ public class PlanningPanel extends JPanel {
       String rid = filterResourceId;
       fetchedResources = fetchedResources.stream().filter(r -> rid.equals(r.id())).toList();
     }
+    if (searchQuery != null && !searchQuery.isBlank()) {
+      String needle = searchQuery;
+      fetchedResources =
+          fetchedResources.stream()
+              .filter(
+                  r -> {
+                    if (r == null) {
+                      return false;
+                    }
+                    String name = r.name();
+                    return name != null && name.toLowerCase(Locale.ROOT).contains(needle);
+                  })
+              .toList();
+    }
     List<Models.ResourceType> fetchedTypes;
     try {
       fetchedTypes = dsp.listResourceTypes();
@@ -537,7 +734,11 @@ public class PlanningPanel extends JPanel {
             .map(Models.ResourceType::id)
             .filter(Objects::nonNull)
             .collect(Collectors.toCollection(LinkedHashSet::new));
+    knownTypeIds.add(UNTYPED_TYPE_KEY);
     collapsedTypes.retainAll(knownTypeIds);
+    saveCollapsedTypes();
+    pinnedTypes.retainAll(knownTypeIds);
+    savePinnedTypes();
 
     resourceTypeIdByResource.clear();
     for (Models.Resource resource : fetchedResources) {
@@ -560,7 +761,9 @@ public class PlanningPanel extends JPanel {
     if (filterResourceId != null && !filterResourceId.isBlank()) {
       String forcedType = resourceTypeIdByResource.get(filterResourceId);
       if (forcedType != null) {
-        collapsedTypes.remove(forcedType);
+        if (collapsedTypes.remove(forcedType)) {
+          saveCollapsedTypes();
+        }
       }
     }
 
@@ -783,7 +986,20 @@ public class PlanningPanel extends JPanel {
       ordered.add(UNTYPED_TYPE_KEY);
     }
 
-    for (String typeId : ordered) {
+    java.util.List<String> orderedList = new java.util.ArrayList<>(ordered);
+    java.util.List<String> head = new java.util.ArrayList<>();
+    java.util.List<String> tail = new java.util.ArrayList<>();
+    for (String typeId : orderedList) {
+      if (pinnedTypes.contains(typeId)) {
+        head.add(typeId);
+      } else {
+        tail.add(typeId);
+      }
+    }
+    java.util.List<String> finalOrder = new java.util.ArrayList<>(head);
+    finalOrder.addAll(tail);
+
+    for (String typeId : finalOrder) {
       java.util.List<Integer> indexes = byType.getOrDefault(typeId, java.util.List.of());
       if (indexes.isEmpty() && totalResourcesForType(typeId) <= 0) {
         continue;
