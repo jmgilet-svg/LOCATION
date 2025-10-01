@@ -7,11 +7,14 @@ import com.location.client.core.Preferences;
 import java.awt.Font;
 import java.awt.Window;
 import java.util.Enumeration;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.SwingUtilities;
 import javax.swing.UIDefaults;
 import javax.swing.UIManager;
 
 public final class Theme {
+  private static final Logger LOGGER = Logger.getLogger(Theme.class.getName());
   public enum Mode { LIGHT, DARK }
 
   private static Preferences preferences;
@@ -65,7 +68,7 @@ public final class Theme {
         }
       }
     } catch (Exception e) {
-      e.printStackTrace();
+      LOGGER.log(Level.SEVERE, "Impossible d'appliquer le thème", e);
     }
   }
 
@@ -75,7 +78,8 @@ public final class Theme {
       if (saved != null) {
         try {
           return Mode.valueOf(saved);
-        } catch (IllegalArgumentException ignored) {
+        } catch (IllegalArgumentException ex) {
+          LOGGER.log(Level.WARNING, "Mode de thème inconnu dans les préférences: " + saved, ex);
         }
       }
     }
