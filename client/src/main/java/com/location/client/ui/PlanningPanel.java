@@ -1773,6 +1773,11 @@ public class PlanningPanel extends JPanel {
     int nx1 = Math.max(minX, Math.min(tile.x1, maxX));
     int nx2 = Math.max(minX, Math.min(tile.x2, maxX));
     dragTile = new Tile(tile.i, tile.row, nx1, nx2, tile.alpha);
+    // Update ghost rectangle for visual feedback
+    Rectangle r =
+        new Rectangle(
+            Math.min(nx1, nx2), rowY(dragTile.row), Math.abs(nx2 - nx1), rowH(dragTile.row));
+    setGhostDrag(r);
     repaint();
   }
 
@@ -1786,6 +1791,7 @@ public class PlanningPanel extends JPanel {
     Tile finalTile = dragTile;
     dragTile = null;
     dragStart = null;
+    clearGhostDrag();
     repaint();
     if (resources.isEmpty()) {
       return;
