@@ -16,15 +16,19 @@ public final class ConflictUtil {
       return out;
     }
     for (int i = 0; i < interventions.size(); i++) {
-      Models.Intervention first = interventions.get(i);
+      Models.Intervention a = interventions.get(i);
       for (int j = i + 1; j < interventions.size(); j++) {
-        Models.Intervention second = interventions.get(j);
-        if (!overlap(first.start(), first.end(), second.start(), second.end())) {
+        Models.Intervention b = interventions.get(j);
+        if (!overlap(a.start(), a.end(), b.start(), b.end())) {
           continue;
         }
-        String resourceId = firstCommonResource(first, second);
-        if (resourceId != null) {
-          out.add(new Conflict(first, second, resourceId));
+        if (a.resourceIds() == null || b.resourceIds() == null) {
+          continue;
+        }
+        for (String resourceId : a.resourceIds()) {
+          if (resourceId != null && b.resourceIds().contains(resourceId)) {
+            out.add(new Conflict(a, b, resourceId));
+          }
         }
       }
     }
@@ -36,17 +40,5 @@ public final class ConflictUtil {
       return false;
     }
     return startA.isBefore(endB) && endA.isAfter(startB);
-  }
-
-  private static String firstCommonResource(Models.Intervention a, Models.Intervention b) {
-    if (a.resourceIds() == null || b.resourceIds() == null) {
-      return null;
-    }
-    for (String resourceId : a.resourceIds()) {
-      if (resourceId != null && b.resourceIds().contains(resourceId)) {
-        return resourceId;
-      }
-    }
-    return null;
   }
 }
