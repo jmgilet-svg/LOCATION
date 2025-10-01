@@ -1481,6 +1481,54 @@ public class PlanningPanel extends JPanel {
     g2.setColor(Color.WHITE);
     g2.setFont(getFont().deriveFont(Font.BOLD));
     drawWrapped(g2, t.i.title(), x + 8, y + 4, Math.max(8, w - 16), Math.max(12, height - 16));
+
+    paintTileBadges(g2, t, rect);
+  }
+
+  private void paintTileBadges(Graphics2D g2, Tile tile, java.awt.Rectangle rect) {
+    if (tile == null || tile.i == null || rect == null) {
+      return;
+    }
+
+    java.util.List<String> resourceIds = effectiveResourceIds(tile.i);
+    if (resourceIds.size() > 1) {
+      Graphics2D badgeGraphics = (Graphics2D) g2.create();
+      try {
+        float baseSize = getFont() != null ? getFont().getSize2D() : 12f;
+        badgeGraphics.setFont(getFont().deriveFont(Font.BOLD, Math.max(10f, baseSize - 1f)));
+        String label = "+" + (resourceIds.size() - 1);
+        java.awt.FontMetrics fm = badgeGraphics.getFontMetrics();
+        int badgeWidth = fm.stringWidth(label) + 8;
+        int badgeHeight = fm.getHeight();
+        int badgeX = rect.x + rect.width - badgeWidth - 4;
+        int badgeY = rect.y + 4;
+        badgeGraphics.setColor(new Color(0, 0, 0, 100));
+        badgeGraphics.fillRoundRect(badgeX, badgeY, badgeWidth, badgeHeight, 8, 8);
+        badgeGraphics.setColor(Color.WHITE);
+        badgeGraphics.drawString(label, badgeX + 4, badgeY + fm.getAscent());
+      } finally {
+        badgeGraphics.dispose();
+      }
+    }
+
+    if (isInConflict(tile.i.id())) {
+      g2.setColor(new Color(200, 50, 50));
+      int dotX = rect.x - 6;
+      int dotY = rect.y - 6;
+      g2.fillOval(dotX, dotY, 10, 10);
+    }
+  }
+
+  private java.util.List<String> effectiveResourceIds(Models.Intervention intervention) {
+    if (intervention == null) {
+      return java.util.List.of();
+    }
+    java.util.List<String> ids = intervention.resourceIds();
+    if (ids != null && !ids.isEmpty()) {
+      return ids;
+    }
+    String legacyId = intervention.resourceId();
+    return (legacyId == null || legacyId.isBlank()) ? java.util.List.of() : java.util.List.of(legacyId);
   }
 
   private java.awt.Rectangle tileRect(Tile t) {
