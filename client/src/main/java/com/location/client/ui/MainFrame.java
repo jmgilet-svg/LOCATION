@@ -7,8 +7,10 @@ import com.location.client.core.RestDataSource;
 import com.location.client.ui.i18n.Language;
 import com.location.client.ui.uikit.EmptyState;
 import com.location.client.ui.uikit.Icons;
+import com.location.client.ui.uikit.Notify;
 import com.location.client.ui.uikit.Svg;
 import com.location.client.ui.uikit.Toasts;
+import com.location.client.ui.uikit.Ui;
 import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.Dimension;
@@ -73,6 +75,10 @@ public class MainFrame extends JFrame {
 
   public MainFrame(DataSourceProvider dsp, Preferences prefs) {
     super("LOCATION — Planning");
+
+    final java.beans.PropertyChangeListener networkListener =
+        evt -> Ui.ensure(() -> Toasts.error(MainFrame.this, String.valueOf(evt.getNewValue())));
+    Notify.on("network.error", networkListener);
     this.dsp = dsp;
     this.prefs = prefs;
     ResourceColors.initialize(prefs);
@@ -128,6 +134,7 @@ public class MainFrame extends JFrame {
             if (badgeTimer != null) {
               badgeTimer.stop();
             }
+            Notify.off("network.error", networkListener);
             try {
               dsp.close();
             } catch (Exception ignored) {

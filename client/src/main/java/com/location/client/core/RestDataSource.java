@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.location.client.ui.uikit.Log;
+import com.location.client.ui.uikit.Notify;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,6 +19,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -38,6 +42,10 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 
 public class RestDataSource implements DataSourceProvider {
+  private final Log log = Log.get(RestDataSource.class);
+  private final ConcurrentHashMap<String, Long> circuitOpenUntil = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Integer> circuitFailures = new ConcurrentHashMap<>();
+
   private static final String DEFAULT_AGENCY_ID =
       System.getenv().getOrDefault("LOCATION_DEFAULT_AGENCY_ID", "A1");
   private final CloseableHttpClient http = HttpClients.createDefault();
@@ -2055,33 +2063,59 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   private <T> T withRetries(IoSupplier<T> call) throws IOException {
-    int attempts = 0;
-    long backoff = 250L;
-    while (true) {
+    String key = baseUrl != null ? baseUrl : "REST";
+    try {
+      return withRetryPolicy(() -> call.get(), key, 3, true);
+    } catch (UnauthorizedException e) {
+      throw e;
+    } catch (IOException e) {
+      throw e;
+    } catch (Exception e) {
+      if (e instanceof IOException ioe) {
+        throw ioe;
+      }
+      throw new IOException(e);
+    }
+  }
+
+  private <T> T withRetryPolicy(Callable<T> call, String key, int attempts, boolean idempotent)
+      throws Exception {
+    long now = System.currentTimeMillis();
+    Long openUntil = circuitOpenUntil.get(key);
+    if (openUntil != null && now < openUntil) {
+      throw new IOException("Circuit open for " + key + " until " + openUntil);
+    }
+    int maxAttempts = Math.max(1, attempts);
+    long backoff = idempotent ? 250L : 400L;
+    Exception last = null;
+    for (int i = 1; i <= maxAttempts; i++) {
       try {
-        return call.get();
-      } catch (IOException e) {
-        if (e instanceof UnauthorizedException) {
-          throw e;
+        T result = call.call();
+        circuitFailures.remove(key);
+        return result;
+      } catch (Exception e) {
+        last = e;
+        int fail = circuitFailures.merge(key, 1, Integer::sum);
+        if (fail >= 5) {
+          circuitOpenUntil.put(key, System.currentTimeMillis() + 15_000L);
+          log.warn("Circuit opened for " + key + " after " + fail + " failures");
         }
-        if (e instanceof HttpStatusException status
-            && status.statusCode() >= 400
-            && status.statusCode() < 500) {
-          throw e;
-        }
-        attempts++;
-        if (attempts >= 3) {
-          throw e;
+        if (i >= maxAttempts) {
+          break;
         }
         try {
           Thread.sleep(backoff);
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
-          throw new IOException("Interrupted during retry", ie);
+          throw e;
         }
         backoff = Math.min(backoff * 2, 2000L);
       }
     }
+    String msg = "Network error on " + key + (last == null ? "" : ": " + last.getMessage());
+    log.error(msg, last);
+    Notify.post("network.error", msg);
+    throw (last != null ? last : new IOException(msg));
   }
 
   private static HttpStatusException httpError(int statusCode, String message) {
