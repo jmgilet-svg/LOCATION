@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Preferences {
   private final Properties props = new Properties();
   private final Path file;
+  private static final Logger LOGGER = Logger.getLogger(Preferences.class.getName());
 
   private Preferences(Path file) {
     this.file = file;
@@ -17,14 +20,16 @@ public class Preferences {
     Path home = Path.of(System.getProperty("user.home"), ".location");
     try {
       Files.createDirectories(home);
-    } catch (IOException ignored) {
+    } catch (IOException ex) {
+      LOGGER.log(Level.WARNING, "Impossible de créer le répertoire des préférences " + home, ex);
     }
     Path file = home.resolve("app.properties");
     Preferences prefs = new Preferences(file);
     if (Files.exists(file)) {
       try (var in = Files.newInputStream(file)) {
         prefs.props.load(in);
-      } catch (IOException ignored) {
+      } catch (IOException ex) {
+        LOGGER.log(Level.WARNING, "Impossible de charger les préférences depuis " + file, ex);
       }
     }
     prefs.props.putIfAbsent("baseUrl", "http://localhost:8080");
@@ -36,7 +41,8 @@ public class Preferences {
   public void save() {
     try (var out = Files.newOutputStream(file)) {
       props.store(out, "LOCATION");
-    } catch (IOException ignored) {
+    } catch (IOException ex) {
+      LOGGER.log(Level.WARNING, "Impossible d'enregistrer les préférences vers " + file, ex);
     }
   }
 

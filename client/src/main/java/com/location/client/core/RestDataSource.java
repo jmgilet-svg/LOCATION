@@ -1945,6 +1945,7 @@ public class RestDataSource implements DataSourceProvider {
   }
 
   private void applyHeaders(ClassicHttpRequest request) {
+    request.addHeader("User-Agent", "LocationApp/1.0");
     String token = bearer.get();
     if (token != null && !token.isBlank()) {
       request.addHeader("Authorization", "Bearer " + token);

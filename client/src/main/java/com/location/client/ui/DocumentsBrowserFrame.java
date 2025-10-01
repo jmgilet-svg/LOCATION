@@ -8,6 +8,8 @@ import java.awt.event.ActionEvent;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.swing.*;
 
@@ -15,6 +17,7 @@ import javax.swing.*;
  * Fenêtre de raccourcis permettant d'ouvrir l'explorateur de documents filtré par type.
  */
 public class DocumentsBrowserFrame extends JFrame {
+  private static final Logger LOGGER = Logger.getLogger(DocumentsBrowserFrame.class.getName());
   private final DataSourceProvider dataSourceProvider;
 
   public DocumentsBrowserFrame(DataSourceProvider dataSourceProvider) {
@@ -39,7 +42,8 @@ public class DocumentsBrowserFrame extends JFrame {
         invoicesUnpaid =
             docs.stream().filter(d -> "INVOICE".equals(d.type()) && !d.paid()).count();
       }
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      LOGGER.log(Level.WARNING, "Impossible de charger les documents", ex);
     }
 
     JPanel panel = new JPanel(new GridLayout(0, 1, 8, 8));

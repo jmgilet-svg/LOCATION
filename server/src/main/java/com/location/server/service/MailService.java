@@ -22,7 +22,7 @@ public class MailService {
   }
 
   public void send(
-      Object to,
+      List<String> to,
       String subject,
       String html,
       List<Map<String, Object>> attachments,
@@ -30,6 +30,9 @@ public class MailService {
       List<String> bcc,
       String from)
       throws Exception {
+    if (to == null || to.isEmpty()) {
+      throw new IllegalArgumentException("Destinataire requis");
+    }
     MimeMessage message = mailSender.createMimeMessage();
     boolean multipart = attachments != null && !attachments.isEmpty();
     MimeMessageHelper helper = new MimeMessageHelper(message, multipart, "UTF-8");
@@ -39,13 +42,7 @@ public class MailService {
       helper.setFrom(effectiveFrom);
     }
 
-    if (to instanceof String s) {
-      helper.setTo(s);
-    } else if (to instanceof List<?> list) {
-      helper.setTo(list.stream().map(Object::toString).toArray(String[]::new));
-    } else {
-      throw new IllegalArgumentException("Invalid 'to' type");
-    }
+    helper.setTo(to.toArray(String[]::new));
 
     if (cc != null && !cc.isEmpty()) {
       helper.setCc(cc.toArray(new String[0]));
