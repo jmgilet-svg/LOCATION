@@ -104,6 +104,8 @@ public class PlanningPanel extends JPanel {
   private List<Models.Agency> agencies = List.of();
   private List<Models.Resource> resources = List.of();
   private final java.util.Map<String, Integer> resourceIndexById = new java.util.HashMap<>();
+  private final java.util.Map<String, Color> typeColorById = new java.util.HashMap<>();
+  private final java.util.Map<String, Long> addedAnimStart = new java.util.HashMap<>();
   private String selectedResourceIdForUI;
   private List<Models.ResourceType> resourceTypes = List.of();
   private final java.util.Set<String> collapsedTypes = new LinkedHashSet<>();
@@ -732,6 +734,7 @@ public class PlanningPanel extends JPanel {
       fetchedTypes = List.of();
     }
     resourceTypes = fetchedTypes;
+    rebuildTypeColors();
     java.util.Set<String> knownTypeIds =
         resourceTypes.stream()
             .map(Models.ResourceType::id)
@@ -942,9 +945,21 @@ public class PlanningPanel extends JPanel {
   private void rebuildResourceColors() {
     resourceColors.clear();
     for (Models.Resource resource : resources) {
-      if (resource.id() != null) {
-        resourceColors.put(resource.id(), ResourceColors.colorFor(resource));
+      if (resource == null || resource.id() == null) {
+        continue;
       }
+      String resourceId = resource.id();
+      Color color;
+      if (ResourceColors.getOverrideHex(resourceId) != null || resource.colorRgb() != null) {
+        color = ResourceColors.colorFor(resource);
+      } else {
+        String typeId = resourceTypeIdByResource.get(resourceId);
+        color = typeColorById.getOrDefault(typeId, ResourceColors.colorFor(resource));
+      }
+      if (color == null) {
+        color = ResourceColors.colorFor(null);
+      }
+      resourceColors.put(resourceId, color);
     }
   }
 
@@ -1043,6 +1058,29 @@ public class PlanningPanel extends JPanel {
         resourceIndexById.put(id, i);
       }
     }
+  }
+
+  private void rebuildTypeColors() {
+    typeColorById.clear();
+    Color[] palette =
+        new Color[] {
+          new Color(0x2F80ED),
+          new Color(0x27AE60),
+          new Color(0xEB5757),
+          new Color(0xF2994A),
+          new Color(0x9B51E0),
+          new Color(0x219653),
+          new Color(0x56CCF2)
+        };
+    int index = 0;
+    for (Models.ResourceType type : resourceTypes) {
+      if (type == null || type.id() == null) {
+        continue;
+      }
+      typeColorById.put(type.id(), palette[index % palette.length]);
+      index++;
+    }
+    typeColorById.putIfAbsent(UNTYPED_TYPE_KEY, new Color(0x3D7EFF));
   }
 
   private void invalidateLayoutCaches() {
@@ -2213,8 +2251,9 @@ public class PlanningPanel extends JPanel {
       }
     }
     laneIndex = Math.max(0, Math.min(laneCount - 1, laneIndex));
-    if (t.alpha != 1f) {
-      return buildTileRect(t, laneIndex, laneCount);
+    int offset = animationOffsetFor(t.i, resourceId);
+    if (t.alpha != 1f || offset != 0) {
+      return buildTileRect(t, laneIndex, laneCount, offset);
     }
     String key = tileKey(t);
     if (key != null) {
@@ -2223,23 +2262,42 @@ public class PlanningPanel extends JPanel {
       if (cached != null) {
         return cached;
       }
-      java.awt.Rectangle rect = buildTileRect(t, laneIndex, laneCount);
+      java.awt.Rectangle rect = buildTileRect(t, laneIndex, laneCount, 0);
       tileRectCache.put(cacheKey, rect);
       return rect;
     }
-    return buildTileRect(t, laneIndex, laneCount);
+    return buildTileRect(t, laneIndex, laneCount, 0);
   }
 
-  private java.awt.Rectangle buildTileRect(Tile t, int laneIndex, int laneCount) {
+  private java.awt.Rectangle buildTileRect(Tile t, int laneIndex, int laneCount, int xOffset) {
     int rowHeight = rowH(t.row);
     int baseY = rowY(t.row) + 6;
     int baseHeight = Math.max(16, rowHeight - 12);
-    int x = Math.min(t.x1, t.x2);
+    int x = Math.min(t.x1, t.x2) + xOffset;
     int w = Math.max(16, Math.abs(t.x2 - t.x1));
     int innerHeight = Math.max(18, baseHeight / Math.max(1, laneCount));
     int y = baseY + laneIndex * innerHeight;
     int h = Math.max(16, innerHeight - 2);
     return new java.awt.Rectangle(x, y, w, h);
+  }
+
+  private int animationOffsetFor(Models.Intervention intervention, String resourceId) {
+    if (intervention == null || intervention.id() == null || resourceId == null) {
+      return 0;
+    }
+    String key = intervention.id() + "#" + resourceId;
+    Long start = addedAnimStart.get(key);
+    if (start == null) {
+      return 0;
+    }
+    long elapsed = System.currentTimeMillis() - start;
+    if (elapsed >= 120L) {
+      addedAnimStart.remove(key);
+      return 0;
+    }
+    float progress = Math.max(0f, Math.min(1f, elapsed / 120f));
+    SwingUtilities.invokeLater(this::repaint);
+    return Math.round((1f - progress) * 8f);
   }
 
   private void paintHatched(Graphics2D g2, int x, int y, int width, int height, boolean recurring) {
@@ -2422,9 +2480,20 @@ public class PlanningPanel extends JPanel {
       return;
     }
     java.util.List<String> sanitized = new java.util.ArrayList<>(unique);
+    java.util.LinkedHashSet<String> before =
+        new java.util.LinkedHashSet<>(effectiveResourceIds(original));
     try {
       Models.Intervention updated = original.withResourceIds(sanitized);
       Models.Intervention saved = dsp.updateIntervention(updated);
+      if (saved != null && saved.id() != null) {
+        java.util.LinkedHashSet<String> after =
+            new java.util.LinkedHashSet<>(effectiveResourceIds(saved));
+        for (String rid : after) {
+          if (rid != null && !before.contains(rid)) {
+            addedAnimStart.put(saved.id() + "#" + rid, System.currentTimeMillis());
+          }
+        }
+      }
       setSelected(saved);
       reload();
       if (saved.id() != null) {
