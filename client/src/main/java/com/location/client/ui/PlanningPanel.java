@@ -171,6 +171,7 @@ public class PlanningPanel extends JPanel {
   private String filterTags = "";
   private boolean filterNoConflicts;
   private boolean filterOnlyConflicts;
+  private boolean hudVisible = true;
 
   private static final int BASE_HEADER_H = 28;
   private static final int CHIP_BAR_H = 24;
@@ -218,6 +219,19 @@ public class PlanningPanel extends JPanel {
   private Timer flashingTimer;
 
   public PlanningPanel(DataSourceProvider dsp) {
+    getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_H, 0), "toggleHud");
+    getActionMap()
+        .put(
+            "toggleHud",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                hudVisible = !hudVisible;
+                repaint();
+              }
+            });
+
     // S14: zoom handlers
     addMouseWheelListener(
         e -> {
@@ -2302,6 +2316,107 @@ public class PlanningPanel extends JPanel {
       ghostGraphics.draw(ghostDragRect);
       ghostGraphics.dispose();
     }
+
+    if (hudVisible) {
+      paintHudFooter(g2);
+    }
+  }
+
+  private void paintHudFooter(Graphics2D baseGraphics) {
+    String text = buildHudText();
+    if (text == null || text.isBlank()) {
+      return;
+    }
+    Graphics2D hudGraphics = (Graphics2D) baseGraphics.create();
+    try {
+      hudGraphics.setRenderingHint(
+          RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      Font baseFont = getFont() != null ? getFont() : hudGraphics.getFont();
+      Font font = baseFont.deriveFont(Font.PLAIN, Math.max(11f, baseFont.getSize2D() - 2f));
+      hudGraphics.setFont(font);
+      FontMetrics fm = hudGraphics.getFontMetrics();
+      int padX = 12;
+      int padY = 6;
+      int textWidth = fm.stringWidth(text);
+      int textHeight = fm.getHeight();
+      int maxWidth = Math.max(0, getWidth() - 16);
+      int boxWidth = Math.min(maxWidth, textWidth + padX * 2);
+      if (boxWidth <= 0) {
+        return;
+      }
+      int boxHeight = Math.max(textHeight + padY * 2 - 2, textHeight + 2);
+      int x = (getWidth() - boxWidth) / 2;
+      int y = Math.max(0, getHeight() - boxHeight - 6);
+      java.awt.Shape background =
+          new java.awt.geom.RoundRectangle2D.Float(x, y, boxWidth, boxHeight, 12, 12);
+      hudGraphics.setColor(new Color(0, 0, 0, 140));
+      hudGraphics.fill(background);
+      hudGraphics.setColor(Color.WHITE);
+      int clipWidth = boxWidth - padX * 2;
+      java.awt.Shape previousClip = hudGraphics.getClip();
+      if (clipWidth > 0) {
+        hudGraphics.setClip(new Rectangle(x + padX, y, clipWidth, boxHeight));
+      }
+      hudGraphics.drawString(text, x + padX, y + padY + fm.getAscent() - 2);
+      hudGraphics.setClip(previousClip);
+    } finally {
+      hudGraphics.dispose();
+    }
+  }
+
+  private String buildHudText() {
+    java.util.List<String> parts = new java.util.ArrayList<>();
+    parts.add(String.format("Zoom %d%%", Math.round(zoomX * 100)));
+    parts.add("Pas " + slotMinutes + " min");
+    if (searchQuery != null && !searchQuery.isBlank()) {
+      parts.add("Filtre '" + searchQuery + "'");
+    }
+    if (collapsedTypes != null && !collapsedTypes.isEmpty()) {
+      parts.add("Types pliés: " + collapsedTypes.size());
+    }
+    if (pinnedTypes != null && !pinnedTypes.isEmpty()) {
+      java.util.Map<String, String> typeLabels = new java.util.HashMap<>();
+      if (resourceTypes != null) {
+        for (Models.ResourceType type : resourceTypes) {
+          if (type == null || type.id() == null) {
+            continue;
+          }
+          String label = type.label();
+          if (label == null || label.isBlank()) {
+            label = type.code();
+          }
+          if (label == null || label.isBlank()) {
+            label = type.id();
+          }
+          typeLabels.put(type.id(), label);
+        }
+      }
+      StringBuilder pinnedLabel = new StringBuilder();
+      int shown = 0;
+      for (String typeId : pinnedTypes) {
+        String label = typeLabels.get(typeId);
+        if (label == null || label.isBlank()) {
+          label = typeId;
+        }
+        if (shown > 0) {
+          pinnedLabel.append(", ");
+        }
+        pinnedLabel.append(label);
+        shown++;
+        if (shown >= 2) {
+          if (pinnedTypes.size() > shown) {
+            pinnedLabel.append("…");
+          }
+          break;
+        }
+      }
+      if (shown == 0) {
+        parts.add("Épinglés: " + pinnedTypes.size());
+      } else {
+        parts.add("Épinglés: " + pinnedLabel);
+      }
+    }
+    return String.join("  •  ", parts);
   }
 
   private void paintHeatmap(Graphics2D g2, int viewDays, int dayWidth, int height) {
