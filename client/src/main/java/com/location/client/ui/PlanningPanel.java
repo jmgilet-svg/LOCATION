@@ -7,14 +7,20 @@ import com.location.client.ui.icons.SvgIconLoader;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Insets;
 import java.awt.FontMetrics;
 import java.awt.Stroke;
 import java.awt.Toolkit;
@@ -38,6 +44,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -49,15 +56,21 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.Icon;
+import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JColorChooser;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
@@ -66,6 +79,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.Timer;
 import javax.swing.ToolTipManager;
+import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import com.location.client.ui.uikit.AgencyPalette;
@@ -86,6 +100,16 @@ public class PlanningPanel extends JPanel {
   private final java.util.Map<String, java.util.List<TagBadge>> tagBoundsByKey =
       new java.util.HashMap<>();
   private javax.swing.JTextField searchField;
+  private javax.swing.JPanel inspectorPanel;
+  private javax.swing.JButton colorBtn;
+  private javax.swing.JTextField tagInput;
+  private javax.swing.JPanel tagListPanel;
+  private javax.swing.JPanel resourcesPanel;
+  private final java.util.Map<String, java.awt.Color> overrideColorByIntervention =
+      new java.util.HashMap<>();
+  private final java.util.Set<String> overrideColorChecked = new java.util.HashSet<>();
+  private final java.util.prefs.Preferences tilePrefs =
+      java.util.prefs.Preferences.userRoot().node("com.location.client.ui.tiles");
   private String searchQuery = "";
   private final Preferences prefs =
       Preferences.userRoot().node("com.location.client.ui.accordion");
@@ -158,6 +182,8 @@ public class PlanningPanel extends JPanel {
   private static final Duration DEFAULT_CREATE_DURATION = Duration.ofHours(2);
   private static final Icon CONFLICT_ICON = SvgIconLoader.load("conflict.svg", 16);
   private static final String UNTYPED_TYPE_KEY = "__UNTYPED__";
+  private static final int INSPECTOR_WIDTH = 260;
+  private static final int MIN_TIMELINE_WIDTH = TIME_W + 220;
 
   private int colWidth;
   private Tile dragTile;
@@ -188,6 +214,99 @@ public class PlanningPanel extends JPanel {
   public PlanningPanel(DataSourceProvider dsp) {
     this.dsp = dsp;
     setLayout(null);
+
+    inspectorPanel = new JPanel(new GridBagLayout());
+    inspectorPanel.setOpaque(true);
+    inspectorPanel.setBackground(new Color(250, 250, 252));
+    inspectorPanel.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(230, 230, 235)));
+
+    GridBagConstraints inspectorGc = new GridBagConstraints();
+    inspectorGc.gridx = 0;
+    inspectorGc.gridy = 0;
+    inspectorGc.insets = new Insets(6, 8, 4, 8);
+    inspectorGc.anchor = GridBagConstraints.WEST;
+
+    JLabel inspectorTitle = new JLabel("Propriétés");
+    inspectorTitle.setFont(inspectorTitle.getFont().deriveFont(Font.BOLD));
+    inspectorPanel.add(inspectorTitle, inspectorGc);
+
+    inspectorGc.gridy++;
+    inspectorPanel.add(new JLabel("Couleur de tuile"), inspectorGc);
+
+    inspectorGc.gridy++;
+    colorBtn = new JButton("Choisir…");
+    colorBtn.addActionListener(
+        ev -> {
+          if (selected == null) {
+            return;
+          }
+          String resourceId =
+              selectedResourceIdForUI != null
+                  ? selectedResourceIdForUI
+                  : effectiveResourceIds(selected).stream().findFirst().orElse(null);
+          Color base = tileColorFor(selected, resourceId);
+          Color preferred = overrideColorByIntervention.getOrDefault(selected.id(), base);
+          Color chosen =
+              JColorChooser.showDialog(PlanningPanel.this, "Couleur de tuile", preferred);
+          if (chosen != null && selected.id() != null) {
+            overrideColorByIntervention.put(selected.id(), chosen);
+            tilePrefs.put(
+                selected.id() + ".color",
+                String.format("#%02X%02X%02X", chosen.getRed(), chosen.getGreen(), chosen.getBlue()));
+            repaint();
+            rebuildInspector();
+          }
+        });
+    inspectorPanel.add(colorBtn, inspectorGc);
+
+    inspectorGc.gridy++;
+    inspectorPanel.add(new JLabel("Tags"), inspectorGc);
+
+    inspectorGc.gridy++;
+    tagInput = new JTextField(14);
+    tagInput.addActionListener(
+        ev -> {
+          if (selected == null || selected.id() == null) {
+            return;
+          }
+          String value = tagInput.getText() == null ? "" : tagInput.getText().trim();
+          if (value.isEmpty()) {
+            return;
+          }
+          java.util.List<String> current =
+              new java.util.ArrayList<>(
+                  interventionTags.getOrDefault(selected.id(), java.util.List.of()));
+          boolean alreadyPresent =
+              current.stream().anyMatch(t -> t != null && t.equalsIgnoreCase(value));
+          if (!alreadyPresent) {
+            current.add(value);
+            tryUpdateTags(selected, current);
+          }
+          tagInput.setText("");
+          rebuildTagList();
+        });
+    inspectorPanel.add(tagInput, inspectorGc);
+
+    inspectorGc.gridy++;
+    tagListPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+    tagListPanel.setOpaque(false);
+    inspectorPanel.add(tagListPanel, inspectorGc);
+
+    inspectorGc.gridy++;
+    inspectorPanel.add(new JLabel("Ressources"), inspectorGc);
+
+    inspectorGc.gridy++;
+    resourcesPanel = new JPanel();
+    resourcesPanel.setOpaque(false);
+    resourcesPanel.setLayout(new BoxLayout(resourcesPanel, BoxLayout.Y_AXIS));
+    JScrollPane inspectorScroll = new JScrollPane(resourcesPanel);
+    inspectorScroll.setBorder(BorderFactory.createEmptyBorder());
+    inspectorScroll.setPreferredSize(new Dimension(220, 180));
+    inspectorPanel.add(inspectorScroll, inspectorGc);
+
+    add(inspectorPanel);
+    rebuildInspector();
+
     searchField = new JTextField();
     searchField.setColumns(18);
     searchField.putClientProperty("JTextField.placeholderText", "Recherche ressources...");
@@ -512,13 +631,25 @@ public class PlanningPanel extends JPanel {
   @Override
   public void doLayout() {
     super.doLayout();
+    int inspectorWidth = 0;
+    if (inspectorPanel != null) {
+      inspectorWidth = Math.max(0, Math.min(INSPECTOR_WIDTH, getWidth() - MIN_TIMELINE_WIDTH));
+      if (inspectorWidth <= 0) {
+        inspectorPanel.setVisible(false);
+        inspectorWidth = 0;
+      } else {
+        inspectorPanel.setVisible(true);
+        inspectorPanel.setBounds(getWidth() - inspectorWidth, 0, inspectorWidth, getHeight());
+      }
+    }
     if (searchField != null) {
       int prefHeight = searchField.getPreferredSize().height;
-      int available = Math.max(140, getWidth() - (TIME_W + 32));
+      int available = Math.max(140, getWidth() - inspectorWidth - (TIME_W + 32));
       int width = Math.min(280, available);
       int x = TIME_W + 16;
-      if (x + width > getWidth() - 8) {
-        width = Math.max(120, getWidth() - x - 8);
+      int rightLimit = getWidth() - inspectorWidth - 8;
+      if (x + width > rightLimit) {
+        width = Math.max(120, rightLimit - x);
       }
       int headerZone = chipBarHeight();
       if (headerZone <= 0) {
@@ -1368,21 +1499,20 @@ public class PlanningPanel extends JPanel {
     selected = intervention;
     if (intervention == null) {
       selectedResourceIdForUI = null;
+      rebuildInspector();
       return;
     }
     java.util.List<String> ids = effectiveResourceIds(intervention);
     if (resourceIdForUi != null && ids.contains(resourceIdForUi)) {
       selectedResourceIdForUI = resourceIdForUi;
-      return;
-    }
-    if (selectedResourceIdForUI != null && ids.contains(selectedResourceIdForUI)) {
-      return;
-    }
-    if (!ids.isEmpty()) {
+    } else if (selectedResourceIdForUI != null && ids.contains(selectedResourceIdForUI)) {
+      // keep current selection if still valid
+    } else if (!ids.isEmpty()) {
       selectedResourceIdForUI = ids.get(0);
-      return;
+    } else {
+      selectedResourceIdForUI = intervention.resourceId();
     }
-    selectedResourceIdForUI = intervention.resourceId();
+    rebuildInspector();
   }
 
   private String selectedResourceId() {
@@ -1630,7 +1760,9 @@ public class PlanningPanel extends JPanel {
     super.paintComponent(g);
     Graphics2D g2 = (Graphics2D) g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int w = getWidth();
+    int inspectorWidth =
+        inspectorPanel != null && inspectorPanel.isVisible() ? inspectorPanel.getWidth() : 0;
+    int w = Math.max(0, getWidth() - inspectorWidth);
     int h = getHeight();
     java.awt.Rectangle vis = getVisibleRect();
     if (vis.width <= 0 || vis.height <= 0) {
@@ -2127,7 +2259,7 @@ public class PlanningPanel extends JPanel {
 
     boolean conflict = hasConflict(t);
     String resourceId = resourceIdAtRow(t.row);
-    Color base = withAgencyAccent(resourceColors.get(resourceId), tile.i.agencyId());
+    Color base = tileColorFor(tile.i, resourceId);
     if (t.alpha < 1f) {
       g2.setComposite(AlphaComposite.SrcOver.derive(t.alpha));
     }
@@ -2260,6 +2392,35 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  private Color tileColorFor(Models.Intervention intervention, String resourceId) {
+    Color base = withAgencyAccent(resourceColors.get(resourceId), intervention == null ? null : intervention.agencyId());
+    if (base == null) {
+      base = ResourceColors.colorFor(null);
+    }
+    if (intervention == null || intervention.id() == null) {
+      return base;
+    }
+    String id = intervention.id();
+    Color override = overrideColorByIntervention.get(id);
+    if (override == null && !overrideColorChecked.contains(id)) {
+      overrideColorChecked.add(id);
+      try {
+        String stored = tilePrefs.get(id + ".color", null);
+        if (stored != null && !stored.isBlank()) {
+          Color decoded = Color.decode(stored);
+          overrideColorByIntervention.put(id, decoded);
+          override = decoded;
+        }
+      } catch (RuntimeException ignore) {
+        // Invalid color preference, ignore.
+      }
+    }
+    if (override != null) {
+      return new Color(override.getRed(), override.getGreen(), override.getBlue(), base.getAlpha());
+    }
+    return base;
+  }
+
   private Color withAgencyAccent(Color base, String agencyId) {
     if (base == null) {
       base = ResourceColors.colorFor(null);
@@ -2292,6 +2453,227 @@ public class PlanningPanel extends JPanel {
     int blue = Math.round(base.getBlue() * (1f - ratio) + accent.getBlue() * ratio);
     int alpha = Math.max(base.getAlpha(), accent.getAlpha());
     return new Color(red, green, blue, alpha);
+  }
+
+  private void rebuildInspector() {
+    if (inspectorPanel == null) {
+      return;
+    }
+    boolean hasSelection = selected != null && selected.id() != null;
+    if (colorBtn != null) {
+      colorBtn.setEnabled(hasSelection);
+      Color displayColor = null;
+      if (hasSelection) {
+        String resourceId =
+            selectedResourceIdForUI != null
+                ? selectedResourceIdForUI
+                : effectiveResourceIds(selected).stream().findFirst().orElse(null);
+        displayColor = tileColorFor(selected, resourceId);
+      }
+      if (displayColor != null) {
+        colorBtn.setOpaque(true);
+        colorBtn.setBackground(displayColor);
+        colorBtn.setForeground(contrastColor(displayColor));
+        colorBtn.setToolTipText(toHex(displayColor));
+      } else {
+        colorBtn.setOpaque(false);
+        colorBtn.setBackground(UIManager.getColor("Button.background"));
+        colorBtn.setForeground(UIManager.getColor("Button.foreground"));
+        colorBtn.setToolTipText(null);
+      }
+    }
+    if (tagInput != null) {
+      tagInput.setEnabled(hasSelection);
+      if (!hasSelection) {
+        tagInput.setText("");
+      }
+    }
+    rebuildTagList();
+    rebuildResourcesChecklist();
+    inspectorPanel.revalidate();
+    inspectorPanel.repaint();
+  }
+
+  private void rebuildTagList() {
+    if (tagListPanel == null) {
+      return;
+    }
+    tagListPanel.removeAll();
+    if (selected == null || selected.id() == null) {
+      JLabel empty = new JLabel("Sélectionnez une intervention");
+      empty.setForeground(new Color(120, 120, 120));
+      tagListPanel.add(empty);
+      tagListPanel.revalidate();
+      tagListPanel.repaint();
+      return;
+    }
+    java.util.List<String> tags =
+        new java.util.ArrayList<>(interventionTags.getOrDefault(selected.id(), java.util.List.of()));
+    if (tags.isEmpty()) {
+      JLabel empty = new JLabel("Aucun tag");
+      empty.setForeground(new Color(120, 120, 120));
+      tagListPanel.add(empty);
+    } else {
+      for (String tag : tags) {
+        if (tag == null || tag.isBlank()) {
+          continue;
+        }
+        JButton remove = new JButton(tag + " ✕");
+        remove.setMargin(new Insets(2, 6, 2, 6));
+        remove.setFocusable(false);
+        remove.addActionListener(
+            ev -> {
+              java.util.List<String> updated =
+                  new java.util.ArrayList<>(
+                      interventionTags.getOrDefault(selected.id(), java.util.List.of()));
+              updated.removeIf(t -> t != null && t.equals(tag));
+              tryUpdateTags(selected, updated);
+            });
+        tagListPanel.add(remove);
+      }
+    }
+    tagListPanel.revalidate();
+    tagListPanel.repaint();
+  }
+
+  private void rebuildResourcesChecklist() {
+    if (resourcesPanel == null) {
+      return;
+    }
+    resourcesPanel.removeAll();
+    if (selected == null || selected.id() == null) {
+      JLabel empty = new JLabel("Sélectionnez une intervention");
+      empty.setForeground(new Color(120, 120, 120));
+      empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+      resourcesPanel.add(empty);
+      resourcesPanel.revalidate();
+      resourcesPanel.repaint();
+      return;
+    }
+    java.util.Set<String> current =
+        new java.util.LinkedHashSet<>(effectiveResourceIds(selected));
+    if (resources == null || resources.isEmpty()) {
+      JLabel empty = new JLabel("Aucune ressource disponible");
+      empty.setForeground(new Color(120, 120, 120));
+      empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+      resourcesPanel.add(empty);
+    } else {
+      for (Models.Resource resource : resources) {
+        if (resource == null || resource.id() == null) {
+          continue;
+        }
+        JCheckBox check = new JCheckBox(resource.name());
+        check.setAlignmentX(Component.LEFT_ALIGNMENT);
+        check.setSelected(current.contains(resource.id()));
+        check.addActionListener(
+            ev -> {
+              if (selected == null) {
+                return;
+              }
+              java.util.List<String> ids =
+                  new java.util.ArrayList<>(effectiveResourceIds(selected));
+              if (check.isSelected()) {
+                if (!ids.contains(resource.id())) {
+                  ids.add(resource.id());
+                }
+              } else {
+                ids.removeIf(rid -> rid != null && rid.equals(resource.id()));
+                if (ids.isEmpty()) {
+                  Toolkit.getDefaultToolkit().beep();
+                  check.setSelected(true);
+                  return;
+                }
+              }
+              tryUpdateResources(selected, ids);
+            });
+        resourcesPanel.add(check);
+      }
+    }
+    resourcesPanel.revalidate();
+    resourcesPanel.repaint();
+  }
+
+  private void tryUpdateTags(Models.Intervention intervention, java.util.List<String> tags) {
+    if (intervention == null || intervention.id() == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String id = intervention.id();
+    java.util.LinkedHashMap<String, String> unique = new java.util.LinkedHashMap<>();
+    if (tags != null) {
+      for (String tag : tags) {
+        if (tag == null) {
+          continue;
+        }
+        String trimmed = tag.trim();
+        if (trimmed.isEmpty()) {
+          continue;
+        }
+        String key = trimmed.toLowerCase(Locale.ROOT);
+        unique.putIfAbsent(key, trimmed);
+      }
+    }
+    java.util.List<String> sanitized = new java.util.ArrayList<>(unique.values());
+    java.util.List<String> before =
+        new java.util.ArrayList<>(interventionTags.getOrDefault(id, java.util.List.of()));
+    if (before.equals(sanitized)) {
+      return;
+    }
+    try {
+      dsp.setInterventionTags(id, sanitized);
+      interventionTags.put(id, java.util.List.copyOf(sanitized));
+      String summary = sanitized.isEmpty() ? "Aucun tag" : String.join(", ", sanitized);
+      notifySuccess("Tags mis à jour", summary);
+      java.util.List<String> beforeSnapshot = java.util.List.copyOf(before);
+      java.util.List<String> afterSnapshot = java.util.List.copyOf(sanitized);
+      history.push(
+          "Tags",
+          () -> {
+            try {
+              dsp.setInterventionTags(id, beforeSnapshot);
+            } catch (RuntimeException ex) {
+              Toolkit.getDefaultToolkit().beep();
+            }
+            reload();
+            selectAndRevealIntervention(id);
+          },
+          () -> {
+            try {
+              dsp.setInterventionTags(id, afterSnapshot);
+            } catch (RuntimeException ex) {
+              Toolkit.getDefaultToolkit().beep();
+            }
+            reload();
+            selectAndRevealIntervention(id);
+          });
+      reload();
+      selectAndRevealIntervention(id);
+    } catch (UnsupportedOperationException ex) {
+      Toolkit.getDefaultToolkit().beep();
+      JOptionPane.showMessageDialog(
+          this,
+          "La source de données ne permet pas de modifier les tags d'intervention.",
+          "Fonctionnalité indisponible",
+          JOptionPane.INFORMATION_MESSAGE);
+    } catch (RuntimeException ex) {
+      notifyError("Impossible de mettre à jour les tags");
+    }
+  }
+
+  private static Color contrastColor(Color color) {
+    if (color == null) {
+      return Color.BLACK;
+    }
+    double luminance =
+        (0.299 * color.getRed() + 0.587 * color.getGreen() + 0.114 * color.getBlue()) / 255d;
+    return luminance > 0.6 ? Color.BLACK : Color.WHITE;
+  }
+
+  private static String toHex(Color color) {
+    if (color == null) {
+      return "";
+    }
+    return String.format("#%02X%02X%02X", color.getRed(), color.getGreen(), color.getBlue());
   }
 
   private static String escapeHtml(String text) {
