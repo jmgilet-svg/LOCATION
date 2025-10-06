@@ -145,7 +145,12 @@ public class PlanningPanel extends JPanel {
   private List<Models.Client> clients = List.of();
   private List<Models.Intervention> interventions = List.of();
   private List<Models.Unavailability> unavailabilities = List.of();
-  private List<ConflictUtil.Conflict> conflicts = List.of();
+  private final java.util.List<ConflictUtil.Conflict> conflicts = new java.util.ArrayList<>();
+  private final java.util.List<ConflictEntry> conflictEntries = new java.util.ArrayList<>();
+  private javax.swing.JPanel conflictsPanel;
+  private javax.swing.JList<String> conflictsList;
+  private boolean conflictsVisible = true;
+  private ConflictEntry selectedConflict;
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
   private final java.util.Map<String, List<String>> interventionTags = new HashMap<>();
@@ -204,6 +209,8 @@ public class PlanningPanel extends JPanel {
   private static final String UNTYPED_TYPE_KEY = "__UNTYPED__";
   private static final int INSPECTOR_WIDTH = 260;
   private static final int MIN_TIMELINE_WIDTH = TIME_W + 220;
+  private static final java.time.format.DateTimeFormatter HOUR_FORMATTER =
+      java.time.format.DateTimeFormatter.ofPattern("HH:mm");
 
   private int colWidth;
   private Tile dragTile;
@@ -232,6 +239,38 @@ public class PlanningPanel extends JPanel {
   private Timer flashingTimer;
 
   public PlanningPanel(DataSourceProvider dsp) {
+    // Conflict helpers shortcuts
+    this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('R'), "resolveAssign");
+    this.getActionMap()
+        .put(
+            "resolveAssign",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                tryAutoResolveAssign(selectedConflict);
+              }
+            });
+    this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke(','), "snapPrev");
+    this.getActionMap()
+        .put(
+            "snapPrev",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                snapSelectedToNearestGap(-1);
+              }
+            });
+    this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('.'), "snapNext");
+    this.getActionMap()
+        .put(
+            "snapNext",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                snapSelectedToNearestGap(1);
+              }
+            });
+
     hoverDelay = new Timer(260, e -> showHoverBar());
     hoverDelay.setRepeats(false);
     hoverDelay.setInitialDelay(260);
@@ -1366,9 +1405,10 @@ public class PlanningPanel extends JPanel {
       computedConflicts = ConflictUtil.computeConflicts(data);
     }
     retainInterventionTagsFor(data);
-    conflicts = computedConflicts;
+    conflicts.clear();
+    conflicts.addAll(computedConflicts);
     try {
-      Notify.post("conflicts.update", conflicts);
+      Notify.post("conflicts.update", List.copyOf(conflicts));
     } catch (Throwable ignore) {
     }
     interventions = data;
@@ -1415,6 +1455,8 @@ public class PlanningPanel extends JPanel {
     notifyReloadListeners();
     fireSelectionChanged();
     repaint();
+    computeConflicts();
+    rebuildConflictsUI();
   }
 
   public void addReloadListener(Runnable listener) {
@@ -2164,11 +2206,19 @@ public class PlanningPanel extends JPanel {
 
   @Override
   protected void paintComponent(Graphics g) {
+    int inspectorWidth =
+        inspectorPanel != null && inspectorPanel.isVisible() ? inspectorPanel.getWidth() : 0;
+    if (conflictsPanel != null) {
+      int conflictsWidth = 240;
+      conflictsPanel.setBounds(
+          Math.max(0, getWidth() - inspectorWidth - conflictsWidth),
+          headerHeight() - 24,
+          conflictsWidth,
+          Math.max(0, getHeight() - headerHeight() + 24));
+    }
     super.paintComponent(g);
     Graphics2D g2 = (Graphics2D) g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    int inspectorWidth =
-        inspectorPanel != null && inspectorPanel.isVisible() ? inspectorPanel.getWidth() : 0;
     int w = Math.max(0, getWidth() - inspectorWidth);
     int h = getHeight();
     java.awt.Rectangle vis = getVisibleRect();
@@ -5446,6 +5496,422 @@ public class PlanningPanel extends JPanel {
           "Impossible d'ajouter le tag : " + ex.getMessage(),
           "Erreur",
           JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private void computeConflicts() {
+    String prevKey = selectedConflict != null ? selectedConflict.key() : null;
+    conflictEntries.clear();
+    selectedConflict = null;
+    if (conflicts == null || conflicts.isEmpty()) {
+      return;
+    }
+    for (ConflictUtil.Conflict conflict : conflicts) {
+      if (conflict == null) {
+        continue;
+      }
+      Models.Intervention a = conflict.a();
+      Models.Intervention b = conflict.b();
+      if (a == null || b == null) {
+        continue;
+      }
+      int severity = overlapSeverity(a, b);
+      conflictEntries.add(new ConflictEntry(a, b, conflict.resourceId(), severity));
+    }
+    conflictEntries.sort(
+        java.util.Comparator
+            .comparingInt((ConflictEntry c) -> -c.severity)
+            .thenComparing(
+                ConflictEntry::earliestStart,
+                java.util.Comparator.nullsLast(java.time.Instant::compareTo)));
+    if (prevKey != null) {
+      for (ConflictEntry entry : conflictEntries) {
+        if (prevKey.equals(entry.key())) {
+          selectedConflict = entry;
+          break;
+        }
+      }
+    }
+    if (selectedConflict == null && !conflictEntries.isEmpty()) {
+      selectedConflict = conflictEntries.get(0);
+    }
+  }
+
+  private void rebuildConflictsUI() {
+    if (conflictsPanel == null) {
+      conflictsPanel = new javax.swing.JPanel(new java.awt.BorderLayout());
+      conflictsPanel.setOpaque(true);
+      conflictsPanel.setBackground(new java.awt.Color(248, 248, 250));
+      conflictsPanel.setBorder(
+          javax.swing.BorderFactory.createMatteBorder(
+              0, 1, 0, 0, new java.awt.Color(230, 230, 235)));
+      javax.swing.JLabel header = new javax.swing.JLabel("Conflits");
+      header.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 8, 6, 8));
+      header.setFont(header.getFont().deriveFont(java.awt.Font.BOLD));
+      conflictsPanel.add(header, java.awt.BorderLayout.NORTH);
+      conflictsList = new javax.swing.JList<>();
+      conflictsList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+      conflictsList.addListSelectionListener(
+          ev -> {
+            if (ev.getValueIsAdjusting()) {
+              return;
+            }
+            int idx = conflictsList.getSelectedIndex();
+            if (idx >= 0 && idx < conflictEntries.size()) {
+              ConflictEntry entry = conflictEntries.get(idx);
+              selectedConflict = entry;
+              Models.Intervention target = entry.primary();
+              if (target != null && target.id() != null) {
+                selectAndRevealIntervention(target.id());
+              }
+              repaint();
+            } else {
+              selectedConflict = null;
+            }
+          });
+      conflictsPanel.add(new javax.swing.JScrollPane(conflictsList), java.awt.BorderLayout.CENTER);
+      add(conflictsPanel);
+    }
+    if (conflictsList != null) {
+      String[] items =
+          conflictEntries.stream().map(ConflictEntry::toString).toArray(String[]::new);
+      conflictsList.setListData(items);
+      if (selectedConflict != null) {
+        String key = selectedConflict.key();
+        int index = -1;
+        for (int i = 0; i < conflictEntries.size(); i++) {
+          if (key.equals(conflictEntries.get(i).key())) {
+            index = i;
+            break;
+          }
+        }
+        if (index >= 0) {
+          conflictsList.setSelectedIndex(index);
+          conflictsList.ensureIndexIsVisible(index);
+        } else {
+          conflictsList.clearSelection();
+        }
+      } else {
+        conflictsList.clearSelection();
+      }
+    }
+    if (conflictsPanel != null) {
+      conflictsPanel.setVisible(conflictsVisible && !conflictEntries.isEmpty());
+    }
+  }
+
+  private void tryAutoResolveAssign(ConflictEntry entry) {
+    if (entry == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String resourceId = entry.resourceId;
+    if (resourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String typeId = resourceTypeIdByResource.get(resourceId);
+    if (typeId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<Models.Resource> candidates = new java.util.ArrayList<>();
+    for (Models.Resource resource : resources) {
+      if (resource == null || resource.id() == null) {
+        continue;
+      }
+      String candidateType = resourceTypeIdByResource.get(resource.id());
+      if (typeId.equals(candidateType)) {
+        candidates.add(resource);
+      }
+    }
+    if (candidates.isEmpty()) {
+      notifyInfo("Aucune ressource compatible libre");
+      return;
+    }
+    java.util.Map<String, java.util.List<Models.Intervention>> busy = new java.util.HashMap<>();
+    for (Models.Intervention intervention : interventions) {
+      if (intervention == null) {
+        continue;
+      }
+      for (String rid : effectiveResourceIds(intervention)) {
+        busy.computeIfAbsent(rid, k -> new java.util.ArrayList<>()).add(intervention);
+      }
+    }
+    Models.Intervention move = entry.shorter();
+    if (move == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.time.Instant start = move.start();
+    java.time.Instant end = move.end();
+    if (start == null || end == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    for (Models.Resource candidate : candidates) {
+      if (candidate.id() == null || candidate.id().equals(resourceId)) {
+        continue;
+      }
+      java.util.List<Models.Intervention> occupied = busy.getOrDefault(candidate.id(), List.of());
+      boolean free = true;
+      for (Models.Intervention other : occupied) {
+        if (other == null || other.id() == null) {
+          continue;
+        }
+        if (move.id() != null && move.id().equals(other.id())) {
+          continue;
+        }
+        if (!effectiveResourceIds(other).contains(candidate.id())) {
+          continue;
+        }
+        if (overlap(start, end, other.start(), other.end())) {
+          free = false;
+          break;
+        }
+      }
+      if (!free) {
+        continue;
+      }
+      java.util.List<String> ids = new java.util.ArrayList<>(effectiveResourceIds(move));
+      ids.remove(resourceId);
+      if (!ids.contains(candidate.id())) {
+        ids.add(candidate.id());
+      }
+      tryUpdateResources(move, ids);
+      return;
+    }
+    notifyInfo("Aucune ressource compatible libre");
+  }
+
+  private void snapSelectedToNearestGap(int direction) {
+    if (selected == null || direction == 0) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    if (selected.start() == null || selected.end() == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<String> resourceIds = effectiveResourceIds(selected);
+    if (resourceIds.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    long stepMinutes = Math.max(5, slotMinutes);
+    java.time.Duration duration = java.time.Duration.between(selected.start(), selected.end());
+    if (duration.isZero() || duration.isNegative()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    int maxSteps = Math.max(1, (int) Math.ceil((24 * 60) / (double) stepMinutes));
+    for (int step = 1; step <= maxSteps; step++) {
+      long offset = stepMinutes * step * direction;
+      java.time.Instant candidateStart = selected.start().plus(java.time.Duration.ofMinutes(offset));
+      java.time.Instant candidateEnd = candidateStart.plus(duration);
+      boolean ok = true;
+      for (String rid : resourceIds) {
+        try {
+          ensureAvailability(rid, candidateStart, candidateEnd);
+        } catch (RuntimeException ex) {
+          ok = false;
+          break;
+        }
+        for (Models.Intervention other : interventions) {
+          if (other == null || other.id() == null) {
+            continue;
+          }
+          if (selected.id() != null && selected.id().equals(other.id())) {
+            continue;
+          }
+          if (!effectiveResourceIds(other).contains(rid)) {
+            continue;
+          }
+          if (overlap(candidateStart, candidateEnd, other.start(), other.end())) {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok) {
+          break;
+        }
+      }
+      if (!ok) {
+        continue;
+      }
+      Models.Intervention before = copyOf(selected);
+      Models.Intervention updated =
+          new Models.Intervention(
+              selected.id(),
+              selected.agencyId(),
+              selected.resourceIds(),
+              selected.clientId(),
+              selected.driverId(),
+              selected.title(),
+              candidateStart,
+              candidateEnd,
+              selected.notes(),
+              selected.internalNotes(),
+              selected.price());
+      try {
+        Models.Intervention saved = dsp.updateIntervention(updated);
+        setSelected(saved);
+        if (saved != null && saved.id() != null) {
+          selectAndRevealIntervention(saved.id());
+        }
+        reload();
+        notifySuccess("Position ajustée", timeLabel(candidateStart, candidateEnd));
+        pushUpdateHistory("Ajustement", before, saved);
+        return;
+      } catch (RuntimeException ex) {
+        notifyError("Impossible d'ajuster la position");
+        return;
+      }
+    }
+    notifyInfo("Pas d'espace libre proche");
+  }
+
+  private boolean overlap(
+      java.time.Instant startA, java.time.Instant endA, java.time.Instant startB, java.time.Instant endB) {
+    if (startA == null || endA == null || startB == null || endB == null) {
+      return false;
+    }
+    return startA.isBefore(endB) && startB.isBefore(endA);
+  }
+
+  private int overlapSeverity(Models.Intervention a, Models.Intervention b) {
+    if (a == null || b == null) {
+      return 0;
+    }
+    java.time.Instant start = latestInstant(a.start(), b.start());
+    java.time.Instant end = earliestInstant(a.end(), b.end());
+    if (start == null || end == null || !end.isAfter(start)) {
+      return 0;
+    }
+    long minutes = java.time.Duration.between(start, end).toMinutes();
+    if (minutes <= 5) {
+      return 1;
+    }
+    if (minutes <= 30) {
+      return 2;
+    }
+    return 3;
+  }
+
+  private java.time.Instant earliestInstant(java.time.Instant a, java.time.Instant b) {
+    if (a == null) {
+      return b;
+    }
+    if (b == null) {
+      return a;
+    }
+    return a.isBefore(b) ? a : b;
+  }
+
+  private java.time.Instant latestInstant(java.time.Instant a, java.time.Instant b) {
+    if (a == null) {
+      return b;
+    }
+    if (b == null) {
+      return a;
+    }
+    return a.isAfter(b) ? a : b;
+  }
+
+  private void notifyInfo(String message) {
+    if (message == null || message.isBlank()) {
+      return;
+    }
+    java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+    if (window != null) {
+      Toasts.info(window, message);
+    }
+  }
+
+  private static String timeLabel(java.time.Instant start, java.time.Instant end) {
+    if (start == null || end == null) {
+      return "";
+    }
+    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    return HOUR_FORMATTER.format(start.atZone(zone))
+        + "–"
+        + HOUR_FORMATTER.format(end.atZone(zone));
+  }
+
+  private static final class ConflictEntry {
+    final Models.Intervention a;
+    final Models.Intervention b;
+    final String resourceId;
+    final int severity;
+
+    ConflictEntry(Models.Intervention a, Models.Intervention b, String resourceId, int severity) {
+      this.a = a;
+      this.b = b;
+      this.resourceId = resourceId;
+      this.severity = severity;
+    }
+
+    java.time.Instant earliestStart() {
+      java.time.Instant sa = a == null ? null : a.start();
+      java.time.Instant sb = b == null ? null : b.start();
+      if (sa == null) {
+        return sb;
+      }
+      if (sb == null) {
+        return sa;
+      }
+      return sa.isBefore(sb) ? sa : sb;
+    }
+
+    Models.Intervention primary() {
+      if (a == null) {
+        return b;
+      }
+      if (b == null) {
+        return a;
+      }
+      if (a.start() == null) {
+        return b;
+      }
+      if (b.start() == null) {
+        return a;
+      }
+      return a.start().isBefore(b.start()) ? a : b;
+    }
+
+    Models.Intervention shorter() {
+      if (a == null) {
+        return b;
+      }
+      if (b == null) {
+        return a;
+      }
+      java.time.Duration da =
+          a.start() != null && a.end() != null
+              ? java.time.Duration.between(a.start(), a.end())
+              : java.time.Duration.ZERO;
+      java.time.Duration db =
+          b.start() != null && b.end() != null
+              ? java.time.Duration.between(b.start(), b.end())
+              : java.time.Duration.ZERO;
+      return da.compareTo(db) <= 0 ? a : b;
+    }
+
+    String key() {
+      String ida = a != null && a.id() != null ? a.id() : "";
+      String idb = b != null && b.id() != null ? b.id() : "";
+      String rid = resourceId == null ? "" : resourceId;
+      return ida + "|" + idb + "|" + rid;
+    }
+
+    @Override
+    public String toString() {
+      String rid = resourceId == null ? "?" : resourceId;
+      String at = a == null ? "" : timeLabel(a.start(), a.end());
+      String bt = b == null ? "" : timeLabel(b.start(), b.end());
+      String an = a == null || a.title() == null ? "" : a.title();
+      String bn = b == null || b.title() == null ? "" : b.title();
+      return "%s • %s  %s ↔ %s".formatted(rid, at + " / " + bt, an, bn);
     }
   }
 }
