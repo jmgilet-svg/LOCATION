@@ -181,6 +181,10 @@ public class PlanningPanel extends JPanel {
   private Models.Intervention hoverIntervention;
   private String hoverResourceId;
   private int hoverRowIndex = -1;
+  private final java.util.Set<String> multiSelectionIds = new LinkedHashSet<>();
+  private final java.util.Map<String, String> statusById = new HashMap<>();
+  private final Preferences statusPrefs =
+      Preferences.userRoot().node("com.location.ui.status");
 
   private static final int BASE_HEADER_H = 28;
   private static final int CHIP_BAR_H = 24;
@@ -541,6 +545,43 @@ public class PlanningPanel extends JPanel {
 
     registerConflictNavigationShortcuts();
 
+    getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.ALT_DOWN_MASK), "batchShiftPlus");
+    getActionMap()
+        .put(
+            "batchShiftPlus",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                batchShift(Duration.ofMinutes(15));
+              }
+            });
+    getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.ALT_DOWN_MASK), "batchShiftMinus");
+    getActionMap()
+        .put(
+            "batchShiftMinus",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                batchShift(Duration.ofMinutes(-15));
+              }
+            });
+    getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(
+                KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+            "batchAddTag");
+    getActionMap()
+        .put(
+            "batchAddTag",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                batchAddTag();
+              }
+            });
+
     MouseAdapter adapter = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
@@ -548,7 +589,7 @@ public class PlanningPanel extends JPanel {
         hideHoverBar();
         altDupPending = e.isAltDown();
         altDupDone = false;
-        onPress(e.getPoint());
+        onPress(e);
       }
 
       @Override
@@ -579,6 +620,7 @@ public class PlanningPanel extends JPanel {
       @Override
       public void mouseClicked(MouseEvent e) {
         Point p = e.getPoint();
+        Optional<Tile> tileUnderPointer = findTileAt(p);
         if (hudVisible && hudRect != null && hudRect.contains(p)) {
           JPopupMenu popup = new JPopupMenu();
           JMenuItem fit = new JMenuItem("Ajuster la journée");
@@ -637,17 +679,24 @@ public class PlanningPanel extends JPanel {
         }
         Models.Intervention badgeTarget = interventionAtBadge(p);
         if (badgeTarget != null) {
+          String resourceId =
+              tileUnderPointer.map(t -> resourceIdAtRow(t.row)).orElse(null);
+          ensureContextSelection(badgeTarget, resourceId);
           showResourcePopover(e, badgeTarget);
           return;
         }
         if (SwingUtilities.isRightMouseButton(e)) {
-          findTileAt(p).map(t -> t.i).ifPresent(it -> showResourcePopover(e, it));
+          if (tileUnderPointer.isPresent()) {
+            Tile tile = tileUnderPointer.get();
+            ensureContextSelection(tile.i, resourceIdAtRow(tile.row));
+            showResourcePopover(e, tile.i);
+            return;
+          }
           return;
         }
         if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-          Optional<Tile> hit = findTileAt(p);
-          if (hit.isPresent()) {
-            openQuickEdit(hit.get().i);
+          if (tileUnderPointer.isPresent()) {
+            openQuickEdit(tileUnderPointer.get().i);
           } else {
             createAt(p);
           }
@@ -1130,6 +1179,7 @@ public class PlanningPanel extends JPanel {
     invalidateLayoutCaches();
     String selectedId = getSelectedInterventionId();
     String selectedResourceId = selectedResourceId();
+    java.util.Set<String> preservedSelection = new LinkedHashSet<>(multiSelectionIds);
     agencies = dsp.listAgencies();
     List<Models.Resource> fetchedResources = dsp.listResources();
     String agency = filterAgencyId;
@@ -1322,15 +1372,37 @@ public class PlanningPanel extends JPanel {
     } catch (Throwable ignore) {
     }
     interventions = data;
+    java.util.Set<String> availableIds =
+        interventions.stream()
+            .map(Models.Intervention::id)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+    if (!preservedSelection.isEmpty()) {
+      preservedSelection.retainAll(availableIds);
+    }
+    multiSelectionIds.clear();
+    multiSelectionIds.addAll(preservedSelection);
+    if (selectedId != null && availableIds.contains(selectedId)) {
+      multiSelectionIds.add(selectedId);
+    }
     if (selectedId != null) {
       Models.Intervention restored =
           interventions.stream()
               .filter(i -> selectedId.equals(i.id()))
               .findFirst()
               .orElse(null);
-      setSelected(restored, selectedResourceId);
+      setSelected(restored, selectedResourceId, false);
     } else {
-      setSelected(null);
+      if (!multiSelectionIds.isEmpty()) {
+        Models.Intervention primary =
+            interventions.stream()
+                .filter(i -> i != null && multiSelectionIds.contains(i.id()))
+                .findFirst()
+                .orElse(null);
+        setSelected(primary, selectedResourceId, false);
+      } else {
+        setSelected(null);
+      }
     }
 
     List<Models.Unavailability> unav =
@@ -1355,8 +1427,7 @@ public class PlanningPanel extends JPanel {
     if (listener != null) {
       selectionListeners.add(listener);
       try {
-        listener.onSelection(
-            selected == null ? List.of() : List.of(selected), List.copyOf(interventions));
+        listener.onSelection(currentSelectionSnapshot(), List.copyOf(interventions));
       } catch (RuntimeException ignored) {
       }
     }
@@ -1557,12 +1628,30 @@ public class PlanningPanel extends JPanel {
     }
   }
 
+  private List<Models.Intervention> currentSelectionSnapshot() {
+    if (!multiSelectionIds.isEmpty() && interventions != null && !interventions.isEmpty()) {
+      java.util.List<Models.Intervention> selectedItems = new ArrayList<>();
+      for (Models.Intervention intervention : interventions) {
+        if (intervention == null || intervention.id() == null) {
+          continue;
+        }
+        if (multiSelectionIds.contains(intervention.id())) {
+          selectedItems.add(intervention);
+        }
+      }
+      if (!selectedItems.isEmpty()) {
+        return java.util.List.copyOf(selectedItems);
+      }
+    }
+    return selected == null ? List.of() : List.of(selected);
+  }
+
   private void fireSelectionChanged() {
     if (selectionListeners.isEmpty()) {
       return;
     }
     List<Models.Intervention> snapshot = List.copyOf(interventions);
-    List<Models.Intervention> selection = selected == null ? List.of() : List.of(selected);
+    List<Models.Intervention> selection = currentSelectionSnapshot();
     for (SelectionListener listener : new ArrayList<>(selectionListeners)) {
       try {
         listener.onSelection(selection, snapshot);
@@ -1787,7 +1876,13 @@ public class PlanningPanel extends JPanel {
   }
 
   public String getSelectedInterventionId() {
-    return selected == null ? null : selected.id();
+    if (selected != null) {
+      return selected.id();
+    }
+    if (!multiSelectionIds.isEmpty()) {
+      return multiSelectionIds.iterator().next();
+    }
+    return null;
   }
 
   private void setSelected(Models.Intervention intervention) {
@@ -1795,7 +1890,20 @@ public class PlanningPanel extends JPanel {
   }
 
   private void setSelected(Models.Intervention intervention, String resourceIdForUi) {
+    setSelected(intervention, resourceIdForUi, true);
+  }
+
+  private void setSelected(
+      Models.Intervention intervention, String resourceIdForUi, boolean syncMultiSelection) {
     selected = intervention;
+    if (syncMultiSelection) {
+      multiSelectionIds.clear();
+      if (intervention != null && intervention.id() != null) {
+        multiSelectionIds.add(intervention.id());
+      }
+    } else if (intervention == null) {
+      multiSelectionIds.clear();
+    }
     if (intervention == null) {
       selectedResourceIdForUI = null;
       rebuildInspector();
@@ -2757,8 +2865,24 @@ public class PlanningPanel extends JPanel {
       }
     }
 
+    int statusIndicatorWidth = 0;
+    int actualIndicatorWidth = 0;
+    if (t.i != null && t.i.id() != null) {
+      Color indicatorColor = statusColor(getStatus(t.i.id()));
+      statusIndicatorWidth = Math.max(3, Math.min(6, Math.max(1, w / 20)));
+      actualIndicatorWidth = Math.min(statusIndicatorWidth, Math.max(0, w));
+      if (actualIndicatorWidth > 0) {
+        g2.setColor(indicatorColor);
+        g2.fillRoundRect(x, y, actualIndicatorWidth, height, 10, 10);
+      }
+    }
+
     g2.setColor(new Color(255, 255, 255, 160));
-    g2.fillRect(x, y, 4, height);
+    if (actualIndicatorWidth <= 0) {
+      g2.fillRect(x, y, 4, height);
+    } else if (actualIndicatorWidth < 4) {
+      g2.fillRect(x + actualIndicatorWidth, y, 4 - actualIndicatorWidth, height);
+    }
     g2.fillRect(x + w - 4, y, 4, height);
 
     if (flashingInterventionId != null && flashingInterventionId.equals(t.i.id())) {
@@ -2766,6 +2890,18 @@ public class PlanningPanel extends JPanel {
       int alpha = Math.min(255, (int) (120 + 120 * pulse));
       g2.setColor(new Color(219, 68, 55, alpha));
       g2.fillRoundRect(x, y, w, height, 10, 10);
+    }
+
+    if (t.i != null && t.i.id() != null && multiSelectionIds.contains(t.i.id())) {
+      Stroke previous = g2.getStroke();
+      g2.setStroke(new BasicStroke(2f));
+      g2.setColor(new Color(255, 255, 255, 180));
+      int outlineW = Math.max(0, w - 2);
+      int outlineH = Math.max(0, height - 2);
+      if (outlineW > 0 && outlineH > 0) {
+        g2.drawRoundRect(x + 1, y + 1, outlineW, outlineH, 10, 10);
+      }
+      g2.setStroke(previous);
     }
 
     g2.setColor(Color.WHITE);
@@ -3665,6 +3801,30 @@ public class PlanningPanel extends JPanel {
     return Optional.empty();
   }
 
+  private void ensureContextSelection(Models.Intervention target, String resourceIdForUi) {
+    if (target == null) {
+      return;
+    }
+    String id = target.id();
+    boolean changed = false;
+    if (id != null) {
+      if (!multiSelectionIds.contains(id)) {
+        multiSelectionIds.clear();
+        multiSelectionIds.add(id);
+        changed = true;
+      }
+    } else if (!multiSelectionIds.isEmpty()) {
+      multiSelectionIds.clear();
+      changed = true;
+    }
+    Models.Intervention previous = selected;
+    setSelected(target, resourceIdForUi, false);
+    if (changed || previous != target) {
+      fireSelectionChanged();
+    }
+    repaint();
+  }
+
   private void showResourcePopover(MouseEvent event, Models.Intervention target) {
     if (event == null || target == null) {
       return;
@@ -3678,6 +3838,43 @@ public class PlanningPanel extends JPanel {
     }
 
     JPopupMenu menu = new JPopupMenu();
+
+    if (target.id() != null) {
+      JMenu statusMenu = new JMenu("Statut");
+      String[] statuses = {"planifie", "a_confirmer", "retard", "termine"};
+      for (String status : statuses) {
+        JMenuItem statusItem = new JMenuItem(status.replace('_', ' '));
+        statusItem.addActionListener(
+            ev -> {
+              java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+              if (!multiSelectionIds.isEmpty()) {
+                ids.addAll(multiSelectionIds);
+              }
+              if (ids.isEmpty() && target.id() != null) {
+                ids.add(target.id());
+              }
+              for (String sid : ids) {
+                setStatus(sid, status);
+              }
+            });
+        statusMenu.add(statusItem);
+      }
+      menu.add(statusMenu);
+
+      int groupSize = multiSelectionIds.isEmpty() ? 1 : multiSelectionIds.size();
+      JMenu batchMenu = new JMenu("Actions groupées (" + groupSize + ")");
+      JMenuItem shiftPlus = new JMenuItem("Décaler +30 min");
+      shiftPlus.addActionListener(ev -> batchShift(Duration.ofMinutes(30)));
+      JMenuItem shiftMinus = new JMenuItem("Décaler -30 min");
+      shiftMinus.addActionListener(ev -> batchShift(Duration.ofMinutes(-30)));
+      JMenuItem addTag = new JMenuItem("Ajouter tag…");
+      addTag.addActionListener(ev -> batchAddTag());
+      batchMenu.add(shiftPlus);
+      batchMenu.add(shiftMinus);
+      batchMenu.add(addTag);
+      menu.add(batchMenu);
+      menu.addSeparator();
+    }
 
     if (!current.isEmpty()) {
       JMenu assigned = new JMenu("Ressources affectées");
@@ -3752,6 +3949,132 @@ public class PlanningPanel extends JPanel {
     }
 
     menu.show(this, event.getX(), event.getY());
+  }
+
+  private Color statusColor(String status) {
+    if (status == null || status.isBlank()) {
+      status = "planifie";
+    }
+    return switch (status) {
+      case "a_confirmer" -> new Color(0xF2, 0x99, 0x4A);
+      case "retard" -> new Color(0xEB, 0x57, 0x57);
+      case "termine" -> new Color(0x27, 0xAE, 0x60);
+      default -> new Color(180, 180, 190);
+    };
+  }
+
+  private void setStatus(String interventionId, String status) {
+    if (interventionId == null || interventionId.isBlank()) {
+      return;
+    }
+    String normalized = status == null || status.isBlank() ? "planifie" : status;
+    statusById.put(interventionId, normalized);
+    statusPrefs.put(interventionId, normalized);
+    repaint();
+  }
+
+  private String getStatus(String interventionId) {
+    if (interventionId == null || interventionId.isBlank()) {
+      return "planifie";
+    }
+    String status = statusById.get(interventionId);
+    if (status == null) {
+      status = statusPrefs.get(interventionId, "planifie");
+      statusById.put(interventionId, status);
+    }
+    return status;
+  }
+
+  private void batchShift(Duration delta) {
+    if (delta == null || multiSelectionIds.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    if (interventions == null || interventions.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>(multiSelectionIds);
+    boolean updated = false;
+    boolean failed = false;
+    for (Models.Intervention intervention : new java.util.ArrayList<>(interventions)) {
+      if (intervention == null || intervention.id() == null) {
+        continue;
+      }
+      if (!targets.contains(intervention.id())) {
+        continue;
+      }
+      try {
+        Models.Intervention shifted = shiftIntervention(intervention, delta);
+        Models.Intervention saved = dsp.updateIntervention(shifted);
+        if (saved != null && saved.id() != null) {
+          updated = true;
+        }
+      } catch (RuntimeException ex) {
+        failed = true;
+      }
+    }
+    if (failed) {
+      notifyError("Impossible d'appliquer le décalage groupé");
+    }
+    if (updated) {
+      reload();
+      repaint();
+    }
+  }
+
+  private void batchAddTag() {
+    if (multiSelectionIds.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    if (interventions == null || interventions.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    String value = JOptionPane.showInputDialog(this, "Tag à ajouter au groupe");
+    if (value == null) {
+      return;
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.LinkedHashSet<String> targets = new java.util.LinkedHashSet<>(multiSelectionIds);
+    boolean updated = false;
+    boolean failed = false;
+    for (Models.Intervention intervention : new java.util.ArrayList<>(interventions)) {
+      if (intervention == null || intervention.id() == null) {
+        continue;
+      }
+      if (!targets.contains(intervention.id())) {
+        continue;
+      }
+      java.util.List<String> tags =
+          new java.util.ArrayList<>(
+              interventionTags.getOrDefault(intervention.id(), java.util.List.of()));
+      boolean exists =
+          tags.stream().anyMatch(t -> t != null && t.equalsIgnoreCase(trimmed));
+      if (exists) {
+        continue;
+      }
+      tags.add(trimmed);
+      try {
+        dsp.setInterventionTags(intervention.id(), tags);
+        interventionTags.put(intervention.id(), java.util.List.copyOf(tags));
+        updated = true;
+      } catch (RuntimeException ex) {
+        failed = true;
+      }
+    }
+    if (failed) {
+      notifyError("Impossible d'ajouter le tag groupé");
+    }
+    if (updated) {
+      reload();
+      repaint();
+    }
   }
 
   private void tryUpdateResources(Models.Intervention original, java.util.List<String> resourceIds) {
@@ -3992,15 +4315,35 @@ public class PlanningPanel extends JPanel {
     }
   }
 
-  private void onPress(Point p) {
+  private void onPress(MouseEvent event) {
+    if (event == null) {
+      return;
+    }
     requestFocusInWindow();
+    Point p = event.getPoint();
     Optional<Tile> ot = findTileAt(p);
     dragStart = p;
     dragResizeLeft = false;
     dragResizeRight = false;
     if (ot.isPresent()) {
       Tile tile = ot.get();
-      setSelected(tile.i, resourceIdAtRow(tile.row));
+      boolean ctrl = (event.getModifiersEx() & InputEvent.CTRL_DOWN_MASK) != 0;
+      String tileId = tile.i == null ? null : tile.i.id();
+      if (tileId != null) {
+        if (ctrl) {
+          if (multiSelectionIds.contains(tileId)) {
+            multiSelectionIds.remove(tileId);
+          } else {
+            multiSelectionIds.add(tileId);
+          }
+        } else {
+          multiSelectionIds.clear();
+          multiSelectionIds.add(tileId);
+        }
+      } else if (!ctrl) {
+        multiSelectionIds.clear();
+      }
+      setSelected(tile.i, resourceIdAtRow(tile.row), false);
       dragTile = tile;
       repaint();
       fireSelectionChanged();
@@ -4013,8 +4356,16 @@ public class PlanningPanel extends JPanel {
       }
     } else {
       dragTile = null;
+      boolean changed = false;
+      if (!multiSelectionIds.isEmpty()) {
+        multiSelectionIds.clear();
+        changed = true;
+      }
       if (selected != null) {
         setSelected(null);
+        changed = true;
+      }
+      if (changed) {
         repaint();
         fireSelectionChanged();
       }
