@@ -59,6 +59,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.swing.AbstractAction;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.Icon;
@@ -68,6 +69,8 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JColorChooser;
+import javax.swing.JDialog;
+import javax.swing.JList;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
@@ -182,6 +185,15 @@ public class PlanningPanel extends JPanel {
   private boolean minimapDragging = false;
   private int[] miniBins = new int[0];
   private int miniBinsMax = 1;
+  // C2 — Palette GoTo/Find (Ctrl+K / Meta+K)
+  private javax.swing.JDialog paletteDlg;
+  private javax.swing.JTextField paletteInput;
+  private javax.swing.JList<String> paletteList;
+  private javax.swing.DefaultListModel<String> paletteModel;
+  private final java.util.List<Object> paletteHits = new java.util.ArrayList<>();
+  private java.util.List<Models.Intervention> idxInterv = new java.util.ArrayList<>();
+  private final java.util.Map<String, Models.Resource> idxResByName = new java.util.HashMap<>();
+  private final java.util.Map<String, Models.Client> idxClientByName = new java.util.HashMap<>();
   private ConflictEntry selectedConflict;
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
@@ -317,6 +329,26 @@ public class PlanningPanel extends JPanel {
               @Override
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 promptGotoDate();
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "openPalette");
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.META_DOWN_MASK),
+            "openPalette");
+    this.getActionMap()
+        .put(
+            "openPalette",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                openPalette();
               }
             });
 
@@ -2975,6 +3007,299 @@ public class PlanningPanel extends JPanel {
     java.time.Instant target = start.plusMillis(targetMillis);
     centerViewOn(target);
     repaint();
+  }
+
+  // ===== C2 — Palette GoTo/Find =====
+  private void ensurePalette() {
+    if (paletteDlg != null) {
+      return;
+    }
+    java.awt.Window top = javax.swing.SwingUtilities.getWindowAncestor(this);
+    paletteDlg = new javax.swing.JDialog(top, "Aller à / Rechercher", java.awt.Dialog.ModalityType.MODELESS);
+    paletteDlg.setUndecorated(true);
+    paletteDlg
+        .getRootPane()
+        .setBorder(
+            javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0, 80), 1),
+                javax.swing.BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+    java.awt.BorderLayout layout = new java.awt.BorderLayout(6, 6);
+    javax.swing.JPanel panel = new javax.swing.JPanel(layout);
+    paletteInput = new javax.swing.JTextField();
+    paletteModel = new javax.swing.DefaultListModel<>();
+    paletteList = new javax.swing.JList<>(paletteModel);
+    paletteList.setVisibleRowCount(10);
+    paletteList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+    paletteList.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e.getClickCount() == 2) {
+              executePalette();
+            }
+          }
+        });
+    paletteInput
+        .getDocument()
+        .addDocumentListener(
+            new javax.swing.event.DocumentListener() {
+              @Override
+              public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                updatePaletteResults();
+              }
+
+              @Override
+              public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                updatePaletteResults();
+              }
+
+              @Override
+              public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                updatePaletteResults();
+              }
+            });
+    paletteInput.addActionListener(e -> executePalette());
+    paletteInput.addKeyListener(
+        new java.awt.event.KeyAdapter() {
+          @Override
+          public void keyPressed(java.awt.event.KeyEvent e) {
+            if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
+              paletteDlg.setVisible(false);
+            }
+            if (e.getKeyCode() == java.awt.event.KeyEvent.VK_UP) {
+              int idx = Math.max(0, paletteList.getSelectedIndex() - 1);
+              paletteList.setSelectedIndex(idx);
+            }
+            if (e.getKeyCode() == java.awt.event.KeyEvent.VK_DOWN) {
+              int idx = Math.min(paletteModel.size() - 1, paletteList.getSelectedIndex() + 1);
+              paletteList.setSelectedIndex(idx);
+            }
+          }
+        });
+    panel.add(paletteInput, java.awt.BorderLayout.NORTH);
+    panel.add(new javax.swing.JScrollPane(paletteList), java.awt.BorderLayout.CENTER);
+    paletteDlg.setContentPane(panel);
+    paletteDlg.setSize(520, 320);
+  }
+
+  private void openPalette() {
+    ensurePalette();
+    buildSearchIndex();
+    paletteInput.setText("");
+    updatePaletteResults();
+    centerDialog(paletteDlg, 520, 320);
+    paletteDlg.setVisible(true);
+    paletteInput.requestFocusInWindow();
+  }
+
+  private void centerDialog(java.awt.Dialog dialog, int width, int height) {
+    if (dialog == null) {
+      return;
+    }
+    java.awt.Window top = javax.swing.SwingUtilities.getWindowAncestor(this);
+    if (top == null) {
+      dialog.setSize(width, height);
+      dialog.setLocationRelativeTo(null);
+      return;
+    }
+    java.awt.Point loc = top.getLocationOnScreen();
+    dialog.setLocation(loc.x + (top.getWidth() - width) / 2, loc.y + (top.getHeight() - height) / 2);
+    dialog.setSize(width, height);
+  }
+
+  private void buildSearchIndex() {
+    idxInterv = new java.util.ArrayList<>(interventions != null ? interventions : java.util.List.of());
+    idxResByName.clear();
+    if (resources != null) {
+      for (Models.Resource resource : resources) {
+        if (resource.name() != null) {
+          idxResByName.put(resource.name().toLowerCase(), resource);
+        }
+      }
+    }
+    idxClientByName.clear();
+    if (clients != null) {
+      for (Models.Client client : clients) {
+        if (client.name() != null) {
+          idxClientByName.put(client.name().toLowerCase(), client);
+        }
+      }
+    }
+  }
+
+  private void updatePaletteResults() {
+    if (paletteModel == null) {
+      return;
+    }
+    String query = paletteInput.getText() == null ? "" : paletteInput.getText().trim();
+    paletteModel.clear();
+    paletteHits.clear();
+    if (query.isEmpty()) {
+      paletteModel.addElement("› Tapez pour chercher (titres, #tags, @ressources, %client, >date)");
+      return;
+    }
+    String lowerQuery = query.toLowerCase();
+    if (query.startsWith(">")) {
+      java.time.Instant instant = parseDateInput(query.substring(1).trim());
+      if (instant != null) {
+        paletteModel.addElement("Aller à : " + query.substring(1).trim());
+        paletteHits.add(instant);
+      }
+    }
+    if (query.startsWith("@")) {
+      String rq = lowerQuery.substring(1);
+      for (java.util.Map.Entry<String, Models.Resource> entry : idxResByName.entrySet()) {
+        if (entry.getKey().contains(rq)) {
+          paletteModel.addElement("Ressource : " + entry.getValue().name());
+          paletteHits.add(entry.getValue());
+        }
+      }
+    } else if (query.startsWith("%")) {
+      String cq = lowerQuery.substring(1);
+      for (java.util.Map.Entry<String, Models.Client> entry : idxClientByName.entrySet()) {
+        if (entry.getKey().contains(cq)) {
+          paletteModel.addElement("Client : " + entry.getValue().name());
+          paletteHits.add(entry.getValue());
+        }
+      }
+    } else if (query.startsWith("#")) {
+      String tq = lowerQuery.substring(1);
+      for (Models.Intervention it : idxInterv) {
+        java.util.List<String> tags = it.tags() != null ? it.tags() : java.util.List.of();
+        for (String tag : tags) {
+          if (tag != null && tag.toLowerCase().contains(tq)) {
+            paletteModel.addElement("Tag : #" + tag + " — " + it.title());
+            paletteHits.add(it);
+            break;
+          }
+        }
+      }
+    }
+    int added = 0;
+    for (Models.Intervention it : idxInterv) {
+      if (added > 50) {
+        break;
+      }
+      String title = it.title() != null ? it.title() : "";
+      String notes = it.notes() != null ? it.notes() : "";
+      if (title.toLowerCase().contains(lowerQuery) || notes.toLowerCase().contains(lowerQuery)) {
+        paletteModel.addElement(
+            "Intervention : " + title + "  (" + timeLabel(it.start(), it.end()) + ")");
+        paletteHits.add(it);
+        added++;
+      }
+    }
+    if (paletteModel.isEmpty()) {
+      paletteModel.addElement("Aucun résultat pour \"" + query + "\"");
+    }
+    if (!paletteModel.isEmpty()) {
+      paletteList.setSelectedIndex(0);
+    }
+  }
+
+  private void executePalette() {
+    if (paletteList == null) {
+      return;
+    }
+    int index = paletteList.getSelectedIndex();
+    if (index < 0 || index >= paletteHits.size()) {
+      paletteDlg.setVisible(false);
+      return;
+    }
+    Object hit = paletteHits.get(index);
+    if (hit instanceof java.time.Instant instant) {
+      centerViewOn(instant);
+      repaint();
+    } else if (hit instanceof Models.Resource resource) {
+      scrollToResource(resource.id());
+    } else if (hit instanceof Models.Client client) {
+      filterByClient(client.id());
+    } else if (hit instanceof Models.Intervention intervention) {
+      selected = intervention;
+      multiSelectionIds.clear();
+      if (intervention.id() != null) {
+        multiSelectionIds.add(intervention.id());
+      }
+      centerViewOn(mid(intervention.start(), intervention.end()));
+      rebuildInspector();
+      repaint();
+    }
+    paletteDlg.setVisible(false);
+  }
+
+  private void scrollToResource(String resourceId) {
+    if (resourceId == null) {
+      return;
+    }
+    Integer idx = resourceIndexById.get(resourceId);
+    if (idx != null) {
+      ensureRowVisible(idx);
+    } else {
+      notifyInfo("Ressource introuvable dans la vue");
+    }
+  }
+
+  private void filterByClient(String clientId) {
+    if (clientId == null) {
+      return;
+    }
+    if (searchField != null) {
+      for (Models.Client client : clients) {
+        if (client.id().equals(clientId)) {
+          searchField.setText(client.name());
+          onSearchChanged();
+          return;
+        }
+      }
+    }
+    notifyInfo("Filtre client non disponible");
+  }
+
+  private java.time.Instant parseDateInput(String input) {
+    if (input == null || input.isBlank()) {
+      return null;
+    }
+    String normalized = input.replace('/', '-').trim().replace('T', ' ');
+    try {
+      if (normalized.matches("[+-]\\d+[dD]")) {
+        int days = Integer.parseInt(normalized.substring(0, normalized.length() - 1));
+        return java.time.Instant.now().plus(java.time.Duration.ofDays(days));
+      }
+      if (normalized.matches("\\d{2}:\\d{2}")) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalTime time = java.time.LocalTime.parse(normalized);
+        return java.time.ZonedDateTime.of(today, time, java.time.ZoneId.systemDefault()).toInstant();
+      }
+      if (normalized.matches("\\d{4}-\\d{2}-\\d{2}")) {
+        java.time.LocalDate date = java.time.LocalDate.parse(normalized);
+        return date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant();
+      }
+      java.time.LocalDateTime ldt =
+          java.time.LocalDateTime.parse(
+              normalized, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+      return ldt.atZone(java.time.ZoneId.systemDefault()).toInstant();
+    } catch (RuntimeException ex) {
+      return null;
+    }
+  }
+
+  private void ensureRowVisible(int idx) {
+    // TODO: adjust vertical scroll position if applicable
+    repaint();
+  }
+
+  private java.time.Instant mid(java.time.Instant a, java.time.Instant b) {
+    if (a == null && b == null) {
+      return null;
+    }
+    if (a == null) {
+      return b;
+    }
+    if (b == null) {
+      return a;
+    }
+    long avg = (a.toEpochMilli() + b.toEpochMilli()) / 2L;
+    return java.time.Instant.ofEpochMilli(avg);
   }
 
   private void promptGotoDate() {
