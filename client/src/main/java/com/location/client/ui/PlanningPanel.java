@@ -148,6 +148,7 @@ public class PlanningPanel extends JPanel {
   private final java.util.List<ConflictUtil.Conflict> conflicts = new java.util.ArrayList<>();
   private final java.util.List<ConflictEntry> conflictEntries = new java.util.ArrayList<>();
   private javax.swing.JPanel conflictsPanel;
+  private javax.swing.JPanel suggestionsPanel;
   private javax.swing.JList<String> conflictsList;
   private boolean conflictsVisible = true;
   private ConflictEntry selectedConflict;
@@ -5568,8 +5569,13 @@ public class PlanningPanel extends JPanel {
             } else {
               selectedConflict = null;
             }
+            rebuildSuggestions();
           });
       conflictsPanel.add(new javax.swing.JScrollPane(conflictsList), java.awt.BorderLayout.CENTER);
+      suggestionsPanel =
+          new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 6));
+      suggestionsPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Suggestions"));
+      conflictsPanel.add(suggestionsPanel, java.awt.BorderLayout.SOUTH);
       add(conflictsPanel);
     }
     if (conflictsList != null) {
@@ -5598,6 +5604,7 @@ public class PlanningPanel extends JPanel {
     if (conflictsPanel != null) {
       conflictsPanel.setVisible(conflictsVisible && !conflictEntries.isEmpty());
     }
+    rebuildSuggestions();
   }
 
   private void tryAutoResolveAssign(ConflictEntry entry) {
@@ -5682,6 +5689,250 @@ public class PlanningPanel extends JPanel {
       return;
     }
     notifyInfo("Aucune ressource compatible libre");
+  }
+
+  private static final class Suggestion {
+    final String label;
+    final Runnable action;
+
+    Suggestion(String label, Runnable action) {
+      this.label = label;
+      this.action = action;
+    }
+  }
+
+  private java.util.List<Suggestion> computeSuggestions(ConflictEntry entry) {
+    java.util.List<Suggestion> suggestions = new java.util.ArrayList<>();
+    if (entry == null) {
+      return suggestions;
+    }
+
+    Models.Intervention shorter = entry.shorter();
+    java.time.Instant start = shorter == null ? null : shorter.start();
+    java.time.Instant end = shorter == null ? null : shorter.end();
+    String conflictResourceId = entry.resourceId;
+
+    if (shorter != null && start != null && end != null && conflictResourceId != null) {
+      String typeId = resourceTypeIdByResource.get(conflictResourceId);
+      if (typeId != null) {
+        java.util.List<Models.Resource> candidates = new java.util.ArrayList<>();
+        for (Models.Resource resource : resources) {
+          if (resource == null || resource.id() == null) {
+            continue;
+          }
+          String candidateType = resourceTypeIdByResource.get(resource.id());
+          if (typeId.equals(candidateType)) {
+            candidates.add(resource);
+          }
+        }
+        java.util.Map<String, java.util.List<Models.Intervention>> busy =
+            new java.util.HashMap<>();
+        for (Models.Intervention intervention : interventions) {
+          if (intervention == null) {
+            continue;
+          }
+          for (String rid : effectiveResourceIds(intervention)) {
+            busy.computeIfAbsent(rid, k -> new java.util.ArrayList<>()).add(intervention);
+          }
+        }
+        int added = 0;
+        for (Models.Resource candidate : candidates) {
+          if (candidate.id().equals(conflictResourceId)) {
+            continue;
+          }
+          boolean free = true;
+          for (Models.Intervention other : busy.getOrDefault(candidate.id(), java.util.List.of())) {
+            if (other == null) {
+              continue;
+            }
+            if (other.id() != null && other.id().equals(shorter.id())) {
+              continue;
+            }
+            if (overlap(start, end, other.start(), other.end())) {
+              free = false;
+              break;
+            }
+          }
+          if (free) {
+            try {
+              ensureAvailability(candidate.id(), start, end);
+            } catch (RuntimeException ex) {
+              free = false;
+            }
+          }
+          if (!free) {
+            continue;
+          }
+          String label = "Réaffecter → " + candidate.name();
+          String newResourceId = candidate.id();
+          suggestions.add(new Suggestion(label, () -> applyReassign(entry, shorter, newResourceId)));
+          if (++added >= 3) {
+            break;
+          }
+        }
+      }
+    }
+
+    int[] offsets = {-30, -15, 15, 30};
+    if (shorter != null && start != null && end != null) {
+      for (int offset : offsets) {
+        if (canShiftWithoutOverlap(shorter, offset)) {
+          int delta = offset;
+          String label = (delta > 0 ? "Décaler +" : "Décaler ") + delta + " min";
+          suggestions.add(new Suggestion(label, () -> applyShift(shorter, delta)));
+        }
+      }
+    }
+
+    if (suggestions.isEmpty()) {
+      suggestions.add(new Suggestion("Aucune suggestion applicable", null));
+    }
+    return suggestions;
+  }
+
+  private boolean canShiftWithoutOverlap(Models.Intervention intervention, int minutes) {
+    if (intervention == null || intervention.start() == null || intervention.end() == null) {
+      return false;
+    }
+    java.time.Instant newStart = intervention.start().plus(java.time.Duration.ofMinutes(minutes));
+    java.time.Instant newEnd = intervention.end().plus(java.time.Duration.ofMinutes(minutes));
+    if (!newEnd.isAfter(newStart)) {
+      return false;
+    }
+    for (String resourceId : effectiveResourceIds(intervention)) {
+      if (resourceId == null) {
+        continue;
+      }
+      try {
+        ensureAvailability(resourceId, newStart, newEnd);
+      } catch (RuntimeException ex) {
+        return false;
+      }
+      for (Models.Intervention other : interventions) {
+        if (other == null || other.id() == null) {
+          continue;
+        }
+        if (intervention.id() != null && intervention.id().equals(other.id())) {
+          continue;
+        }
+        if (!effectiveResourceIds(other).contains(resourceId)) {
+          continue;
+        }
+        if (overlap(newStart, newEnd, other.start(), other.end())) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private void applyReassign(ConflictEntry entry, Models.Intervention intervention, String newResourceId) {
+    if (entry == null || intervention == null || newResourceId == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<String> resourceIds = new java.util.ArrayList<>(effectiveResourceIds(intervention));
+    resourceIds.removeIf(r -> r == null || r.equals(entry.resourceId));
+    if (!resourceIds.contains(newResourceId)) {
+      resourceIds.add(newResourceId);
+    }
+    tryUpdateResources(intervention, resourceIds);
+    rebuildSuggestions();
+  }
+
+  private void applyShift(Models.Intervention intervention, int minutes) {
+    if (intervention == null || intervention.start() == null || intervention.end() == null) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.time.Duration delta = java.time.Duration.ofMinutes(minutes);
+    java.time.Instant newStart = intervention.start().plus(delta);
+    java.time.Instant newEnd = intervention.end().plus(delta);
+    if (!newEnd.isAfter(newStart)) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    java.util.List<String> resourceIds = effectiveResourceIds(intervention);
+    for (String resourceId : resourceIds) {
+      if (resourceId == null) {
+        continue;
+      }
+      try {
+        ensureAvailability(resourceId, newStart, newEnd);
+      } catch (RuntimeException ex) {
+        Toolkit.getDefaultToolkit().beep();
+        return;
+      }
+      for (Models.Intervention other : interventions) {
+        if (other == null || other.id() == null) {
+          continue;
+        }
+        if (intervention.id() != null && intervention.id().equals(other.id())) {
+          continue;
+        }
+        if (!effectiveResourceIds(other).contains(resourceId)) {
+          continue;
+        }
+        if (overlap(newStart, newEnd, other.start(), other.end())) {
+          Toolkit.getDefaultToolkit().beep();
+          return;
+        }
+      }
+    }
+    Models.Intervention before = copyOf(intervention);
+    Models.Intervention updated =
+        new Models.Intervention(
+            intervention.id(),
+            intervention.agencyId(),
+            intervention.resourceIds(),
+            intervention.clientId(),
+            intervention.driverId(),
+            intervention.title(),
+            newStart,
+            newEnd,
+            intervention.notes(),
+            intervention.internalNotes(),
+            intervention.price());
+    try {
+      Models.Intervention saved = dsp.updateIntervention(updated);
+      setSelected(saved);
+      reload();
+      if (saved != null) {
+        String idLabel = saved.id() == null ? "" : ": " + saved.id();
+        notifySuccess("Intervention décalée", "Décalage " + minutes + " min" + idLabel);
+        pushUpdateHistory("Décalage", before, saved);
+      }
+    } catch (RuntimeException ex) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+  }
+
+  private void rebuildSuggestions() {
+    if (suggestionsPanel == null) {
+      return;
+    }
+    suggestionsPanel.removeAll();
+    if (!conflictsVisible || conflictEntries.isEmpty() || selectedConflict == null) {
+      suggestionsPanel.setVisible(false);
+      suggestionsPanel.revalidate();
+      suggestionsPanel.repaint();
+      return;
+    }
+    java.util.List<Suggestion> suggestions = computeSuggestions(selectedConflict);
+    for (Suggestion suggestion : suggestions) {
+      if (suggestion.action == null) {
+        javax.swing.JLabel label = new javax.swing.JLabel(suggestion.label);
+        suggestionsPanel.add(label);
+        continue;
+      }
+      javax.swing.JButton button = new javax.swing.JButton(suggestion.label);
+      button.setFocusable(false);
+      button.addActionListener(e -> suggestion.action.run());
+      suggestionsPanel.add(button);
+    }
+    suggestionsPanel.setVisible(true);
+    suggestionsPanel.revalidate();
+    suggestionsPanel.repaint();
   }
 
   private void snapSelectedToNearestGap(int direction) {
