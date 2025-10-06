@@ -148,6 +148,7 @@ public class PlanningPanel extends JPanel {
   private final java.util.List<ConflictUtil.Conflict> conflicts = new java.util.ArrayList<>();
   private final java.util.List<ConflictEntry> conflictEntries = new java.util.ArrayList<>();
   private javax.swing.JPanel conflictsPanel;
+  private javax.swing.JLabel conflictsHeaderLabel;
   private javax.swing.JPanel suggestionsPanel;
   // B.2 — Undo léger sur actions de suggestion
   private final java.util.Deque<Runnable> undoStack = new java.util.ArrayDeque<>();
@@ -155,6 +156,13 @@ public class PlanningPanel extends JPanel {
   // B.3 — Affinités client↔ressource (persistées)
   private final java.util.prefs.Preferences affinityPrefs =
       java.util.prefs.Preferences.userRoot().node("com.location.affinity");
+  // B.4 — Thème clair/sombre
+  private boolean darkTheme = false;
+  private java.awt.Color themeBg;
+  private java.awt.Color themePanelBg;
+  private java.awt.Color themeBorder;
+  private java.awt.Color themeFg;
+  private java.awt.Color themeAccent;
   private javax.swing.JList<String> conflictsList;
   private boolean conflictsVisible = true;
   private ConflictEntry selectedConflict;
@@ -246,6 +254,25 @@ public class PlanningPanel extends JPanel {
   private Timer flashingTimer;
 
   public PlanningPanel(DataSourceProvider dsp) {
+    applyTheme();
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_D, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "toggleTheme");
+    this.getActionMap()
+        .put(
+            "toggleTheme",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                darkTheme = !darkTheme;
+                applyTheme();
+                rebuildConflictsUI();
+                repaint();
+              }
+            });
+
     // Conflict helpers shortcuts
     this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('R'), "resolveAssign");
     this.getActionMap()
@@ -5575,16 +5602,19 @@ public class PlanningPanel extends JPanel {
     if (conflictsPanel == null) {
       conflictsPanel = new javax.swing.JPanel(new java.awt.BorderLayout());
       conflictsPanel.setOpaque(true);
-      conflictsPanel.setBackground(new java.awt.Color(248, 248, 250));
+      conflictsPanel.setBackground(themePanelBg);
       conflictsPanel.setBorder(
-          javax.swing.BorderFactory.createMatteBorder(
-              0, 1, 0, 0, new java.awt.Color(230, 230, 235)));
-      javax.swing.JLabel header = new javax.swing.JLabel("Conflits");
-      header.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 8, 6, 8));
-      header.setFont(header.getFont().deriveFont(java.awt.Font.BOLD));
-      conflictsPanel.add(header, java.awt.BorderLayout.NORTH);
+          javax.swing.BorderFactory.createMatteBorder(0, 1, 0, 0, themeBorder));
+      conflictsHeaderLabel = new javax.swing.JLabel("Conflits");
+      conflictsHeaderLabel.setBorder(javax.swing.BorderFactory.createEmptyBorder(6, 8, 6, 8));
+      conflictsHeaderLabel.setFont(
+          conflictsHeaderLabel.getFont().deriveFont(java.awt.Font.BOLD));
+      conflictsHeaderLabel.setForeground(themeFg);
+      conflictsPanel.add(conflictsHeaderLabel, java.awt.BorderLayout.NORTH);
       conflictsList = new javax.swing.JList<>();
       conflictsList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+      conflictsList.setBackground(themePanelBg);
+      conflictsList.setForeground(themeFg);
       conflictsList.addListSelectionListener(
           ev -> {
             if (ev.getValueIsAdjusting()) {
@@ -5607,7 +5637,11 @@ public class PlanningPanel extends JPanel {
       conflictsPanel.add(new javax.swing.JScrollPane(conflictsList), java.awt.BorderLayout.CENTER);
       suggestionsPanel =
           new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 6));
-      suggestionsPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Suggestions"));
+      javax.swing.border.TitledBorder border =
+          javax.swing.BorderFactory.createTitledBorder("Suggestions");
+      border.setTitleColor(themeFg);
+      suggestionsPanel.setBorder(border);
+      suggestionsPanel.setBackground(themePanelBg);
       conflictsPanel.add(suggestionsPanel, java.awt.BorderLayout.SOUTH);
       add(conflictsPanel);
     }
@@ -6044,6 +6078,7 @@ public class PlanningPanel extends JPanel {
       return;
     }
     suggestionsPanel.removeAll();
+    suggestionsPanel.setBackground(themePanelBg);
     if (!conflictsVisible || conflictEntries.isEmpty() || selectedConflict == null) {
       suggestionsPanel.setVisible(false);
       suggestionsPanel.revalidate();
@@ -6054,6 +6089,7 @@ public class PlanningPanel extends JPanel {
     for (Suggestion suggestion : suggestions) {
       if (suggestion.action == null) {
         javax.swing.JLabel label = new javax.swing.JLabel(suggestion.label);
+        label.setForeground(themeFg);
         if (suggestion.tooltip != null && !suggestion.tooltip.isBlank()) {
           label.setToolTipText(suggestion.tooltip);
         }
@@ -6062,25 +6098,169 @@ public class PlanningPanel extends JPanel {
       }
       javax.swing.JButton button = new javax.swing.JButton(suggestion.label);
       button.setFocusable(false);
+      button.setBackground(themeBg);
+      button.setForeground(themeFg);
+      button.setBorder(
+          javax.swing.BorderFactory.createCompoundBorder(
+              javax.swing.BorderFactory.createLineBorder(themeBorder),
+              javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8)));
       if (suggestion.tooltip != null && !suggestion.tooltip.isBlank()) {
         button.setToolTipText(suggestion.tooltip);
+      }
+      javax.swing.Icon icon = iconForSuggestion(suggestion);
+      if (icon != null) {
+        button.setIcon(icon);
       }
       button.addActionListener(e -> suggestion.action.run());
       suggestionsPanel.add(button);
     }
     if (!undoStack.isEmpty()) {
-      javax.swing.JButton undoButton = new javax.swing.JButton("↶ Annuler (Ctrl+Z)");
+      javax.swing.JButton undoButton = new javax.swing.JButton("Annuler (Ctrl+Z)");
       String tooltip = undoLabels.peek();
       if (tooltip != null && !tooltip.isBlank()) {
         undoButton.setToolTipText(tooltip);
       }
       undoButton.setFocusable(false);
+      undoButton.setBackground(themeBg);
+      undoButton.setForeground(themeFg);
+      undoButton.setBorder(
+          javax.swing.BorderFactory.createCompoundBorder(
+              javax.swing.BorderFactory.createLineBorder(themeBorder),
+              javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8)));
+      undoButton.setIcon(new VectorIcon(VectorIcon.Type.UNDO, themeAccent));
       undoButton.addActionListener(e -> performUndo());
       suggestionsPanel.add(undoButton);
     }
     suggestionsPanel.setVisible(true);
     suggestionsPanel.revalidate();
     suggestionsPanel.repaint();
+  }
+
+  private void applyTheme() {
+    if (darkTheme) {
+      themeBg = new java.awt.Color(32, 32, 36);
+      themePanelBg = new java.awt.Color(38, 38, 44);
+      themeBorder = new java.awt.Color(64, 64, 72);
+      themeFg = new java.awt.Color(235, 235, 238);
+      themeAccent = new java.awt.Color(80, 140, 255);
+    } else {
+      themeBg = java.awt.Color.WHITE;
+      themePanelBg = new java.awt.Color(248, 248, 250);
+      themeBorder = new java.awt.Color(220, 220, 226);
+      themeFg = new java.awt.Color(36, 36, 40);
+      themeAccent = new java.awt.Color(52, 112, 235);
+    }
+    setBackground(themeBg);
+    setForeground(themeFg);
+    if (conflictsPanel != null) {
+      conflictsPanel.setBackground(themePanelBg);
+      conflictsPanel.setBorder(
+          javax.swing.BorderFactory.createMatteBorder(0, 1, 0, 0, themeBorder));
+    }
+    if (conflictsHeaderLabel != null) {
+      conflictsHeaderLabel.setForeground(themeFg);
+    }
+    if (conflictsList != null) {
+      conflictsList.setBackground(themePanelBg);
+      conflictsList.setForeground(themeFg);
+    }
+    if (suggestionsPanel != null) {
+      suggestionsPanel.setBackground(themePanelBg);
+      if (suggestionsPanel.getBorder() instanceof javax.swing.border.TitledBorder titledBorder) {
+        titledBorder.setTitleColor(themeFg);
+      }
+    }
+  }
+
+  private javax.swing.Icon iconForSuggestion(Suggestion suggestion) {
+    if (suggestion == null || suggestion.label == null) {
+      return null;
+    }
+    java.awt.Color color = themeAccent;
+    if (suggestion.label.startsWith("↔ Réaffecter") || suggestion.label.startsWith("Réaffecter")) {
+      return new VectorIcon(VectorIcon.Type.REASSIGN, color);
+    }
+    if (suggestion.label.startsWith("⇢") || suggestion.label.contains("Décaler")) {
+      return new VectorIcon(VectorIcon.Type.SHIFT_RIGHT, color);
+    }
+    return null;
+  }
+
+  private static final class VectorIcon implements javax.swing.Icon {
+    enum Type {
+      REASSIGN,
+      SHIFT_RIGHT,
+      UNDO
+    }
+
+    private final Type type;
+    private final java.awt.Color color;
+    private final int size;
+
+    VectorIcon(Type type, java.awt.Color color) {
+      this(type, color, 14);
+    }
+
+    VectorIcon(Type type, java.awt.Color color, int size) {
+      this.type = type;
+      this.color = color;
+      this.size = size;
+    }
+
+    @Override
+    public int getIconWidth() {
+      return size;
+    }
+
+    @Override
+    public int getIconHeight() {
+      return size;
+    }
+
+    @Override
+    public void paintIcon(java.awt.Component component, java.awt.Graphics graphics, int x, int y) {
+      java.awt.Graphics2D g2 = (java.awt.Graphics2D) graphics.create();
+      g2.setRenderingHint(
+          java.awt.RenderingHints.KEY_ANTIALIASING,
+          java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+      g2.translate(x, y);
+      g2.setStroke(
+          new java.awt.BasicStroke(
+              1.6f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND));
+      g2.setColor(color);
+      switch (type) {
+        case REASSIGN -> {
+          g2.draw(new java.awt.geom.Line2D.Float(2, 4, size - 4, 4));
+          g2.draw(new java.awt.geom.Line2D.Float(size - 6, 2, size - 4, 4));
+          g2.draw(new java.awt.geom.Line2D.Float(size - 6, 6, size - 4, 4));
+          g2.draw(new java.awt.geom.Line2D.Float(size - 4, size - 4, 2, size - 4));
+          g2.draw(new java.awt.geom.Line2D.Float(4, size - 6, 2, size - 4));
+          g2.draw(new java.awt.geom.Line2D.Float(4, size - 2, 2, size - 4));
+        }
+        case SHIFT_RIGHT -> {
+          g2.draw(new java.awt.geom.Line2D.Float(2, size / 2f, size - 6, size / 2f));
+          java.awt.geom.Path2D path = new java.awt.geom.Path2D.Float();
+          path.moveTo(size - 6, size / 2f - 4);
+          path.lineTo(size - 2, size / 2f);
+          path.lineTo(size - 6, size / 2f + 4);
+          path.closePath();
+          g2.fill(path);
+          g2.draw(new java.awt.geom.RoundRectangle2D.Float(2, 3, 6, size - 6, 3, 3));
+        }
+        case UNDO -> {
+          java.awt.geom.Arc2D arc =
+              new java.awt.geom.Arc2D.Float(3, 3, size - 6, size - 6, 30, 270, java.awt.geom.Arc2D.OPEN);
+          g2.draw(arc);
+          java.awt.geom.Path2D path = new java.awt.geom.Path2D.Float();
+          path.moveTo(3, size / 2f);
+          path.lineTo(8, size / 2f);
+          path.lineTo(6, size / 2f - 3);
+          path.closePath();
+          g2.fill(path);
+        }
+      }
+      g2.dispose();
+    }
   }
 
   private int affinityScore(String clientId, String resourceId) {
