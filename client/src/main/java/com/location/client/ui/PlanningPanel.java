@@ -174,6 +174,14 @@ public class PlanningPanel extends JPanel {
   }
   private volatile boolean conflictsDirty = false;
   private final java.util.Map<String, javax.swing.Icon> iconCache = new java.util.HashMap<>();
+  // Mini-map overview
+  private boolean minimapVisible = true;
+  private static final int MINIMAP_HEIGHT = 52;
+  private static final int MINIMAP_PADDING = 8;
+  private final java.awt.Rectangle minimapRect = new java.awt.Rectangle();
+  private boolean minimapDragging = false;
+  private int[] miniBins = new int[0];
+  private int miniBinsMax = 1;
   private ConflictEntry selectedConflict;
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
@@ -281,6 +289,69 @@ public class PlanningPanel extends JPanel {
                 repaint();
               }
             });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_M, 0), "toggleMinimap");
+    this.getActionMap()
+        .put(
+            "toggleMinimap",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                minimapVisible = !minimapVisible;
+                recomputeMiniBins();
+                revalidate();
+                repaint();
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_G, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "gotoDate");
+    this.getActionMap()
+        .put(
+            "gotoDate",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                promptGotoDate();
+              }
+            });
+
+    this.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mousePressed(java.awt.event.MouseEvent e) {
+            if (minimapVisible && minimapRect.contains(e.getPoint())) {
+              minimapDragging = true;
+              seekFromMinimap(e.getX());
+            }
+          }
+
+          @Override
+          public void mouseReleased(java.awt.event.MouseEvent e) {
+            minimapDragging = false;
+          }
+
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (minimapVisible && minimapRect.contains(e.getPoint())) {
+              seekFromMinimap(e.getX());
+            }
+          }
+        });
+
+    this.addMouseMotionListener(
+        new java.awt.event.MouseMotionAdapter() {
+          @Override
+          public void mouseDragged(java.awt.event.MouseEvent e) {
+            if (minimapDragging) {
+              seekFromMinimap(e.getX());
+            }
+          }
+        });
 
     // Conflict helpers shortcuts
     this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('R'), "resolveAssign");
@@ -1512,6 +1583,7 @@ public class PlanningPanel extends JPanel {
     computeDynamicRows();
     notifyReloadListeners();
     fireSelectionChanged();
+    recomputeMiniBins();
     repaint();
     scheduleConflictsRebuild();
   }
@@ -1547,12 +1619,20 @@ public class PlanningPanel extends JPanel {
 
   public int computeTotalHeight() {
     ensureRowLayout();
+    int base = headerHeight();
     if (displayToResource.isEmpty()) {
-      return headerHeight() + headerRowH;
+      int total = base + headerRowH;
+      if (minimapVisible) {
+        total += MINIMAP_HEIGHT;
+      }
+      return total;
     }
-    int total = headerHeight();
+    int total = base;
     for (int idx = 0; idx < displayToResource.size(); idx++) {
       total += displayRowH(idx);
+    }
+    if (minimapVisible) {
+      total += MINIMAP_HEIGHT;
     }
     return total;
   }
@@ -2600,11 +2680,82 @@ public class PlanningPanel extends JPanel {
       ghostGraphics.dispose();
     }
 
+    if (minimapVisible) {
+      paintMinimap(g2);
+    }
+
     if (hudVisible) {
       paintHudFooter(g2);
     } else {
       hudRect = null;
     }
+  }
+
+  private void paintMinimap(Graphics2D baseGraphics) {
+    Graphics2D gh = (Graphics2D) baseGraphics.create();
+    int mmH = MINIMAP_HEIGHT;
+    int mmW = getWidth();
+    int y0 = Math.max(0, getHeight() - mmH);
+    minimapRect.setBounds(0, y0, mmW, mmH);
+
+    gh.setColor(darkTheme ? new Color(26, 26, 30) : new Color(245, 245, 248));
+    gh.fillRect(minimapRect.x, minimapRect.y, minimapRect.width, minimapRect.height);
+
+    int pad = MINIMAP_PADDING;
+    int axX = minimapRect.x + pad;
+    int axY = minimapRect.y + pad;
+    int axW = Math.max(1, minimapRect.width - pad * 2);
+    int axH = Math.max(1, minimapRect.height - pad * 2);
+
+    int desiredBins = Math.max(8, axW);
+    if (miniBins == null || miniBins.length != desiredBins) {
+      miniBins = new int[desiredBins];
+      recomputeMiniBins();
+    }
+
+    double binWidth = axW / (double) Math.max(1, miniBins.length);
+    for (int i = 0; i < miniBins.length; i++) {
+      int value = miniBins[i];
+      float t = miniBinsMax <= 0 ? 0f : Math.min(1f, value / (float) miniBinsMax);
+      Color color = lerpColor(new Color(64, 100, 255, 90), new Color(235, 87, 87, 140), t);
+      int barHeight = (int) Math.round(axH * t);
+      if (barHeight <= 0) {
+        continue;
+      }
+      int x1 = axX + (int) Math.floor(i * binWidth);
+      int x2 = axX + (int) Math.floor((i + 1) * binWidth);
+      int width = Math.max(1, x2 - x1);
+      gh.setColor(color);
+      gh.fillRect(x1, axY + Math.max(0, axH - barHeight), width, barHeight);
+    }
+
+    gh.setColor(new Color(235, 87, 87, 220));
+    for (ConflictUtil.Conflict conflict : conflicts) {
+      if (conflict == null) {
+        continue;
+      }
+      java.time.Instant a = conflict.a() != null ? conflict.a().start() : null;
+      java.time.Instant b = conflict.b() != null ? conflict.b().start() : null;
+      java.time.Instant mid = mid(a, b);
+      if (mid == null) {
+        continue;
+      }
+      int cx = axX + (int) Math.round(instantToRatio(mid) * axW);
+      cx = Math.max(axX, Math.min(axX + axW - 2, cx));
+      gh.fillRect(cx, axY + 2, 2, Math.max(1, Math.min(4, axH - 4)));
+    }
+
+    gh.setColor(new Color(80, 140, 255, 160));
+    java.awt.Rectangle viewport = viewportRectInMinimap(axX, axY, axW, axH);
+    gh.drawRect(viewport.x, viewport.y, viewport.width, viewport.height);
+
+    gh.setColor(darkTheme ? new Color(0, 0, 0, 120) : new Color(0, 0, 0, 60));
+    gh.drawRect(
+        minimapRect.x,
+        minimapRect.y,
+        Math.max(0, minimapRect.width - 1),
+        Math.max(0, minimapRect.height - 1));
+    gh.dispose();
   }
 
   private void paintHudFooter(Graphics2D baseGraphics) {
@@ -2705,6 +2856,203 @@ public class PlanningPanel extends JPanel {
       }
     }
     return String.join("  •  ", parts);
+  }
+
+  private void recomputeMiniBins() {
+    if (miniBins == null || miniBins.length == 0) {
+      miniBins = new int[Math.max(8, getWidth() > 0 ? getWidth() : 64)];
+    }
+    java.util.Arrays.fill(miniBins, 0);
+    miniBinsMax = 1;
+    if (interventions == null || interventions.isEmpty()) {
+      return;
+    }
+    java.time.Instant start = getViewFrom().toInstant();
+    java.time.Instant end = getViewTo().toInstant();
+    long totalMillis = Math.max(1L, java.time.Duration.between(start, end).toMillis());
+    if (miniBins.length == 1) {
+      int count = 0;
+      for (Models.Intervention intervention : interventions) {
+        if (intervention == null || intervention.start() == null || intervention.end() == null) {
+          continue;
+        }
+        if (intervention.end().isBefore(start) || intervention.start().isAfter(end)) {
+          continue;
+        }
+        count++;
+      }
+      miniBins[0] = count;
+      miniBinsMax = Math.max(miniBinsMax, count);
+      return;
+    }
+    for (Models.Intervention intervention : interventions) {
+      if (intervention == null) {
+        continue;
+      }
+      java.time.Instant s = intervention.start();
+      java.time.Instant e = intervention.end();
+      if (s == null || e == null) {
+        continue;
+      }
+      if (e.isBefore(start) || s.isAfter(end)) {
+        continue;
+      }
+      java.time.Instant clampedStart = s.isBefore(start) ? start : s;
+      java.time.Instant clampedEnd = e.isAfter(end) ? end : e;
+      if (clampedEnd.isBefore(clampedStart)) {
+        java.time.Instant tmp = clampedStart;
+        clampedStart = clampedEnd;
+        clampedEnd = tmp;
+      }
+      long startMillis = java.time.Duration.between(start, clampedStart).toMillis();
+      long endMillis = java.time.Duration.between(start, clampedEnd).toMillis();
+      double t0 = Math.max(0d, Math.min(1d, startMillis / (double) totalMillis));
+      double t1 = Math.max(0d, Math.min(1d, endMillis / (double) totalMillis));
+      if (t1 < t0) {
+        double tmp = t0;
+        t0 = t1;
+        t1 = tmp;
+      }
+      int idx0 = (int) Math.floor(t0 * (miniBins.length - 1));
+      int idx1 = (int) Math.ceil(t1 * (miniBins.length - 1));
+      idx0 = Math.max(0, Math.min(miniBins.length - 1, idx0));
+      idx1 = Math.max(0, Math.min(miniBins.length - 1, idx1));
+      for (int idx = idx0; idx <= idx1; idx++) {
+        int value = ++miniBins[idx];
+        if (value > miniBinsMax) {
+          miniBinsMax = value;
+        }
+      }
+    }
+  }
+
+  private java.awt.Rectangle viewportRectInMinimap(int axX, int axY, int axW, int axH) {
+    javax.swing.JViewport viewport = findEnclosingViewport();
+    java.time.Instant start = getViewFrom().toInstant();
+    java.time.Instant end = getViewTo().toInstant();
+    java.time.Instant leftInstant = start;
+    java.time.Instant rightInstant = end;
+    if (viewport != null) {
+      int viewPos = viewport.getViewPosition().x;
+      int extent = viewport.getExtentSize().width;
+      int timelineWidth = TIME_W + Math.max(1, HOURS * Math.max(1, colWidth) * Math.max(1, getViewDays()));
+      int leftX = Math.max(TIME_W, Math.min(timelineWidth, viewPos));
+      int rightX = Math.max(TIME_W, Math.min(timelineWidth, viewPos + extent));
+      leftInstant = instantForX(leftX);
+      rightInstant = instantForX(rightX);
+    }
+    double t0 = instantToRatio(leftInstant, start, end);
+    double t1 = instantToRatio(rightInstant, start, end);
+    int x = axX + (int) Math.round(axW * t0);
+    int width = Math.max(6, (int) Math.round(axW * Math.max(0d, t1 - t0)));
+    int maxX = axX + axW;
+    if (x + width > maxX) {
+      width = Math.max(6, maxX - x);
+    }
+    if (width <= 0) {
+      width = 6;
+    }
+    if (x < axX) {
+      x = axX;
+    } else if (x + width > maxX) {
+      x = Math.max(axX, maxX - width);
+    }
+    return new java.awt.Rectangle(x, axY + 1, width, Math.max(1, axH - 2));
+  }
+
+  private void seekFromMinimap(int px) {
+    int axX = minimapRect.x + MINIMAP_PADDING;
+    int axW = Math.max(1, minimapRect.width - MINIMAP_PADDING * 2);
+    if (axW <= 0) {
+      return;
+    }
+    double t = (px - axX) / (double) axW;
+    t = Math.max(0d, Math.min(1d, t));
+    java.time.Instant start = getViewFrom().toInstant();
+    java.time.Instant end = getViewTo().toInstant();
+    long totalMillis = Math.max(1L, java.time.Duration.between(start, end).toMillis());
+    long targetMillis = Math.round(totalMillis * t);
+    java.time.Instant target = start.plusMillis(targetMillis);
+    centerViewOn(target);
+    repaint();
+  }
+
+  private void promptGotoDate() {
+    String value = javax.swing.JOptionPane.showInputDialog(this, "Aller à (yyyy-MM-dd HH:mm) :");
+    if (value == null || value.isBlank()) {
+      return;
+    }
+    String normalized = value.replace('/', '-').trim().replace('T', ' ');
+    try {
+      java.time.LocalDateTime ldt =
+          java.time.LocalDateTime.parse(
+              normalized, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+      java.time.Instant instant = ldt.atZone(java.time.ZoneId.systemDefault()).toInstant();
+      centerViewOn(instant);
+    } catch (RuntimeException ex) {
+      notifyInfo("Format invalide. Ex: 2025-10-06 09:30");
+    }
+  }
+
+  private void centerViewOn(java.time.Instant instant) {
+    if (instant == null) {
+      return;
+    }
+    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    java.time.LocalDate targetDate = instant.atZone(zone).toLocalDate();
+    boolean changedDay = targetDate != null && !java.util.Objects.equals(targetDate, day);
+    if (changedDay) {
+      setDay(targetDate);
+      javax.swing.SwingUtilities.invokeLater(() -> centerViewportOnInstant(instant));
+    } else {
+      centerViewportOnInstant(instant);
+    }
+  }
+
+  private void centerViewportOnInstant(java.time.Instant instant) {
+    if (instant == null) {
+      return;
+    }
+    javax.swing.SwingUtilities.invokeLater(
+        () -> {
+          int x = xForInstant(instant);
+          centerViewportOnX(x);
+        });
+  }
+
+  private static Color lerpColor(Color a, Color b, float t) {
+    t = Math.max(0f, Math.min(1f, t));
+    int r = (int) (a.getRed() + (b.getRed() - a.getRed()) * t);
+    int g = (int) (a.getGreen() + (b.getGreen() - a.getGreen()) * t);
+    int bl = (int) (a.getBlue() + (b.getBlue() - a.getBlue()) * t);
+    int al = (int) (a.getAlpha() + (b.getAlpha() - a.getAlpha()) * t);
+    return new Color(r, g, bl, al);
+  }
+
+  private double instantToRatio(java.time.Instant instant) {
+    return instantToRatio(instant, getViewFrom().toInstant(), getViewTo().toInstant());
+  }
+
+  private double instantToRatio(
+      java.time.Instant instant, java.time.Instant start, java.time.Instant end) {
+    if (instant == null || start == null || end == null) {
+      return 0d;
+    }
+    long totalMillis = Math.max(1L, java.time.Duration.between(start, end).toMillis());
+    long current = java.time.Duration.between(start, instant).toMillis();
+    double clamped = Math.max(0d, Math.min(totalMillis, current));
+    return clamped / (double) totalMillis;
+  }
+
+  private static java.time.Instant mid(java.time.Instant a, java.time.Instant b) {
+    if (a == null) {
+      return b;
+    }
+    if (b == null) {
+      return a;
+    }
+    long avg = (a.toEpochMilli() + b.toEpochMilli()) / 2L;
+    return java.time.Instant.ofEpochMilli(avg);
   }
 
   private void paintHeatmap(Graphics2D g2, int viewDays, int dayWidth, int height) {
