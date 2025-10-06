@@ -152,6 +152,9 @@ public class PlanningPanel extends JPanel {
   // B.2 — Undo léger sur actions de suggestion
   private final java.util.Deque<Runnable> undoStack = new java.util.ArrayDeque<>();
   private final java.util.Deque<String> undoLabels = new java.util.ArrayDeque<>();
+  // B.3 — Affinités client↔ressource (persistées)
+  private final java.util.prefs.Preferences affinityPrefs =
+      java.util.prefs.Preferences.userRoot().node("com.location.affinity");
   private javax.swing.JList<String> conflictsList;
   private boolean conflictsVisible = true;
   private ConflictEntry selectedConflict;
@@ -5722,10 +5725,10 @@ public class PlanningPanel extends JPanel {
   }
 
   private static final class Suggestion {
-    final String label;
-    final String tooltip;
-    final int score;
-    final Runnable action;
+    final String label; // ex: "↔ Réaffecter → Camion 12"
+    final String tooltip; // explication
+    final int score; // plus petit = mieux
+    final Runnable action; // applique la suggestion
 
     Suggestion(String label, String tooltip, int score, Runnable action) {
       this.label = label;
@@ -5797,14 +5800,25 @@ public class PlanningPanel extends JPanel {
           if (!free) {
             continue;
           }
-          String label = "Réaffecter → " + candidate.name();
-          String tooltip = "Libre " + timeLabel(start, end) + " • Type compatible";
-          int score = 10;
-          if (shorter != null
-              && shorter.agencyId() != null
-              && shorter.agencyId().equals(candidate.agencyId())) {
-            score -= 3;
+          int affinity = affinityScore(shorter.clientId(), candidate.id());
+          double load = loadForResourceInterval(candidate.id(), start, end);
+          boolean sameAgency =
+              shorter.agencyId() != null && shorter.agencyId().equals(candidate.agencyId());
+          int score = 30;
+          if (!sameAgency) {
+            score += 10;
           }
+          score += (int) Math.round(load * 20.0);
+          score -= Math.min(10, affinity * 2);
+          String label = "↔ Réaffecter → " + candidate.name();
+          String tooltip =
+              (sameAgency ? "Même agence" : "Agence différente")
+                  + " • Charge~"
+                  + (int) Math.round(load * 100)
+                  + "% • Affinité "
+                  + affinity
+                  + " • Libre "
+                  + timeLabel(start, end);
           String newResourceId = candidate.id();
           suggestions.add(
               new Suggestion(
@@ -5821,9 +5835,11 @@ public class PlanningPanel extends JPanel {
       for (int offset : offsets) {
         if (canShiftWithoutOverlap(shorter, offset)) {
           int delta = offset;
-          String label = (delta > 0 ? "Décaler +" : "Décaler ") + delta + " min";
-          String tooltip = "Sans chevauchement • Durée conservée";
-          int score = Math.abs(delta);
+          double localLoad = localLoadAroundInterval(shorter, delta);
+          int score = Math.abs(delta) + (int) Math.round(localLoad * 10.0);
+          String label = "⇢ " + ((delta > 0 ? "Décaler +" : "Décaler ") + delta + " min");
+          String tooltip =
+              "Sans chevauchement • Durée conservée • Charge~" + (int) Math.round(localLoad * 100) + "%";
           suggestions.add(new Suggestion(label, tooltip, score, () -> applyShift(shorter, delta)));
         }
       }
@@ -5897,6 +5913,7 @@ public class PlanningPanel extends JPanel {
       return;
     }
     tryUpdateResources(intervention, after);
+    recordAffinity(intervention.clientId(), newResourceId);
     Models.Intervention refreshed = findInterventionById(intervention.id());
     java.util.LinkedHashSet<String> appliedSet =
         refreshed != null
@@ -6052,7 +6069,7 @@ public class PlanningPanel extends JPanel {
       suggestionsPanel.add(button);
     }
     if (!undoStack.isEmpty()) {
-      javax.swing.JButton undoButton = new javax.swing.JButton("Annuler (Ctrl+Z)");
+      javax.swing.JButton undoButton = new javax.swing.JButton("↶ Annuler (Ctrl+Z)");
       String tooltip = undoLabels.peek();
       if (tooltip != null && !tooltip.isBlank()) {
         undoButton.setToolTipText(tooltip);
@@ -6064,6 +6081,77 @@ public class PlanningPanel extends JPanel {
     suggestionsPanel.setVisible(true);
     suggestionsPanel.revalidate();
     suggestionsPanel.repaint();
+  }
+
+  private int affinityScore(String clientId, String resourceId) {
+    if (clientId == null || resourceId == null) {
+      return 0;
+    }
+    String key = clientId + ":" + resourceId;
+    return affinityPrefs.getInt(key, 0);
+  }
+
+  private void recordAffinity(String clientId, String resourceId) {
+    if (clientId == null || resourceId == null) {
+      return;
+    }
+    String key = clientId + ":" + resourceId;
+    int current = affinityPrefs.getInt(key, 0);
+    affinityPrefs.putInt(key, Math.min(50, current + 1));
+  }
+
+  private double loadForResourceInterval(
+      String resourceId, java.time.Instant from, java.time.Instant to) {
+    if (resourceId == null || from == null || to == null || !to.isAfter(from)) {
+      return 0.0d;
+    }
+    long windowMinutes = Math.max(1L, java.time.Duration.between(from, to).toMinutes());
+    long overlapMinutes = 0L;
+    for (Models.Intervention intervention : interventions) {
+      if (intervention == null || intervention.start() == null || intervention.end() == null) {
+        continue;
+      }
+      if (!effectiveResourceIds(intervention).contains(resourceId)) {
+        continue;
+      }
+      if (!overlap(from, to, intervention.start(), intervention.end())) {
+        continue;
+      }
+      java.time.Instant overlapStart =
+          intervention.start().isAfter(from) ? intervention.start() : from;
+      java.time.Instant overlapEnd = intervention.end().isBefore(to) ? intervention.end() : to;
+      long minutes =
+          Math.max(0L, java.time.Duration.between(overlapStart, overlapEnd).toMinutes());
+      overlapMinutes += minutes;
+    }
+    double ratio = (double) overlapMinutes / (double) windowMinutes;
+    if (ratio < 0.0d) {
+      return 0.0d;
+    }
+    if (ratio > 1.0d) {
+      return 1.0d;
+    }
+    return ratio;
+  }
+
+  private double localLoadAroundInterval(Models.Intervention intervention, int shiftMinutes) {
+    if (intervention == null || intervention.start() == null || intervention.end() == null) {
+      return 0.0d;
+    }
+    java.time.Instant shiftedStart =
+        intervention.start().plus(java.time.Duration.ofMinutes(shiftMinutes));
+    java.time.Instant shiftedEnd =
+        intervention.end().plus(java.time.Duration.ofMinutes(shiftMinutes));
+    java.time.Instant windowStart = shiftedStart.minus(java.time.Duration.ofMinutes(60));
+    java.time.Instant windowEnd = shiftedEnd.plus(java.time.Duration.ofMinutes(60));
+    double maxLoad = 0.0d;
+    for (String resourceId : effectiveResourceIds(intervention)) {
+      if (resourceId == null) {
+        continue;
+      }
+      maxLoad = Math.max(maxLoad, loadForResourceInterval(resourceId, windowStart, windowEnd));
+    }
+    return maxLoad;
   }
 
   private void pushUndo(String label, Runnable undo) {
