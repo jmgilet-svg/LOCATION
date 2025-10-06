@@ -194,6 +194,10 @@ public class PlanningPanel extends JPanel {
   private java.util.List<Models.Intervention> idxInterv = new java.util.ArrayList<>();
   private final java.util.Map<String, Models.Resource> idxResByName = new java.util.HashMap<>();
   private final java.util.Map<String, Models.Client> idxClientByName = new java.util.HashMap<>();
+  private final java.util.Deque<String> paletteHistory = new java.util.ArrayDeque<>();
+  private int paletteHistoryCursor = -1;
+  private final java.util.prefs.Preferences palettePrefs =
+      java.util.prefs.Preferences.userRoot().node("com.location.palette.history");
   private ConflictEntry selectedConflict;
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
@@ -3030,6 +3034,20 @@ public class PlanningPanel extends JPanel {
     paletteList = new javax.swing.JList<>(paletteModel);
     paletteList.setVisibleRowCount(10);
     paletteList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+    paletteList.setCellRenderer(
+        new javax.swing.DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            java.awt.Component c =
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            if (c instanceof javax.swing.JLabel label) {
+              label.setOpaque(true);
+              label.setText(value == null ? "" : value.toString());
+            }
+            return c;
+          }
+        });
     paletteList.addMouseListener(
         new java.awt.event.MouseAdapter() {
           @Override
@@ -3067,12 +3085,22 @@ public class PlanningPanel extends JPanel {
               paletteDlg.setVisible(false);
             }
             if (e.getKeyCode() == java.awt.event.KeyEvent.VK_UP) {
-              int idx = Math.max(0, paletteList.getSelectedIndex() - 1);
-              paletteList.setSelectedIndex(idx);
+              if (paletteInput.getText().isBlank()) {
+                historyPrev();
+                e.consume();
+              } else {
+                int idx = Math.max(0, paletteList.getSelectedIndex() - 1);
+                paletteList.setSelectedIndex(idx);
+              }
             }
             if (e.getKeyCode() == java.awt.event.KeyEvent.VK_DOWN) {
-              int idx = Math.min(paletteModel.size() - 1, paletteList.getSelectedIndex() + 1);
-              paletteList.setSelectedIndex(idx);
+              if (paletteInput.getText().isBlank()) {
+                historyNext();
+                e.consume();
+              } else {
+                int idx = Math.min(paletteModel.size() - 1, paletteList.getSelectedIndex() + 1);
+                paletteList.setSelectedIndex(idx);
+              }
             }
           }
         });
@@ -3086,6 +3114,7 @@ public class PlanningPanel extends JPanel {
     ensurePalette();
     buildSearchIndex();
     paletteInput.setText("");
+    loadHistory();
     updatePaletteResults();
     centerDialog(paletteDlg, 520, 320);
     paletteDlg.setVisible(true);
@@ -3135,31 +3164,55 @@ public class PlanningPanel extends JPanel {
     paletteModel.clear();
     paletteHits.clear();
     if (query.isEmpty()) {
-      paletteModel.addElement("› Tapez pour chercher (titres, #tags, @ressources, %client, >date)");
+      paletteModel.addElement("› Tapez pour chercher (titres, #tags, @ressources, %client, >date) — ↑/↓ historique");
       return;
     }
     String lowerQuery = query.toLowerCase();
     if (query.startsWith(">")) {
       java.time.Instant instant = parseDateInput(query.substring(1).trim());
       if (instant != null) {
-        paletteModel.addElement("Aller à : " + query.substring(1).trim());
+        String label =
+            html(
+                "Aller à : ",
+                highlight(query.substring(1).trim(), query.substring(1).trim()));
+        paletteModel.addElement(label);
         paletteHits.add(instant);
       }
     }
     if (query.startsWith("@")) {
       String rq = lowerQuery.substring(1);
-      for (java.util.Map.Entry<String, Models.Resource> entry : idxResByName.entrySet()) {
-        if (entry.getKey().contains(rq)) {
-          paletteModel.addElement("Ressource : " + entry.getValue().name());
-          paletteHits.add(entry.getValue());
+      java.util.List<java.util.Map.Entry<String, Models.Resource>> entries =
+          new java.util.ArrayList<>(idxResByName.entrySet());
+      entries.sort(
+          (a, b) -> Integer.compare(fuzzyScore(b.getKey(), rq), fuzzyScore(a.getKey(), rq)));
+      for (java.util.Map.Entry<String, Models.Resource> entry : entries) {
+        int score = fuzzyScore(entry.getKey(), rq);
+        if (score <= 0) {
+          continue;
+        }
+        String name = entry.getValue().name();
+        paletteModel.addElement(html("Ressource : ", highlight(name, rq)));
+        paletteHits.add(entry.getValue());
+        if (paletteModel.size() > 50) {
+          break;
         }
       }
     } else if (query.startsWith("%")) {
       String cq = lowerQuery.substring(1);
-      for (java.util.Map.Entry<String, Models.Client> entry : idxClientByName.entrySet()) {
-        if (entry.getKey().contains(cq)) {
-          paletteModel.addElement("Client : " + entry.getValue().name());
-          paletteHits.add(entry.getValue());
+      java.util.List<java.util.Map.Entry<String, Models.Client>> entries =
+          new java.util.ArrayList<>(idxClientByName.entrySet());
+      entries.sort(
+          (a, b) -> Integer.compare(fuzzyScore(b.getKey(), cq), fuzzyScore(a.getKey(), cq)));
+      for (java.util.Map.Entry<String, Models.Client> entry : entries) {
+        int score = fuzzyScore(entry.getKey(), cq);
+        if (score <= 0) {
+          continue;
+        }
+        String name = entry.getValue().name();
+        paletteModel.addElement(html("Client : ", highlight(name, cq)));
+        paletteHits.add(entry.getValue());
+        if (paletteModel.size() > 50) {
+          break;
         }
       }
     } else if (query.startsWith("#")) {
@@ -3167,24 +3220,43 @@ public class PlanningPanel extends JPanel {
       for (Models.Intervention it : idxInterv) {
         java.util.List<String> tags = it.tags() != null ? it.tags() : java.util.List.of();
         for (String tag : tags) {
-          if (tag != null && tag.toLowerCase().contains(tq)) {
-            paletteModel.addElement("Tag : #" + tag + " — " + it.title());
+          if (tag == null) {
+            continue;
+          }
+          int score = fuzzyScore(tag.toLowerCase(), tq);
+          if (score > 0) {
+            String label = html("Tag : #", highlight(tag, tq) + " — " + escape(it.title()));
+            paletteModel.addElement(label);
             paletteHits.add(it);
             break;
           }
         }
       }
     }
+    java.util.List<Models.Intervention> interventionsSorted = new java.util.ArrayList<>(idxInterv);
+    interventionsSorted.sort(
+        (a, b) -> {
+          int scoreA = Math.max(fuzzyScore(safeLower(a.title()), lowerQuery), fuzzyScore(safeLower(a.notes()), lowerQuery));
+          int scoreB = Math.max(fuzzyScore(safeLower(b.title()), lowerQuery), fuzzyScore(safeLower(b.notes()), lowerQuery));
+          return Integer.compare(scoreB, scoreA);
+        });
     int added = 0;
-    for (Models.Intervention it : idxInterv) {
+    for (Models.Intervention it : interventionsSorted) {
       if (added > 50) {
         break;
       }
       String title = it.title() != null ? it.title() : "";
       String notes = it.notes() != null ? it.notes() : "";
-      if (title.toLowerCase().contains(lowerQuery) || notes.toLowerCase().contains(lowerQuery)) {
-        paletteModel.addElement(
-            "Intervention : " + title + "  (" + timeLabel(it.start(), it.end()) + ")");
+      int score = Math.max(fuzzyScore(title.toLowerCase(), lowerQuery), fuzzyScore(notes.toLowerCase(), lowerQuery));
+      if (score > 0) {
+        String label =
+            html(
+                "Intervention : ",
+                highlight(title, lowerQuery)
+                    + "  ("
+                    + escape(timeLabel(it.start(), it.end()))
+                    + ")");
+        paletteModel.addElement(label);
         paletteHits.add(it);
         added++;
       }
@@ -3206,6 +3278,10 @@ public class PlanningPanel extends JPanel {
       paletteDlg.setVisible(false);
       return;
     }
+    String query = paletteInput.getText();
+    if (query != null && !query.isBlank()) {
+      pushHistory(query.trim());
+    }
     Object hit = paletteHits.get(index);
     if (hit instanceof java.time.Instant instant) {
       centerViewOn(instant);
@@ -3225,6 +3301,149 @@ public class PlanningPanel extends JPanel {
       repaint();
     }
     paletteDlg.setVisible(false);
+  }
+
+  private int fuzzyScore(String haystack, String needle) {
+    if (haystack == null || needle == null) {
+      return 0;
+    }
+    String hay = haystack.toLowerCase();
+    String ned = needle.toLowerCase();
+    int i = 0;
+    int j = 0;
+    int score = 0;
+    int streak = 0;
+    while (i < hay.length() && j < ned.length()) {
+      char ch = hay.charAt(i);
+      char cn = ned.charAt(j);
+      if (ch == cn) {
+        streak++;
+        score += 5 + Math.min(4, streak);
+        j++;
+        i++;
+      } else {
+        streak = 0;
+        i++;
+        score -= 1;
+      }
+    }
+    if (j < ned.length()) {
+      return 0;
+    }
+    return Math.max(1, score);
+  }
+
+  private String highlight(String text, String query) {
+    if (text == null) {
+      return "";
+    }
+    if (query == null || query.isBlank()) {
+      return escape(text);
+    }
+    String lowerText = text.toLowerCase();
+    String lowerQuery = query.toLowerCase();
+    StringBuilder sb = new StringBuilder();
+    int index = 0;
+    while (true) {
+      int found = lowerText.indexOf(lowerQuery, index);
+      if (found < 0) {
+        sb.append(escape(text.substring(index)));
+        break;
+      }
+      sb.append(escape(text.substring(index, found)));
+      sb.append("<b>").append(escape(text.substring(found, found + lowerQuery.length()))).append("</b>");
+      index = found + lowerQuery.length();
+    }
+    return sb.toString();
+  }
+
+  private String html(String prefix, String content) {
+    if (content != null && content.startsWith("<html>")) {
+      return "<html>" + escape(prefix) + content.substring(6);
+    }
+    return "<html>" + escape(prefix) + (content == null ? "" : content) + "</html>";
+  }
+
+  private String escape(String text) {
+    if (text == null) {
+      return "";
+    }
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  private String safeLower(String text) {
+    return text == null ? "" : text.toLowerCase();
+  }
+
+  private void pushHistory(String query) {
+    if (!paletteHistory.isEmpty() && paletteHistory.peekFirst().equalsIgnoreCase(query)) {
+      return;
+    }
+    paletteHistory.removeIf(entry -> entry.equalsIgnoreCase(query));
+    paletteHistory.addFirst(query);
+    while (paletteHistory.size() > 10) {
+      paletteHistory.removeLast();
+    }
+    paletteHistoryCursor = -1;
+    saveHistory();
+  }
+
+  private void historyPrev() {
+    if (paletteHistory.isEmpty()) {
+      return;
+    }
+    if (paletteHistoryCursor < paletteHistory.size() - 1) {
+      paletteHistoryCursor++;
+    }
+    setHistoryCursor();
+  }
+
+  private void historyNext() {
+    if (paletteHistory.isEmpty()) {
+      return;
+    }
+    if (paletteHistoryCursor > 0) {
+      paletteHistoryCursor--;
+      setHistoryCursor();
+      return;
+    }
+    paletteHistoryCursor = -1;
+    paletteInput.setText("");
+    updatePaletteResults();
+  }
+
+  private void setHistoryCursor() {
+    if (paletteHistoryCursor >= 0 && paletteHistoryCursor < paletteHistory.size()) {
+      String value = paletteHistory.stream().skip(paletteHistoryCursor).findFirst().orElse("");
+      paletteInput.setText(value);
+      paletteInput.setCaretPosition(value.length());
+      updatePaletteResults();
+    }
+  }
+
+  private void saveHistory() {
+    int i = 0;
+    for (String entry : paletteHistory) {
+      palettePrefs.put("h" + i, entry);
+      i++;
+      if (i >= 10) {
+        break;
+      }
+    }
+    for (; i < 10; i++) {
+      palettePrefs.remove("h" + i);
+    }
+  }
+
+  private void loadHistory() {
+    paletteHistory.clear();
+    for (int i = 0; i < 10; i++) {
+      String entry = palettePrefs.get("h" + i, null);
+      if (entry != null && !entry.isBlank()) {
+        paletteHistory.addLast(entry);
+      }
+    }
+    paletteHistoryCursor = -1;
   }
 
   private void scrollToResource(String resourceId) {
