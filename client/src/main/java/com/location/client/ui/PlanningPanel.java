@@ -149,6 +149,9 @@ public class PlanningPanel extends JPanel {
   private final java.util.List<ConflictEntry> conflictEntries = new java.util.ArrayList<>();
   private javax.swing.JPanel conflictsPanel;
   private javax.swing.JPanel suggestionsPanel;
+  // B.2 — Undo léger sur actions de suggestion
+  private final java.util.Deque<Runnable> undoStack = new java.util.ArrayDeque<>();
+  private final java.util.Deque<String> undoLabels = new java.util.ArrayDeque<>();
   private javax.swing.JList<String> conflictsList;
   private boolean conflictsVisible = true;
   private ConflictEntry selectedConflict;
@@ -269,6 +272,21 @@ public class PlanningPanel extends JPanel {
               @Override
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 snapSelectedToNearestGap(1);
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_Z, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "undoAction");
+    this.getActionMap()
+        .put(
+            "undoAction",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                performUndo();
               }
             });
 
@@ -3712,6 +3730,18 @@ public class PlanningPanel extends JPanel {
     return (legacyId == null || legacyId.isBlank()) ? java.util.List.of() : java.util.List.of(legacyId);
   }
 
+  private Models.Intervention findInterventionById(String id) {
+    if (id == null || interventions == null || interventions.isEmpty()) {
+      return null;
+    }
+    for (Models.Intervention intervention : interventions) {
+      if (intervention != null && id.equals(intervention.id())) {
+        return intervention;
+      }
+    }
+    return null;
+  }
+
   private java.awt.Rectangle tileRect(Tile t) {
     if (t == null) {
       return new java.awt.Rectangle();
@@ -5693,10 +5723,14 @@ public class PlanningPanel extends JPanel {
 
   private static final class Suggestion {
     final String label;
+    final String tooltip;
+    final int score;
     final Runnable action;
 
-    Suggestion(String label, Runnable action) {
+    Suggestion(String label, String tooltip, int score, Runnable action) {
       this.label = label;
+      this.tooltip = tooltip;
+      this.score = score;
       this.action = action;
     }
   }
@@ -5764,8 +5798,17 @@ public class PlanningPanel extends JPanel {
             continue;
           }
           String label = "Réaffecter → " + candidate.name();
+          String tooltip = "Libre " + timeLabel(start, end) + " • Type compatible";
+          int score = 10;
+          if (shorter != null
+              && shorter.agencyId() != null
+              && shorter.agencyId().equals(candidate.agencyId())) {
+            score -= 3;
+          }
           String newResourceId = candidate.id();
-          suggestions.add(new Suggestion(label, () -> applyReassign(entry, shorter, newResourceId)));
+          suggestions.add(
+              new Suggestion(
+                  label, tooltip, score, () -> applyReassign(entry, shorter, newResourceId)));
           if (++added >= 3) {
             break;
           }
@@ -5779,14 +5822,23 @@ public class PlanningPanel extends JPanel {
         if (canShiftWithoutOverlap(shorter, offset)) {
           int delta = offset;
           String label = (delta > 0 ? "Décaler +" : "Décaler ") + delta + " min";
-          suggestions.add(new Suggestion(label, () -> applyShift(shorter, delta)));
+          String tooltip = "Sans chevauchement • Durée conservée";
+          int score = Math.abs(delta);
+          suggestions.add(new Suggestion(label, tooltip, score, () -> applyShift(shorter, delta)));
         }
       }
     }
 
     if (suggestions.isEmpty()) {
-      suggestions.add(new Suggestion("Aucune suggestion applicable", null));
+      suggestions.add(
+          new Suggestion(
+              "Aucune suggestion applicable",
+              "Aucune alternative libre proche",
+              Integer.MAX_VALUE,
+              null));
     }
+    suggestions.sort(
+        java.util.Comparator.<Suggestion>comparingInt(s -> s.score).thenComparing(s -> s.label));
     return suggestions;
   }
 
@@ -5831,12 +5883,44 @@ public class PlanningPanel extends JPanel {
       Toolkit.getDefaultToolkit().beep();
       return;
     }
-    java.util.List<String> resourceIds = new java.util.ArrayList<>(effectiveResourceIds(intervention));
-    resourceIds.removeIf(r -> r == null || r.equals(entry.resourceId));
-    if (!resourceIds.contains(newResourceId)) {
-      resourceIds.add(newResourceId);
+    java.util.List<String> before = new java.util.ArrayList<>(effectiveResourceIds(intervention));
+    before.removeIf(r -> r == null || r.isBlank());
+    java.util.List<String> after = new java.util.ArrayList<>(before);
+    after.removeIf(r -> r != null && r.equals(entry.resourceId));
+    if (!after.contains(newResourceId)) {
+      after.add(newResourceId);
     }
-    tryUpdateResources(intervention, resourceIds);
+    java.util.LinkedHashSet<String> beforeSet = new java.util.LinkedHashSet<>(before);
+    java.util.LinkedHashSet<String> afterSet = new java.util.LinkedHashSet<>(after);
+    if (afterSet.equals(beforeSet)) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+    tryUpdateResources(intervention, after);
+    Models.Intervention refreshed = findInterventionById(intervention.id());
+    java.util.LinkedHashSet<String> appliedSet =
+        refreshed != null
+            ? new java.util.LinkedHashSet<>(effectiveResourceIds(refreshed))
+            : afterSet;
+    if (appliedSet.equals(afterSet)) {
+      String title = intervention.title() == null ? "" : intervention.title();
+      java.util.List<String> beforeSnapshot = java.util.List.copyOf(before);
+      pushUndo(
+          "Réaffectation: " + title,
+          () -> {
+            try {
+              Models.Intervention current = findInterventionById(intervention.id());
+              Models.Intervention base = current != null ? current : copyOf(intervention);
+              if (base != null) {
+                Models.Intervention restored = base.withResourceIds(beforeSnapshot);
+                dsp.updateIntervention(restored);
+              }
+            } catch (RuntimeException ignored) {
+            }
+            reload();
+            repaint();
+          });
+    }
     rebuildSuggestions();
   }
 
@@ -5895,6 +5979,37 @@ public class PlanningPanel extends JPanel {
             intervention.price());
     try {
       Models.Intervention saved = dsp.updateIntervention(updated);
+      Models.Intervention applied = saved != null ? saved : updated;
+      String title = intervention.title() == null ? "" : intervention.title();
+      if (before != null) {
+        java.time.Instant originalStart = before.start();
+        java.time.Instant originalEnd = before.end();
+        pushUndo(
+            "Décaler " + (minutes >= 0 ? "+" : "") + minutes + " min: " + title,
+            () -> {
+              try {
+                Models.Intervention current = findInterventionById(applied.id());
+                Models.Intervention base = current != null ? current : applied;
+                Models.Intervention restored =
+                    new Models.Intervention(
+                        base.id(),
+                        base.agencyId(),
+                        base.resourceIds(),
+                        base.clientId(),
+                        base.driverId(),
+                        base.title(),
+                        originalStart,
+                        originalEnd,
+                        base.notes(),
+                        base.internalNotes(),
+                        base.price());
+                dsp.updateIntervention(restored);
+              } catch (RuntimeException ignored) {
+              }
+              reload();
+              repaint();
+            });
+      }
       setSelected(saved);
       reload();
       if (saved != null) {
@@ -5922,17 +6037,60 @@ public class PlanningPanel extends JPanel {
     for (Suggestion suggestion : suggestions) {
       if (suggestion.action == null) {
         javax.swing.JLabel label = new javax.swing.JLabel(suggestion.label);
+        if (suggestion.tooltip != null && !suggestion.tooltip.isBlank()) {
+          label.setToolTipText(suggestion.tooltip);
+        }
         suggestionsPanel.add(label);
         continue;
       }
       javax.swing.JButton button = new javax.swing.JButton(suggestion.label);
       button.setFocusable(false);
+      if (suggestion.tooltip != null && !suggestion.tooltip.isBlank()) {
+        button.setToolTipText(suggestion.tooltip);
+      }
       button.addActionListener(e -> suggestion.action.run());
       suggestionsPanel.add(button);
+    }
+    if (!undoStack.isEmpty()) {
+      javax.swing.JButton undoButton = new javax.swing.JButton("Annuler (Ctrl+Z)");
+      String tooltip = undoLabels.peek();
+      if (tooltip != null && !tooltip.isBlank()) {
+        undoButton.setToolTipText(tooltip);
+      }
+      undoButton.setFocusable(false);
+      undoButton.addActionListener(e -> performUndo());
+      suggestionsPanel.add(undoButton);
     }
     suggestionsPanel.setVisible(true);
     suggestionsPanel.revalidate();
     suggestionsPanel.repaint();
+  }
+
+  private void pushUndo(String label, Runnable undo) {
+    if (undo == null) {
+      return;
+    }
+    undoStack.push(undo);
+    undoLabels.push(label == null ? "" : label);
+  }
+
+  private void performUndo() {
+    if (undoStack.isEmpty()) {
+      javax.swing.UIManager.getLookAndFeel().provideErrorFeedback(this);
+      return;
+    }
+    Runnable undo = undoStack.pop();
+    String label = undoLabels.pop();
+    try {
+      undo.run();
+      if (label != null && !label.isBlank()) {
+        notifyInfo("Annulé — " + label);
+      } else {
+        notifyInfo("Action annulée");
+      }
+    } finally {
+      rebuildSuggestions();
+    }
   }
 
   private void snapSelectedToNearestGap(int direction) {
