@@ -185,6 +185,13 @@ public class PlanningPanel extends JPanel {
   private boolean minimapDragging = false;
   private int[] miniBins = new int[0];
   private int miniBinsMax = 1;
+  // C3 — Signets & navigation conflits
+  private final java.util.prefs.Preferences bookmarksPrefs =
+      java.util.prefs.Preferences.userRoot().node("com.location.bookmarks");
+  private final java.util.List<java.time.Instant> bookmarks = new java.util.ArrayList<>();
+  private javax.swing.JDialog bookmarksDlg;
+  private javax.swing.JList<String> bookmarksList;
+  private javax.swing.DefaultListModel<String> bookmarksModel;
   // C2 — Palette GoTo/Find (Ctrl+K / Meta+K)
   private javax.swing.JDialog paletteDlg;
   private javax.swing.JTextField paletteInput;
@@ -339,6 +346,66 @@ public class PlanningPanel extends JPanel {
     this.getInputMap(WHEN_FOCUSED)
         .put(
             javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_UP, java.awt.event.InputEvent.ALT_DOWN_MASK),
+            "conflictPrev");
+    this.getActionMap()
+        .put(
+            "conflictPrev",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                navigatePrevConflict();
+              }
+            });
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_DOWN, java.awt.event.InputEvent.ALT_DOWN_MASK),
+            "conflictNext");
+    this.getActionMap()
+        .put(
+            "conflictNext",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                navigateNextConflict();
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_B, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "bookmarkToggle");
+    this.getActionMap()
+        .put(
+            "bookmarkToggle",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                toggleBookmarkHere();
+              }
+            });
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_B,
+                java.awt.event.InputEvent.CTRL_DOWN_MASK
+                    | java.awt.event.InputEvent.SHIFT_DOWN_MASK),
+            "bookmarkOpen");
+    this.getActionMap()
+        .put(
+            "bookmarkOpen",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                openBookmarks();
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
                 java.awt.event.KeyEvent.VK_K, java.awt.event.InputEvent.CTRL_DOWN_MASK),
             "openPalette");
     this.getInputMap(WHEN_FOCUSED)
@@ -388,6 +455,8 @@ public class PlanningPanel extends JPanel {
             }
           }
         });
+
+    loadBookmarks();
 
     // Conflict helpers shortcuts
     this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('R'), "resolveAssign");
@@ -2781,6 +2850,17 @@ public class PlanningPanel extends JPanel {
       gh.fillRect(cx, axY + 2, 2, Math.max(1, Math.min(4, axH - 4)));
     }
 
+    java.awt.Color starColor =
+        darkTheme ? new Color(255, 210, 64) : new Color(255, 193, 7);
+    for (java.time.Instant bookmark : bookmarks) {
+      if (bookmark == null) {
+        continue;
+      }
+      int bx = axX + (int) Math.round(instantToRatio(bookmark) * axW);
+      bx = Math.max(axX + 2, Math.min(axX + axW - 8, bx - 3));
+      drawMiniStar(gh, bx, axY + Math.max(2, axH - 12), starColor);
+    }
+
     gh.setColor(new Color(80, 140, 255, 160));
     java.awt.Rectangle viewport = viewportRectInMinimap(axX, axY, axW, axH);
     gh.drawRect(viewport.x, viewport.y, viewport.width, viewport.height);
@@ -2792,6 +2872,18 @@ public class PlanningPanel extends JPanel {
         Math.max(0, minimapRect.width - 1),
         Math.max(0, minimapRect.height - 1));
     gh.dispose();
+  }
+
+  private void drawMiniStar(Graphics2D g2, int x, int y, java.awt.Color color) {
+    if (g2 == null || color == null) {
+      return;
+    }
+    java.awt.Color previous = g2.getColor();
+    g2.setColor(color);
+    int[] xs = {x + 4, x + 5, x + 7, x + 5, x + 4, x + 3, x + 1, x + 3};
+    int[] ys = {y, y + 2, y + 3, y + 4, y + 6, y + 4, y + 3, y + 2};
+    g2.fillPolygon(xs, ys, xs.length);
+    g2.setColor(previous);
   }
 
   private void paintHudFooter(Graphics2D baseGraphics) {
@@ -3562,6 +3654,15 @@ public class PlanningPanel extends JPanel {
           int x = xForInstant(instant);
           centerViewportOnX(x);
         });
+  }
+
+  private java.time.Instant viewCenterInstant() {
+    java.awt.Rectangle vis = getVisibleRect();
+    if (vis == null || vis.width <= 0) {
+      return mid(getViewFrom().toInstant(), getViewTo().toInstant());
+    }
+    int centerX = vis.x + vis.width / 2;
+    return instantForX(centerX);
   }
 
   private static Color lerpColor(Color a, Color b, float t) {
@@ -6633,6 +6734,329 @@ public class PlanningPanel extends JPanel {
       conflictsPanel.setVisible(conflictsVisible && !conflictEntries.isEmpty());
     }
     rebuildSuggestions();
+  }
+
+  private void navigateNextConflict() {
+    if (conflicts == null || conflicts.isEmpty()) {
+      javax.swing.UIManager.getLookAndFeel().provideErrorFeedback(this);
+      return;
+    }
+    java.time.Instant reference = viewCenterInstant();
+    int bestIndex = -1;
+    java.time.Instant bestInstant = null;
+    for (int i = 0; i < conflicts.size(); i++) {
+      ConflictUtil.Conflict conflict = conflicts.get(i);
+      java.time.Instant midpoint = conflictMidInstant(conflict);
+      if (midpoint == null) {
+        continue;
+      }
+      if (reference == null || midpoint.isAfter(reference)) {
+        if (bestInstant == null || midpoint.isBefore(bestInstant)) {
+          bestInstant = midpoint;
+          bestIndex = i;
+        }
+      }
+    }
+    if (bestIndex < 0) {
+      for (int i = 0; i < conflicts.size(); i++) {
+        java.time.Instant midpoint = conflictMidInstant(conflicts.get(i));
+        if (midpoint == null) {
+          continue;
+        }
+        if (bestInstant == null || midpoint.isBefore(bestInstant)) {
+          bestInstant = midpoint;
+          bestIndex = i;
+        }
+      }
+    }
+    if (bestIndex >= 0 && bestInstant != null) {
+      focusConflictAt(bestIndex, bestInstant);
+    } else {
+      javax.swing.UIManager.getLookAndFeel().provideErrorFeedback(this);
+    }
+  }
+
+  private void navigatePrevConflict() {
+    if (conflicts == null || conflicts.isEmpty()) {
+      javax.swing.UIManager.getLookAndFeel().provideErrorFeedback(this);
+      return;
+    }
+    java.time.Instant reference = viewCenterInstant();
+    int bestIndex = -1;
+    java.time.Instant bestInstant = null;
+    for (int i = 0; i < conflicts.size(); i++) {
+      ConflictUtil.Conflict conflict = conflicts.get(i);
+      java.time.Instant midpoint = conflictMidInstant(conflict);
+      if (midpoint == null) {
+        continue;
+      }
+      if (reference != null && midpoint.isBefore(reference)) {
+        if (bestInstant == null || midpoint.isAfter(bestInstant)) {
+          bestInstant = midpoint;
+          bestIndex = i;
+        }
+      }
+    }
+    if (bestIndex < 0) {
+      for (int i = 0; i < conflicts.size(); i++) {
+        java.time.Instant midpoint = conflictMidInstant(conflicts.get(i));
+        if (midpoint == null) {
+          continue;
+        }
+        if (bestInstant == null || midpoint.isAfter(bestInstant)) {
+          bestInstant = midpoint;
+          bestIndex = i;
+        }
+      }
+    }
+    if (bestIndex >= 0 && bestInstant != null) {
+      focusConflictAt(bestIndex, bestInstant);
+    } else {
+      javax.swing.UIManager.getLookAndFeel().provideErrorFeedback(this);
+    }
+  }
+
+  private java.time.Instant conflictMidInstant(ConflictUtil.Conflict conflict) {
+    if (conflict == null) {
+      return null;
+    }
+    java.time.Instant a = conflict.a() != null ? conflict.a().start() : null;
+    java.time.Instant b = conflict.b() != null ? conflict.b().start() : null;
+    return mid(a, b);
+  }
+
+  private void focusConflictAt(int conflictIndex, java.time.Instant when) {
+    if (conflicts == null || conflictIndex < 0 || conflictIndex >= conflicts.size()) {
+      return;
+    }
+    ConflictUtil.Conflict conflict = conflicts.get(conflictIndex);
+    if (conflict == null) {
+      return;
+    }
+    String key = conflictKey(conflict);
+    ConflictEntry targetEntry = null;
+    int listIndex = -1;
+    for (int i = 0; i < conflictEntries.size(); i++) {
+      ConflictEntry entry = conflictEntries.get(i);
+      if (entry != null && key.equals(entry.key())) {
+        targetEntry = entry;
+        listIndex = i;
+        break;
+      }
+    }
+    if (targetEntry != null) {
+      selectedConflict = targetEntry;
+      if (conflictsList != null) {
+        conflictsList.setSelectedIndex(listIndex);
+        conflictsList.ensureIndexIsVisible(listIndex);
+      }
+      rebuildSuggestions();
+    }
+    if (when != null) {
+      centerViewOn(when);
+    }
+    repaint();
+  }
+
+  private String conflictKey(ConflictUtil.Conflict conflict) {
+    if (conflict == null) {
+      return "";
+    }
+    String ida = conflict.a() != null && conflict.a().id() != null ? conflict.a().id() : "";
+    String idb = conflict.b() != null && conflict.b().id() != null ? conflict.b().id() : "";
+    String rid = conflict.resourceId() == null ? "" : conflict.resourceId();
+    return ida + "|" + idb + "|" + rid;
+  }
+
+  private void toggleBookmarkHere() {
+    java.time.Instant center = viewCenterInstant();
+    if (center == null) {
+      javax.swing.UIManager.getLookAndFeel().provideErrorFeedback(this);
+      return;
+    }
+    int nearest = indexOfNearestBookmark(center, java.time.Duration.ofMinutes(5));
+    if (nearest >= 0) {
+      java.time.Instant removed = bookmarks.remove(nearest);
+      saveBookmarks();
+      repaint();
+      notifyInfo("Signet supprimé — " + timeLabel(removed, removed));
+    } else {
+      addBookmark(center);
+      notifySuccess("Signet ajouté", "Signet ajouté: " + timeLabel(center, center));
+    }
+  }
+
+  private void addBookmark(java.time.Instant instant) {
+    if (instant == null) {
+      return;
+    }
+    bookmarks.add(instant);
+    bookmarks.sort(java.util.Comparator.naturalOrder());
+    while (bookmarks.size() > 50) {
+      bookmarks.remove(0);
+    }
+    saveBookmarks();
+    repaint();
+  }
+
+  private int indexOfNearestBookmark(java.time.Instant reference, java.time.Duration tolerance) {
+    if (reference == null) {
+      return -1;
+    }
+    long maxDelta = tolerance == null ? 0L : Math.abs(tolerance.toMillis());
+    int bestIndex = -1;
+    long bestDelta = Long.MAX_VALUE;
+    for (int i = 0; i < bookmarks.size(); i++) {
+      java.time.Instant instant = bookmarks.get(i);
+      if (instant == null) {
+        continue;
+      }
+      long delta = Math.abs(instant.toEpochMilli() - reference.toEpochMilli());
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestIndex = i;
+      }
+    }
+    if (bestIndex >= 0 && (tolerance == null || bestDelta <= maxDelta)) {
+      return bestIndex;
+    }
+    return -1;
+  }
+
+  private void openBookmarks() {
+    ensureBookmarksDialog();
+    rebuildBookmarksModel();
+    if (bookmarksList != null) {
+      bookmarksList.setBackground(themePanelBg);
+      bookmarksList.setForeground(themeFg);
+    }
+    if (bookmarksDlg != null) {
+      java.awt.Container content = bookmarksDlg.getContentPane();
+      if (content instanceof javax.swing.JComponent comp) {
+        comp.setBackground(themePanelBg);
+      }
+    }
+    centerDialog(bookmarksDlg, 420, 320);
+    bookmarksDlg.setVisible(true);
+    if (bookmarksList != null) {
+      bookmarksList.requestFocusInWindow();
+    }
+  }
+
+  private void ensureBookmarksDialog() {
+    if (bookmarksDlg != null) {
+      return;
+    }
+    java.awt.Window window = javax.swing.SwingUtilities.getWindowAncestor(this);
+    bookmarksDlg =
+        new javax.swing.JDialog(window, "Signets (⭐)", java.awt.Dialog.ModalityType.MODELESS);
+    bookmarksDlg.setUndecorated(true);
+    bookmarksDlg
+        .getRootPane()
+        .setBorder(
+            javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0, 80), 1),
+                javax.swing.BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+    javax.swing.JPanel root = new javax.swing.JPanel(new java.awt.BorderLayout(6, 6));
+    root.setBackground(themePanelBg);
+    bookmarksModel = new javax.swing.DefaultListModel<>();
+    bookmarksList = new javax.swing.JList<>(bookmarksModel);
+    bookmarksList.setVisibleRowCount(10);
+    bookmarksList.setBackground(themePanelBg);
+    bookmarksList.setForeground(themeFg);
+    root.add(new javax.swing.JScrollPane(bookmarksList), java.awt.BorderLayout.CENTER);
+    javax.swing.JPanel buttons =
+        new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 6, 6));
+    buttons.setOpaque(false);
+    javax.swing.JButton gotoButton = new javax.swing.JButton("Aller à");
+    javax.swing.JButton deleteButton = new javax.swing.JButton("Supprimer");
+    javax.swing.JButton closeButton = new javax.swing.JButton("Fermer");
+    gotoButton.addActionListener(
+        e -> {
+          int index = bookmarksList.getSelectedIndex();
+          if (index >= 0 && index < bookmarks.size()) {
+            java.time.Instant instant = bookmarks.get(index);
+            if (instant != null) {
+              centerViewOn(instant);
+              bookmarksDlg.setVisible(false);
+              repaint();
+            }
+          }
+        });
+    deleteButton.addActionListener(
+        e -> {
+          int index = bookmarksList.getSelectedIndex();
+          if (index >= 0 && index < bookmarks.size()) {
+            bookmarks.remove(index);
+            saveBookmarks();
+            rebuildBookmarksModel();
+            repaint();
+          }
+        });
+    closeButton.addActionListener(e -> bookmarksDlg.setVisible(false));
+    buttons.add(gotoButton);
+    buttons.add(deleteButton);
+    buttons.add(closeButton);
+    root.add(buttons, java.awt.BorderLayout.SOUTH);
+    bookmarksDlg.setContentPane(root);
+    bookmarksDlg.setSize(420, 320);
+  }
+
+  private void rebuildBookmarksModel() {
+    if (bookmarksModel == null) {
+      return;
+    }
+    bookmarksModel.clear();
+    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    java.time.format.DateTimeFormatter formatter =
+        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    for (java.time.Instant instant : bookmarks) {
+      if (instant == null) {
+        continue;
+      }
+      String label = formatter.format(java.time.ZonedDateTime.ofInstant(instant, zone));
+      bookmarksModel.addElement("⭐  " + label);
+    }
+    if (!bookmarksModel.isEmpty()) {
+      bookmarksList.setSelectedIndex(0);
+    }
+  }
+
+  private void saveBookmarks() {
+    StringBuilder builder = new StringBuilder();
+    for (int i = 0; i < bookmarks.size(); i++) {
+      java.time.Instant instant = bookmarks.get(i);
+      if (instant == null) {
+        continue;
+      }
+      if (builder.length() > 0) {
+        builder.append(',');
+      }
+      builder.append(instant.toEpochMilli());
+    }
+    bookmarksPrefs.put("list", builder.toString());
+  }
+
+  private void loadBookmarks() {
+    bookmarks.clear();
+    String csv = bookmarksPrefs.get("list", "");
+    if (csv != null && !csv.isBlank()) {
+      for (String token : csv.split(",")) {
+        if (token == null || token.isBlank()) {
+          continue;
+        }
+        try {
+          long millis = Long.parseLong(token.trim());
+          bookmarks.add(java.time.Instant.ofEpochMilli(millis));
+        } catch (NumberFormatException ignore) {
+          // Ignore malformed entries
+        }
+      }
+      bookmarks.sort(java.util.Comparator.naturalOrder());
+      while (bookmarks.size() > 50) {
+        bookmarks.remove(0);
+      }
+    }
   }
 
   private String conflictEntryLabel(ConflictEntry entry) {
