@@ -24,6 +24,7 @@ import java.awt.FontMetrics;
 import java.awt.IllegalComponentStateException;
 import java.awt.Stroke;
 import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -77,6 +78,7 @@ import javax.swing.KeyStroke;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.ImageIcon;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.Timer;
@@ -165,6 +167,13 @@ public class PlanningPanel extends JPanel {
   private java.awt.Color themeAccent;
   private javax.swing.JList<String> conflictsList;
   private boolean conflictsVisible = true;
+  private final javax.swing.Timer conflictsDebounce =
+      new javax.swing.Timer(120, e -> doComputeConflicts());
+  {
+    conflictsDebounce.setRepeats(false);
+  }
+  private volatile boolean conflictsDirty = false;
+  private final java.util.Map<String, javax.swing.Icon> iconCache = new java.util.HashMap<>();
   private ConflictEntry selectedConflict;
   private final List<Runnable> reloadListeners = new ArrayList<>();
   private final java.util.Map<String, Color> resourceColors = new HashMap<>();
@@ -1504,8 +1513,7 @@ public class PlanningPanel extends JPanel {
     notifyReloadListeners();
     fireSelectionChanged();
     repaint();
-    computeConflicts();
-    rebuildConflictsUI();
+    scheduleConflictsRebuild();
   }
 
   public void addReloadListener(Runnable listener) {
@@ -5615,6 +5623,67 @@ public class PlanningPanel extends JPanel {
       conflictsList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
       conflictsList.setBackground(themePanelBg);
       conflictsList.setForeground(themeFg);
+      conflictsList.setFixedCellHeight(22);
+      conflictsList.setCellRenderer(
+          new javax.swing.ListCellRenderer<String>() {
+            private final javax.swing.border.Border pad =
+                javax.swing.BorderFactory.createEmptyBorder(2, 6, 2, 6);
+
+            @Override
+            public java.awt.Component getListCellRendererComponent(
+                javax.swing.JList<? extends String> list,
+                String value,
+                int index,
+                boolean isSelected,
+                boolean cellHasFocus) {
+              final boolean selected = isSelected;
+              final String text = value;
+              return new javax.swing.JComponent() {
+                {
+                  setOpaque(true);
+                  setBorder(pad);
+                }
+
+                @Override
+                public java.awt.Dimension getPreferredSize() {
+                  return new java.awt.Dimension(160, 22);
+                }
+
+                @Override
+                protected void paintComponent(java.awt.Graphics g) {
+                  java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                  java.awt.Color bg = selected ? themeAccent : themePanelBg;
+                  java.awt.Color fg = selected ? java.awt.Color.WHITE : themeFg;
+                  g2.setColor(bg);
+                  g2.fillRect(0, 0, getWidth(), getHeight());
+                  int dotX = 8;
+                  int dotY = getHeight() / 2;
+                  int r = 4;
+                  java.awt.Color dot = themeBorder;
+                  String label = text == null ? "" : text;
+                  int sIdx = label.indexOf("[S");
+                  if (sIdx >= 0 && sIdx + 3 < label.length()) {
+                    char c = label.charAt(sIdx + 2);
+                    if (c == '1') {
+                      dot = new java.awt.Color(255, 202, 40);
+                    } else if (c == '2') {
+                      dot = new java.awt.Color(255, 111, 97);
+                    } else if (c == '3') {
+                      dot = new java.awt.Color(235, 87, 87);
+                    }
+                  }
+                  g2.setColor(dot);
+                  g2.fillOval(dotX - r, dotY - r, r * 2, r * 2);
+                  g2.setColor(fg);
+                  java.awt.FontMetrics fm = g2.getFontMetrics();
+                  int tx = dotX + r + 6;
+                  int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                  g2.drawString(label, tx, ty);
+                  g2.dispose();
+                }
+              };
+            }
+          });
       conflictsList.addListSelectionListener(
           ev -> {
             if (ev.getValueIsAdjusting()) {
@@ -5647,7 +5716,7 @@ public class PlanningPanel extends JPanel {
     }
     if (conflictsList != null) {
       String[] items =
-          conflictEntries.stream().map(ConflictEntry::toString).toArray(String[]::new);
+          conflictEntries.stream().map(this::conflictEntryLabel).toArray(String[]::new);
       conflictsList.setListData(items);
       if (selectedConflict != null) {
         String key = selectedConflict.key();
@@ -5672,6 +5741,56 @@ public class PlanningPanel extends JPanel {
       conflictsPanel.setVisible(conflictsVisible && !conflictEntries.isEmpty());
     }
     rebuildSuggestions();
+  }
+
+  private String conflictEntryLabel(ConflictEntry entry) {
+    if (entry == null) {
+      return "";
+    }
+    int severity = entry.severity;
+    if (severity < 1) {
+      severity = 1;
+    }
+    if (severity > 3) {
+      severity = 3;
+    }
+    String resource = entry.resourceId == null ? "?" : entry.resourceId;
+    java.time.Instant start =
+        earliestInstant(entry.a == null ? null : entry.a.start(),
+            entry.b == null ? null : entry.b.start());
+    java.time.Instant end =
+        latestInstant(entry.a == null ? null : entry.a.end(), entry.b == null ? null : entry.b.end());
+    String time = timeLabel(start, end);
+    String titleA = entry.a == null || entry.a.title() == null ? "" : entry.a.title();
+    String titleB = entry.b == null || entry.b.title() == null ? "" : entry.b.title();
+    StringBuilder sb = new StringBuilder();
+    sb.append("[S").append(severity).append("] ").append(resource);
+    if (time != null && !time.isBlank()) {
+      sb.append(" • ").append(time);
+    }
+    sb.append("  ").append(titleA).append(" ↔ ").append(titleB);
+    return sb.toString();
+  }
+
+  private void scheduleConflictsRebuild() {
+    conflictsDirty = true;
+    if (conflictsDebounce.isRunning()) {
+      conflictsDebounce.restart();
+    } else {
+      conflictsDebounce.start();
+    }
+  }
+
+  private void doComputeConflicts() {
+    if (!conflictsDirty) {
+      return;
+    }
+    conflictsDirty = false;
+    javax.swing.SwingUtilities.invokeLater(
+        () -> {
+          computeConflicts();
+          rebuildConflictsUI();
+        });
   }
 
   private void tryAutoResolveAssign(ConflictEntry entry) {
@@ -6107,7 +6226,7 @@ public class PlanningPanel extends JPanel {
       if (suggestion.tooltip != null && !suggestion.tooltip.isBlank()) {
         button.setToolTipText(suggestion.tooltip);
       }
-      javax.swing.Icon icon = iconForSuggestion(suggestion);
+      javax.swing.Icon icon = getCachedIcon(iconForSuggestionType(suggestion), themeAccent, 14);
       if (icon != null) {
         button.setIcon(icon);
       }
@@ -6127,7 +6246,7 @@ public class PlanningPanel extends JPanel {
           javax.swing.BorderFactory.createCompoundBorder(
               javax.swing.BorderFactory.createLineBorder(themeBorder),
               javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8)));
-      undoButton.setIcon(new VectorIcon(VectorIcon.Type.UNDO, themeAccent));
+      undoButton.setIcon(getCachedIcon(VectorIcon.Type.UNDO, themeAccent, 14));
       undoButton.addActionListener(e -> performUndo());
       suggestionsPanel.add(undoButton);
     }
@@ -6172,16 +6291,15 @@ public class PlanningPanel extends JPanel {
     }
   }
 
-  private javax.swing.Icon iconForSuggestion(Suggestion suggestion) {
+  private VectorIcon.Type iconForSuggestionType(Suggestion suggestion) {
     if (suggestion == null || suggestion.label == null) {
       return null;
     }
-    java.awt.Color color = themeAccent;
     if (suggestion.label.startsWith("↔ Réaffecter") || suggestion.label.startsWith("Réaffecter")) {
-      return new VectorIcon(VectorIcon.Type.REASSIGN, color);
+      return VectorIcon.Type.REASSIGN;
     }
     if (suggestion.label.startsWith("⇢") || suggestion.label.contains("Décaler")) {
-      return new VectorIcon(VectorIcon.Type.SHIFT_RIGHT, color);
+      return VectorIcon.Type.SHIFT_RIGHT;
     }
     return null;
   }
@@ -6261,6 +6379,26 @@ public class PlanningPanel extends JPanel {
       }
       g2.dispose();
     }
+  }
+
+  private javax.swing.Icon getCachedIcon(VectorIcon.Type type, java.awt.Color color, int size) {
+    if (type == null || color == null) {
+      return null;
+    }
+    String key = (darkTheme ? "d" : "l") + ":" + type.name() + ":" + color.getRGB() + ":" + size;
+    javax.swing.Icon cached = iconCache.get(key);
+    if (cached != null) {
+      return cached;
+    }
+    BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+    java.awt.Graphics2D g2 = image.createGraphics();
+    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    new VectorIcon(type, color, size).paintIcon(null, g2, 0, 0);
+    g2.dispose();
+    javax.swing.Icon icon = new ImageIcon(image);
+    iconCache.put(key, icon);
+    return icon;
   }
 
   private int affinityScore(String clientId, String resourceId) {
