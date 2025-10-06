@@ -21,6 +21,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Insets;
 import java.awt.FontMetrics;
+import java.awt.IllegalComponentStateException;
 import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -51,6 +52,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -78,6 +80,7 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.JTextField;
 import javax.swing.Timer;
+import javax.swing.JWindow;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
@@ -171,6 +174,13 @@ public class PlanningPanel extends JPanel {
   private boolean filterNoConflicts;
   private boolean filterOnlyConflicts;
   private boolean hudVisible = true;
+  private Rectangle hudRect;
+  private Timer hoverDelay;
+  private JWindow hoverWindow;
+  private JPanel hoverToolbar;
+  private Models.Intervention hoverIntervention;
+  private String hoverResourceId;
+  private int hoverRowIndex = -1;
 
   private static final int BASE_HEADER_H = 28;
   private static final int CHIP_BAR_H = 24;
@@ -218,6 +228,10 @@ public class PlanningPanel extends JPanel {
   private Timer flashingTimer;
 
   public PlanningPanel(DataSourceProvider dsp) {
+    hoverDelay = new Timer(260, e -> showHoverBar());
+    hoverDelay.setRepeats(false);
+    hoverDelay.setInitialDelay(260);
+
     getInputMap(WHEN_FOCUSED)
         .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_H, 0), "toggleHud");
     getActionMap()
@@ -530,6 +544,8 @@ public class PlanningPanel extends JPanel {
     MouseAdapter adapter = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
+        hoverDelay.stop();
+        hideHoverBar();
         altDupPending = e.isAltDown();
         altDupDone = false;
         onPress(e.getPoint());
@@ -537,6 +553,8 @@ public class PlanningPanel extends JPanel {
 
       @Override
       public void mouseDragged(MouseEvent e) {
+        hoverDelay.stop();
+        hideHoverBar();
         onDrag(e.getPoint());
       }
 
@@ -550,11 +568,49 @@ public class PlanningPanel extends JPanel {
         Point point = e.getPoint();
         updateTagTooltip(point);
         updateCursor(point);
+        if (hitTileAt(point.x, point.y)) {
+          hoverDelay.restart();
+        } else {
+          hoverDelay.stop();
+          hideHoverBar();
+        }
       }
 
       @Override
       public void mouseClicked(MouseEvent e) {
         Point p = e.getPoint();
+        if (hudVisible && hudRect != null && hudRect.contains(p)) {
+          JPopupMenu popup = new JPopupMenu();
+          JMenuItem fit = new JMenuItem("Ajuster la journée");
+          fit.addActionListener(ev -> fitDay());
+          JMenuItem zoom = new JMenuItem("Zoom 100%");
+          zoom.addActionListener(ev -> setZoomX(1.0d));
+          JMenu slotMenu = new JMenu("Pas");
+          JMenuItem five = new JMenuItem("5 min");
+          five.addActionListener(ev -> setSlotMinutes(5));
+          JMenuItem fifteen = new JMenuItem("15 min");
+          fifteen.addActionListener(ev -> setSlotMinutes(15));
+          JMenuItem thirty = new JMenuItem("30 min");
+          thirty.addActionListener(ev -> setSlotMinutes(30));
+          slotMenu.add(five);
+          slotMenu.add(fifteen);
+          slotMenu.add(thirty);
+          JMenuItem clear = new JMenuItem("Effacer filtre");
+          clear.addActionListener(
+              ev -> {
+                if (searchField != null) {
+                  searchField.setText("");
+                  onSearchChanged();
+                }
+              });
+          popup.add(fit);
+          popup.add(zoom);
+          popup.add(slotMenu);
+          popup.addSeparator();
+          popup.add(clear);
+          popup.show(PlanningPanel.this, p.x, p.y);
+          return;
+        }
         if (SwingUtilities.isRightMouseButton(e)) {
           String headerType = headerTypeAtPoint(p);
           if (headerType != null) {
@@ -604,6 +660,19 @@ public class PlanningPanel extends JPanel {
         hoverTileKey = null;
         repaint();
         setCursor(Cursor.getDefaultCursor());
+        boolean insideHover = false;
+        if (hoverWindow != null && hoverWindow.isVisible()) {
+          try {
+            Point locationOnScreen = e.getLocationOnScreen();
+            insideHover = hoverWindow.getBounds().contains(locationOnScreen);
+          } catch (IllegalComponentStateException ex) {
+            insideHover = false;
+          }
+        }
+        if (!insideHover) {
+          hoverDelay.stop();
+          hideHoverBar();
+        }
       }
     };
     addMouseListener(adapter);
@@ -2318,12 +2387,15 @@ public class PlanningPanel extends JPanel {
 
     if (hudVisible) {
       paintHudFooter(g2);
+    } else {
+      hudRect = null;
     }
   }
 
   private void paintHudFooter(Graphics2D baseGraphics) {
     String text = buildHudText();
     if (text == null || text.isBlank()) {
+      hudRect = null;
       return;
     }
     Graphics2D hudGraphics = (Graphics2D) baseGraphics.create();
@@ -2341,11 +2413,13 @@ public class PlanningPanel extends JPanel {
       int maxWidth = Math.max(0, getWidth() - 16);
       int boxWidth = Math.min(maxWidth, textWidth + padX * 2);
       if (boxWidth <= 0) {
+        hudRect = null;
         return;
       }
       int boxHeight = Math.max(textHeight + padY * 2 - 2, textHeight + 2);
       int x = (getWidth() - boxWidth) / 2;
       int y = Math.max(0, getHeight() - boxHeight - 6);
+      hudRect = new Rectangle(x, y, boxWidth, boxHeight);
       java.awt.Shape background =
           new java.awt.geom.RoundRectangle2D.Float(x, y, boxWidth, boxHeight, 12, 12);
       hudGraphics.setColor(new Color(0, 0, 0, 140));
@@ -3052,6 +3126,302 @@ public class PlanningPanel extends JPanel {
     } catch (RuntimeException ex) {
       notifyError("Impossible de mettre à jour les tags");
     }
+  }
+
+  private void ensureHoverBar() {
+    if (hoverWindow != null && hoverToolbar != null) {
+      return;
+    }
+    java.awt.Window owner = SwingUtilities.getWindowAncestor(this);
+    hoverWindow = new JWindow(owner);
+    hoverWindow.setFocusableWindowState(false);
+    hoverWindow.setAlwaysOnTop(true);
+    hoverWindow.setBackground(new Color(0, 0, 0, 0));
+    hoverToolbar =
+        new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 4)) {
+          @Override
+          public Dimension getPreferredSize() {
+            return new Dimension(240, 32);
+          }
+        };
+    hoverToolbar.setOpaque(true);
+    hoverToolbar.setBackground(new Color(35, 35, 40, 230));
+    hoverToolbar.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+    hoverToolbar.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseEntered(MouseEvent e) {
+            if (hoverDelay != null) {
+              hoverDelay.stop();
+            }
+          }
+
+          @Override
+          public void mouseExited(MouseEvent e) {
+            Component opposite = e.getOppositeComponent();
+            if (!isHoverPopupComponent(opposite) && !isPanelComponent(opposite)) {
+              hideHoverBar();
+            }
+          }
+        });
+    BiConsumer<String, Runnable> addButton =
+        (label, action) -> {
+          JButton button = new JButton(label);
+          button.setFocusable(false);
+          button.setMargin(new Insets(1, 8, 1, 8));
+          button.addActionListener(ev -> action.run());
+          hoverToolbar.add(button);
+        };
+    addButton.accept(
+        "✎ Renommer",
+        () -> {
+          if (hoverIntervention == null) {
+            return;
+          }
+          String current = hoverIntervention.title();
+          String value =
+              JOptionPane.showInputDialog(
+                  PlanningPanel.this,
+                  "Titre de l'intervention",
+                  current == null ? "" : current);
+          if (value == null) {
+            return;
+          }
+          String trimmed = value.trim();
+          if (trimmed.isEmpty() || Objects.equals(trimmed, current)) {
+            return;
+          }
+          Models.Intervention before = copyOf(hoverIntervention);
+          Models.Intervention updated =
+              new Models.Intervention(
+                  hoverIntervention.id(),
+                  hoverIntervention.agencyId(),
+                  hoverIntervention.resourceIds(),
+                  hoverIntervention.clientId(),
+                  hoverIntervention.driverId(),
+                  trimmed,
+                  hoverIntervention.start(),
+                  hoverIntervention.end(),
+                  hoverIntervention.notes(),
+                  hoverIntervention.internalNotes(),
+                  hoverIntervention.price());
+          try {
+            Models.Intervention saved = dsp.updateIntervention(updated);
+            setSelected(saved);
+            hoverIntervention = saved;
+            reload();
+            if (saved != null && saved.id() != null) {
+              selectAndRevealIntervention(saved.id());
+            }
+            pushUpdateHistory("Renommage", before, saved);
+            if (saved != null && saved.id() != null) {
+              notifySuccess("Intervention renommée", "Renommage: " + trimmed);
+            }
+          } catch (RuntimeException ex) {
+            notifyError("Impossible de renommer l'intervention");
+          } finally {
+            hideHoverBar();
+          }
+        });
+    addButton.accept(
+        "⊕ Ress",
+        () -> {
+          if (hoverIntervention == null || hoverResourceId == null) {
+            return;
+          }
+          java.util.List<String> ids = new java.util.ArrayList<>(hoverIntervention.resourceIds());
+          if (!ids.contains(hoverResourceId)) {
+            ids.add(hoverResourceId);
+            tryUpdateResources(hoverIntervention, ids);
+            if (selected != null) {
+              hoverIntervention = selected;
+            }
+          }
+          hideHoverBar();
+        });
+    addButton.accept(
+        "⏩ +30",
+        () -> {
+          if (hoverIntervention == null) {
+            return;
+          }
+          Models.Intervention before = copyOf(hoverIntervention);
+          Models.Intervention shifted = shiftIntervention(hoverIntervention, Duration.ofMinutes(30));
+          try {
+            Models.Intervention saved = dsp.updateIntervention(shifted);
+            setSelected(saved);
+            hoverIntervention = saved;
+            reload();
+            if (saved != null && saved.id() != null) {
+              selectAndRevealIntervention(saved.id());
+            }
+            pushUpdateHistory("Décalage", before, saved);
+            if (saved != null && saved.id() != null) {
+              notifySuccess("Intervention décalée", "Décalage +30 min: " + saved.id());
+            }
+          } catch (RuntimeException ex) {
+            notifyError("Impossible de décaler l'intervention");
+          } finally {
+            hideHoverBar();
+          }
+        });
+    addButton.accept(
+        "🏷 Tag",
+        () -> {
+          if (hoverIntervention == null || hoverIntervention.id() == null) {
+            return;
+          }
+          String value = JOptionPane.showInputDialog(PlanningPanel.this, "Nouveau tag");
+          if (value == null) {
+            return;
+          }
+          String trimmed = value.trim();
+          if (trimmed.isEmpty()) {
+            return;
+          }
+          java.util.List<String> tags =
+              new java.util.ArrayList<>(
+                  interventionTags.getOrDefault(hoverIntervention.id(), java.util.List.of()));
+          if (!tags.contains(trimmed)) {
+            tags.add(trimmed);
+            tryUpdateTags(hoverIntervention, tags);
+            if (selected != null) {
+              hoverIntervention = selected;
+            }
+          }
+          hideHoverBar();
+        });
+    hoverWindow.setContentPane(hoverToolbar);
+    hoverWindow.pack();
+  }
+
+  private Models.Intervention shiftIntervention(
+      Models.Intervention intervention, Duration delta) {
+    if (intervention == null || delta == null) {
+      return intervention;
+    }
+    Instant start = intervention.start() == null ? null : intervention.start().plus(delta);
+    Instant end = intervention.end() == null ? null : intervention.end().plus(delta);
+    return new Models.Intervention(
+        intervention.id(),
+        intervention.agencyId(),
+        intervention.resourceIds(),
+        intervention.clientId(),
+        intervention.driverId(),
+        intervention.title(),
+        start,
+        end,
+        intervention.notes(),
+        intervention.internalNotes(),
+        intervention.price());
+  }
+
+  private boolean hitTileAt(int px, int py) {
+    Optional<Tile> tileOpt = findTileAt(new Point(px, py));
+    if (tileOpt.isEmpty()) {
+      hoverIntervention = null;
+      hoverResourceId = null;
+      hoverRowIndex = -1;
+      return false;
+    }
+    Tile tile = tileOpt.get();
+    hoverIntervention = tile.i;
+    hoverRowIndex = tile.row;
+    hoverResourceId = resourceIdAtRow(tile.row);
+    if (hoverResourceId == null) {
+      hoverIntervention = null;
+      hoverRowIndex = -1;
+      return false;
+    }
+    return true;
+  }
+
+  private void showHoverBar() {
+    if (hoverIntervention == null) {
+      hideHoverBar();
+      return;
+    }
+    ensureHoverBar();
+    int row = hoverRowIndex;
+    if (hoverResourceId != null) {
+      int idx = indexOfResource(hoverResourceId);
+      if (idx >= 0) {
+        row = idx;
+      }
+    }
+    if (row < 0) {
+      hideHoverBar();
+      return;
+    }
+    hoverRowIndex = row;
+    Tile tile = tileFor(hoverIntervention, row);
+    Rectangle rect = tileRect(tile);
+    if (rect == null || rect.width <= 0 || rect.height <= 0) {
+      hideHoverBar();
+      return;
+    }
+    Dimension size = hoverToolbar.getPreferredSize();
+    int x = rect.x + rect.width / 2 - size.width / 2;
+    x = Math.max(0, Math.min(x, getWidth() - size.width));
+    int y = rect.y - size.height - 8;
+    if (y < headerHeight()) {
+      y = rect.y + rect.height + 8;
+      if (y + size.height > getHeight()) {
+        y = Math.max(headerHeight(), rect.y - size.height - 8);
+      }
+    }
+    Point location = new Point(x, y);
+    SwingUtilities.convertPointToScreen(location, this);
+    hoverWindow.pack();
+    hoverWindow.setLocation(location);
+    hoverWindow.setVisible(true);
+  }
+
+  private void hideHoverBar() {
+    if (hoverDelay != null) {
+      hoverDelay.stop();
+    }
+    if (hoverWindow != null) {
+      hoverWindow.setVisible(false);
+    }
+    hoverIntervention = null;
+    hoverResourceId = null;
+    hoverRowIndex = -1;
+  }
+
+  private boolean isHoverPopupComponent(Component component) {
+    if (component == null) {
+      return false;
+    }
+    if (hoverWindow != null && component == hoverWindow) {
+      return true;
+    }
+    if (hoverWindow != null && SwingUtilities.getWindowAncestor(component) == hoverWindow) {
+      return true;
+    }
+    if (hoverToolbar != null
+        && (component == hoverToolbar || SwingUtilities.isDescendingFrom(component, hoverToolbar))) {
+      return true;
+    }
+    return false;
+  }
+
+  private boolean isPanelComponent(Component component) {
+    if (component == null) {
+      return false;
+    }
+    return component == this || SwingUtilities.isDescendingFrom(component, this);
+  }
+
+  @Override
+  public void removeNotify() {
+    hideHoverBar();
+    if (hoverWindow != null) {
+      hoverWindow.dispose();
+      hoverWindow = null;
+      hoverToolbar = null;
+    }
+    super.removeNotify();
   }
 
   private static Color contrastColor(Color color) {
