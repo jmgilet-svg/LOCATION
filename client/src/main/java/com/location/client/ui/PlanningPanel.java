@@ -185,6 +185,9 @@ public class PlanningPanel extends JPanel {
   private boolean minimapDragging = false;
   private int[] miniBins = new int[0];
   private int miniBinsMax = 1;
+  private int minimapSpanDays = 1;
+  private static final int MINIMAP_SPAN_DAYS_MIN = 1;
+  private static final int MINIMAP_SPAN_DAYS_MAX = 30;
   // C3 — Signets & navigation conflits
   private final java.util.prefs.Preferences bookmarksPrefs =
       java.util.prefs.Preferences.userRoot().node("com.location.bookmarks");
@@ -340,6 +343,132 @@ public class PlanningPanel extends JPanel {
               @Override
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 promptGotoDate();
+              }
+            });
+
+    this.addMouseWheelListener(
+        e -> {
+          boolean overMini = minimapVisible && minimapRect.contains(e.getPoint());
+          boolean ctrlOrMeta = e.isControlDown() || e.isMetaDown();
+          if (!ctrlOrMeta) {
+            return;
+          }
+          e.consume();
+          if (overMini) {
+            int direction = e.getPreciseWheelRotation() > 0 ? 1 : -1;
+            int nextSpan =
+                Math.max(
+                    MINIMAP_SPAN_DAYS_MIN,
+                    Math.min(MINIMAP_SPAN_DAYS_MAX, minimapSpanDays + direction));
+            if (nextSpan != minimapSpanDays) {
+              minimapSpanDays = nextSpan;
+              recomputeMiniBins();
+              repaint();
+            }
+            return;
+          }
+          zoomAroundX(e.getX(), e.getPreciseWheelRotation());
+        });
+
+    javax.swing.InputMap zoomMap = this.getInputMap(WHEN_FOCUSED);
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_EQUALS,
+            java.awt.event.InputEvent.CTRL_DOWN_MASK
+                | java.awt.event.InputEvent.SHIFT_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_EQUALS,
+            java.awt.event.InputEvent.META_DOWN_MASK
+                | java.awt.event.InputEvent.SHIFT_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_EQUALS, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_EQUALS, java.awt.event.InputEvent.META_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_PLUS, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_PLUS, java.awt.event.InputEvent.META_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_ADD, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_ADD, java.awt.event.InputEvent.META_DOWN_MASK),
+        "zoomIn");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_SUBTRACT, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+        "zoomOut");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_SUBTRACT, java.awt.event.InputEvent.META_DOWN_MASK),
+        "zoomOut");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_MINUS, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+        "zoomOut");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_MINUS, java.awt.event.InputEvent.META_DOWN_MASK),
+        "zoomOut");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_0, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+        "zoomReset");
+    zoomMap.put(
+        javax.swing.KeyStroke.getKeyStroke(
+            java.awt.event.KeyEvent.VK_0, java.awt.event.InputEvent.META_DOWN_MASK),
+        "zoomReset");
+    this.getActionMap()
+        .put(
+            "zoomIn",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                zoomAroundX(getWidth() / 2, -1d);
+              }
+            });
+    this.getActionMap()
+        .put(
+            "zoomOut",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                zoomAroundX(getWidth() / 2, 1d);
+              }
+            });
+    this.getActionMap()
+        .put(
+            "zoomReset",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                resetZoom();
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('W'), "cycleMiniSpan");
+    this.getActionMap()
+        .put(
+            "cycleMiniSpan",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                minimapSpanDays = minimapSpanDays == 1 ? 7 : minimapSpanDays == 7 ? 30 : 1;
+                recomputeMiniBins();
+                repaint();
               }
             });
 
@@ -519,49 +648,6 @@ public class PlanningPanel extends JPanel {
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 hudVisible = !hudVisible;
                 repaint();
-              }
-            });
-
-    // S14: zoom handlers
-    addMouseWheelListener(
-        e -> {
-          if (!e.isControlDown()) {
-            return;
-          }
-          double factor = e.getWheelRotation() < 0 ? 1.1 : 0.9;
-          setZoomX(zoomX * factor);
-          e.consume();
-        });
-
-    getInputMap(WHEN_FOCUSED)
-        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_PLUS, 0), "zoomIn");
-    getInputMap(WHEN_FOCUSED)
-        .put(
-            javax.swing.KeyStroke.getKeyStroke(
-                java.awt.event.KeyEvent.VK_EQUALS, java.awt.event.InputEvent.SHIFT_DOWN_MASK),
-            "zoomIn");
-    getInputMap(WHEN_FOCUSED)
-        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ADD, 0), "zoomIn");
-    getActionMap()
-        .put(
-            "zoomIn",
-            new javax.swing.AbstractAction() {
-              @Override
-              public void actionPerformed(java.awt.event.ActionEvent e) {
-                setZoomX(zoomX * 1.1);
-              }
-            });
-    getInputMap(WHEN_FOCUSED)
-        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_MINUS, 0), "zoomOut");
-    getInputMap(WHEN_FOCUSED)
-        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_SUBTRACT, 0), "zoomOut");
-    getActionMap()
-        .put(
-            "zoomOut",
-            new javax.swing.AbstractAction() {
-              @Override
-              public void actionPerformed(java.awt.event.ActionEvent e) {
-                setZoomX(zoomX * 0.9);
               }
             });
 
@@ -1311,6 +1397,26 @@ public class PlanningPanel extends JPanel {
     return zoomX;
   }
 
+  private void zoomAroundX(int xPixel, double wheelRotation) {
+    double factor = Math.pow(1.1d, -wheelRotation);
+    double targetZoom = zoomX * factor;
+    double clamped = Math.max(MIN_ZOOM_X, Math.min(MAX_ZOOM_X, targetZoom));
+    if (Math.abs(clamped - zoomX) < 0.0001d) {
+      return;
+    }
+    javax.swing.JViewport viewport = findEnclosingViewport();
+    int pointerOffset = 0;
+    if (viewport != null) {
+      pointerOffset = xPixel - viewport.getViewPosition().x;
+    }
+    java.time.Instant focusInstant = instantForX(xPixel);
+    setZoomX(clamped);
+    if (viewport != null && focusInstant != null) {
+      int focusX = xForInstant(focusInstant);
+      setViewportX(viewport, focusX - pointerOffset);
+    }
+  }
+
   private void setZoomX(double value) {
     double clamped = Math.max(MIN_ZOOM_X, Math.min(MAX_ZOOM_X, value));
     if (Math.abs(clamped - zoomX) < 0.0001d) {
@@ -1340,6 +1446,14 @@ public class PlanningPanel extends JPanel {
       java.awt.Rectangle target =
           new java.awt.Rectangle(Math.max(0, centerX - focusOffset), vis.y, vis.width, vis.height);
       scrollRectToVisible(target);
+    }
+  }
+
+  private void resetZoom() {
+    boolean changed = Math.abs(zoomX - 1.0d) > 0.0001d;
+    setZoomX(1.0d);
+    if (changed) {
+      javax.swing.SwingUtilities.invokeLater(this::alignViewportToStart);
     }
   }
 
@@ -2871,6 +2985,19 @@ public class PlanningPanel extends JPanel {
         minimapRect.y,
         Math.max(0, minimapRect.width - 1),
         Math.max(0, minimapRect.height - 1));
+
+    int spanDays = Math.max(minimapSpanDays, getViewDays());
+    String spanLabel = spanDays + "j";
+    gh.setColor(darkTheme ? new Color(230, 230, 235) : new Color(40, 40, 44));
+    gh.setFont(gh.getFont().deriveFont(10f));
+    java.awt.FontMetrics fm = gh.getFontMetrics();
+    int labelWidth = fm.stringWidth(spanLabel);
+    int labelX =
+        Math.max(
+            minimapRect.x + MINIMAP_PADDING,
+            minimapRect.x + minimapRect.width - MINIMAP_PADDING - labelWidth);
+    int labelY = minimapRect.y + fm.getAscent() + 2;
+    gh.drawString(spanLabel, labelX, labelY);
     gh.dispose();
   }
 
@@ -2995,8 +3122,8 @@ public class PlanningPanel extends JPanel {
     if (interventions == null || interventions.isEmpty()) {
       return;
     }
-    java.time.Instant start = getViewFrom().toInstant();
-    java.time.Instant end = getViewTo().toInstant();
+    java.time.Instant start = multiSpanStartInstant();
+    java.time.Instant end = multiSpanEndInstant();
     long totalMillis = Math.max(1L, java.time.Duration.between(start, end).toMillis());
     if (miniBins.length == 1) {
       int count = 0;
@@ -3056,8 +3183,8 @@ public class PlanningPanel extends JPanel {
 
   private java.awt.Rectangle viewportRectInMinimap(int axX, int axY, int axW, int axH) {
     javax.swing.JViewport viewport = findEnclosingViewport();
-    java.time.Instant start = getViewFrom().toInstant();
-    java.time.Instant end = getViewTo().toInstant();
+    java.time.Instant start = multiSpanStartInstant();
+    java.time.Instant end = multiSpanEndInstant();
     java.time.Instant leftInstant = start;
     java.time.Instant rightInstant = end;
     if (viewport != null) {
@@ -3096,8 +3223,8 @@ public class PlanningPanel extends JPanel {
     }
     double t = (px - axX) / (double) axW;
     t = Math.max(0d, Math.min(1d, t));
-    java.time.Instant start = getViewFrom().toInstant();
-    java.time.Instant end = getViewTo().toInstant();
+    java.time.Instant start = multiSpanStartInstant();
+    java.time.Instant end = multiSpanEndInstant();
     long totalMillis = Math.max(1L, java.time.Duration.between(start, end).toMillis());
     long targetMillis = Math.round(totalMillis * t);
     java.time.Instant target = start.plusMillis(targetMillis);
@@ -3675,7 +3802,7 @@ public class PlanningPanel extends JPanel {
   }
 
   private double instantToRatio(java.time.Instant instant) {
-    return instantToRatio(instant, getViewFrom().toInstant(), getViewTo().toInstant());
+    return instantToRatio(instant, multiSpanStartInstant(), multiSpanEndInstant());
   }
 
   private double instantToRatio(
@@ -3698,6 +3825,16 @@ public class PlanningPanel extends JPanel {
     }
     long avg = (a.toEpochMilli() + b.toEpochMilli()) / 2L;
     return java.time.Instant.ofEpochMilli(avg);
+  }
+
+  private java.time.Instant multiSpanStartInstant() {
+    return getViewFrom().toInstant();
+  }
+
+  private java.time.Instant multiSpanEndInstant() {
+    java.time.OffsetDateTime base = getViewFrom();
+    int spanDays = Math.max(Math.max(1, minimapSpanDays), getViewDays());
+    return base.plusDays(spanDays).toInstant();
   }
 
   private void paintHeatmap(Graphics2D g2, int viewDays, int dayWidth, int height) {
