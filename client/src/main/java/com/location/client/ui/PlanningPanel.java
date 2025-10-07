@@ -186,6 +186,8 @@ public class PlanningPanel extends JPanel {
   // ===== D1 — Observabilité : core =====
   private final com.location.client.telemetry.Metrics metrics =
       com.location.client.telemetry.Metrics.get();
+  private final com.location.client.telemetry.FrameMonitor frameMon =
+      com.location.client.telemetry.FrameMonitor.get();
   // suivi des conflits (clé→start)
   private final java.util.Map<String, ConflictTelemetry> conflictStart = new java.util.HashMap<>();
   // dernier snapshot de clés pour détecter résolutions
@@ -403,6 +405,10 @@ public class PlanningPanel extends JPanel {
                     .setVisible(true);
               }
             });
+
+    // D3 — démarre le frame monitor (détecte jank/freezes EDT)
+    frameMon.start();
+    metrics.event("ux.app.start");
 
     this.addMouseWheelListener(
         e -> {
@@ -2779,12 +2785,14 @@ public class PlanningPanel extends JPanel {
           Math.max(0, getHeight() - headerHeight() + 24));
     }
     super.paintComponent(g);
+    long framePaintStartNs = System.nanoTime();
     Graphics2D g2 = (Graphics2D) g;
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     int w = Math.max(0, getWidth() - inspectorWidth);
     int h = getHeight();
     java.awt.Rectangle vis = getVisibleRect();
     if (vis.width <= 0 || vis.height <= 0) {
+      frameMon.observeFrame((System.nanoTime() - framePaintStartNs) / 1_000_000.0);
       return;
     }
     int headerH = headerHeight();
@@ -3136,20 +3144,35 @@ public class PlanningPanel extends JPanel {
                 + "  Resolved: "
                 + metrics.getCounter("conflicts.resolved");
         double avgTtrMs = metrics.avgMs("conflicts.ttr.ms");
+        double apiAvgMs = metrics.avgMs("api.updateIntervention.ms");
+        double frameP95 = frameMon.p95FrameMs();
         String line2 =
             "Avg TTR: "
                 + String.format(java.util.Locale.ROOT, "%.1fs", avgTtrMs / 1000.0)
-                + "  Actions: reassign="
+                + "  API avg: "
+                + String.format(java.util.Locale.ROOT, "%.0fms", apiAvgMs)
+                + "  Frame p95: "
+                + String.format(java.util.Locale.ROOT, "%.0fms", frameP95);
+        String line3 =
+            "Actions: reassign="
                 + metrics.getCounter("action.reassign")
                 + " shift="
                 + metrics.getCounter("action.shift")
                 + " undo="
-                + metrics.getCounter("action.undo");
+                + metrics.getCounter("action.undo")
+                + "  Freezes≥"
+                + frameMon.freezeThresholdMs()
+                + "ms: "
+                + frameMon.freezeCount();
         metricsGraphics.setFont(metricsGraphics.getFont().deriveFont(11f));
         java.awt.FontMetrics fm = metricsGraphics.getFontMetrics();
         int pad = metricsHudPad;
-        int boxWidth = Math.max(fm.stringWidth(line1), fm.stringWidth(line2)) + pad * 2;
-        int boxHeight = fm.getHeight() * 2 + pad * 2;
+        int boxWidth =
+            Math.max(
+                    Math.max(fm.stringWidth(line1), fm.stringWidth(line2)),
+                    fm.stringWidth(line3))
+                + pad * 2;
+        int boxHeight = fm.getHeight() * 3 + pad * 2;
         int x = getWidth() - boxWidth - 6;
         int y = getHeight() - (minimapVisible ? MINIMAP_HEIGHT : 0) - boxHeight - 6;
         java.awt.Color background =
@@ -3164,12 +3187,16 @@ public class PlanningPanel extends JPanel {
         metricsGraphics.drawString(line1, x + pad, y + pad + fm.getAscent());
         metricsGraphics.drawString(
             line2, x + pad, y + pad + fm.getAscent() + fm.getHeight());
+        metricsGraphics.drawString(
+            line3, x + pad, y + pad + fm.getAscent() + fm.getHeight() * 2);
         metricsGraphics.setColor(border);
         metricsGraphics.drawRoundRect(x, y, boxWidth, boxHeight, 10, 10);
       } finally {
         metricsGraphics.dispose();
       }
     }
+    // D3 — frame time (mesuré au paint) pour p95
+    frameMon.observeFrame((System.nanoTime() - framePaintStartNs) / 1_000_000.0);
   }
 
   private void paintMinimap(Graphics2D baseGraphics) {
@@ -4082,6 +4109,7 @@ public class PlanningPanel extends JPanel {
       ensureRowVisible(idx);
     } else {
       notifyInfo("Ressource introuvable dans la vue");
+      metrics.event("ux.scrollToResource.miss", "rid", resourceId == null ? "" : resourceId);
     }
   }
 
@@ -6056,24 +6084,30 @@ public class PlanningPanel extends JPanel {
         new java.util.LinkedHashSet<>(effectiveResourceIds(original));
     try {
       Models.Intervention updated = original.withResourceIds(sanitized);
+      long apiStart = System.currentTimeMillis();
       Models.Intervention saved = dsp.updateIntervention(updated);
-      if (saved != null && saved.id() != null) {
+      long apiDt = System.currentTimeMillis() - apiStart;
+      metrics.observe("api.updateIntervention.ms", apiDt);
+      metrics.event("api.updateIntervention.ok", "ms", String.valueOf(apiDt));
+      Models.Intervention applied = saved != null ? saved : updated;
+      if (applied.id() != null) {
         java.util.LinkedHashSet<String> after =
-            new java.util.LinkedHashSet<>(effectiveResourceIds(saved));
+            new java.util.LinkedHashSet<>(effectiveResourceIds(applied));
         for (String rid : after) {
           if (rid != null && !before.contains(rid)) {
-            addedAnimStart.put(saved.id() + "#" + rid, System.currentTimeMillis());
+            addedAnimStart.put(applied.id() + "#" + rid, System.currentTimeMillis());
           }
         }
       }
-      setSelected(saved);
+      setSelected(applied);
       reload();
-      if (saved.id() != null) {
-        selectAndRevealIntervention(saved.id());
+      if (applied.id() != null) {
+        selectAndRevealIntervention(applied.id());
       }
       notifySuccess("Affectations mises à jour", "Ressources: " + String.join(", ", sanitized));
-      pushUpdateHistory("Affectations", original, saved);
+      pushUpdateHistory("Affectations", original, applied);
     } catch (RuntimeException ex) {
+      metrics.event("api.updateIntervention.err", "msg", ex.getMessage() == null ? "" : ex.getMessage());
       notifyError("Impossible de mettre à jour les affectations");
     }
   }
@@ -7583,6 +7617,8 @@ public class PlanningPanel extends JPanel {
     }
     rebuildSuggestions();
     updateConflictsTelemetry();
+    // D3 — trace UX : temps de rebuild panneau Conflits
+    metrics.event("ux.conflicts.rebuild");
   }
 
   private void navigateNextConflict() {
@@ -8002,12 +8038,18 @@ public class PlanningPanel extends JPanel {
   }
 
   private void scheduleConflictsRebuild() {
+    long start = System.nanoTime();
     conflictsDirty = true;
     if (conflictsDebounce.isRunning()) {
       conflictsDebounce.restart();
     } else {
       conflictsDebounce.start();
     }
+    javax.swing.SwingUtilities.invokeLater(
+        () -> {
+          long deltaMs = (System.nanoTime() - start) / 1_000_000;
+          metrics.observe("ux.invalidate_to_compute.ms", deltaMs);
+        });
   }
 
   private void doComputeConflicts() {
@@ -8017,8 +8059,12 @@ public class PlanningPanel extends JPanel {
     conflictsDirty = false;
     javax.swing.SwingUtilities.invokeLater(
         () -> {
+          long start = System.nanoTime();
           computeConflicts();
           rebuildConflictsUI();
+          long deltaMs = (System.nanoTime() - start) / 1_000_000;
+          metrics.observe("ux.computeConflicts.ms", deltaMs);
+          metrics.event("ux.conflicts.computed", "ms", String.valueOf(deltaMs));
         });
   }
 
@@ -8379,7 +8425,11 @@ public class PlanningPanel extends JPanel {
             intervention.internalNotes(),
             intervention.price());
     try {
+      long apiStart = System.currentTimeMillis();
       Models.Intervention saved = dsp.updateIntervention(updated);
+      long apiDt = System.currentTimeMillis() - apiStart;
+      metrics.observe("api.updateIntervention.ms", apiDt);
+      metrics.event("api.updateIntervention.ok", "ms", String.valueOf(apiDt));
       Models.Intervention applied = saved != null ? saved : updated;
       String title = intervention.title() == null ? "" : intervention.title();
       if (before != null) {
@@ -8421,6 +8471,7 @@ public class PlanningPanel extends JPanel {
         pushUpdateHistory("Décalage", before, saved);
       }
     } catch (RuntimeException ex) {
+      metrics.event("api.updateIntervention.err", "msg", ex.getMessage() == null ? "" : ex.getMessage());
       Toolkit.getDefaultToolkit().beep();
     }
   }
