@@ -188,6 +188,8 @@ public class PlanningPanel extends JPanel {
   private int minimapSpanDays = 1;
   private static final int MINIMAP_SPAN_DAYS_MIN = 1;
   private static final int MINIMAP_SPAN_DAYS_MAX = 30;
+  private boolean rulerVisible = true;
+  private static final int RULER_HEIGHT = 24;
   // C3 — Signets & navigation conflits
   private final java.util.prefs.Preferences bookmarksPrefs =
       java.util.prefs.Preferences.userRoot().node("com.location.bookmarks");
@@ -468,6 +470,23 @@ public class PlanningPanel extends JPanel {
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 minimapSpanDays = minimapSpanDays == 1 ? 7 : minimapSpanDays == 7 ? 30 : 1;
                 recomputeMiniBins();
+                repaint();
+              }
+            });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_H, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "toggleRuler");
+    this.getActionMap()
+        .put(
+            "toggleRuler",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                rulerVisible = !rulerVisible;
+                revalidate();
                 repaint();
               }
             });
@@ -1559,7 +1578,11 @@ public class PlanningPanel extends JPanel {
   }
 
   private int headerHeight() {
-    return BASE_HEADER_H + chipBarHeight();
+    int height = BASE_HEADER_H + chipBarHeight();
+    if (rulerVisible) {
+      height += RULER_HEIGHT;
+    }
+    return height;
   }
 
   public void reload() {
@@ -2719,8 +2742,15 @@ public class PlanningPanel extends JPanel {
 
     paintHeatmap(g2, viewDays, dayWidth, h);
 
+    if (rulerVisible) {
+      drawTimeRuler(g2, w, chipBar, headerH);
+    }
+
     LocalDate headerStart = getViewStart();
     int dayLabelY = (chipBar > 0 ? chipBar + 16 : 16);
+    if (rulerVisible) {
+      dayLabelY += RULER_HEIGHT;
+    }
     for (int d = 0; d < viewDays; d++) {
       int xDay = TIME_W + d * dayWidth;
       g2.setColor(new Color(230, 230, 230));
@@ -2735,10 +2765,12 @@ public class PlanningPanel extends JPanel {
       g2.setColor(Color.GRAY);
       for (int i = 0; i <= HOURS; i++) {
         int x = xDay + i * colWidth;
-        g2.drawLine(x, headerH, x, h);
-        if (d == 0 && i < HOURS) {
-          String txt = (START_HOUR + i) + ":00";
-          g2.drawString(txt, x + 4, headerH - 8);
+        if (!rulerVisible) {
+          g2.drawLine(x, headerH, x, h);
+          if (d == 0 && i < HOURS) {
+            String txt = (START_HOUR + i) + ":00";
+            g2.drawString(txt, x + 4, headerH - 8);
+          }
         }
       }
     }
@@ -3878,6 +3910,153 @@ public class PlanningPanel extends JPanel {
         g2.fillRect(x1, headerHeight(), Math.max(1, x2 - x1), bodyHeight);
       }
     }
+  }
+
+  private void drawTimeRuler(Graphics2D baseGraphics, int usableWidth, int chipBar, int headerH) {
+    if (usableWidth <= 0) {
+      return;
+    }
+    Graphics2D g = (Graphics2D) baseGraphics.create();
+    try {
+      int top = chipBar;
+      int height = RULER_HEIGHT;
+      if (height <= 0) {
+        return;
+      }
+      g.setColor(darkTheme ? new Color(26, 26, 30) : new Color(245, 245, 248));
+      g.fillRect(0, top, usableWidth, height);
+
+      ZoneId zone = ZoneId.systemDefault();
+      LocalDate startDate = getViewStart();
+      LocalDate endDate = startDate.plusDays(Math.max(1, getViewDays()));
+      ZonedDateTime viewStart = startDate.atTime(START_HOUR, 0).atZone(zone);
+      ZonedDateTime viewEnd = endDate.atTime(START_HOUR, 0).atZone(zone);
+      Instant startInstant = viewStart.toInstant();
+      Instant endInstant = viewEnd.toInstant();
+      Duration span = Duration.between(startInstant, endInstant);
+      int minorMinutes = pickMinorMinutes(span);
+      int majorEvery = Math.max(1, pickMajorMultiple(minorMinutes));
+      ZonedDateTime tick = roundDownToStep(viewStart, minorMinutes);
+      while (tick.isBefore(viewStart)) {
+        tick = tick.plusMinutes(minorMinutes);
+      }
+
+      Color minorColor = darkTheme ? new Color(80, 80, 88) : new Color(220, 220, 226);
+      Color majorColor = darkTheme ? new Color(120, 120, 132) : new Color(180, 180, 188);
+      Color textColor = darkTheme ? new Color(230, 230, 235) : new Color(40, 40, 44);
+      Color gridMinor = darkTheme ? new Color(70, 70, 80, 60) : new Color(0, 0, 0, 15);
+      Color gridMajor = darkTheme ? new Color(120, 120, 140, 85) : new Color(0, 0, 0, 35);
+
+      int contentTop = headerH;
+      int bottomLimit = minimapVisible ? Math.max(headerH, getHeight() - MINIMAP_HEIGHT) : getHeight();
+      int contentHeight = Math.max(0, bottomLimit - contentTop);
+
+      g.setFont(g.getFont().deriveFont(11f));
+      int tickIndex = 0;
+      while (!tick.isAfter(viewEnd)) {
+        Instant tickInstant = tick.toInstant();
+        int x = xForInstant(tickInstant);
+        boolean major = tickIndex % majorEvery == 0;
+        g.setColor(major ? majorColor : minorColor);
+        int tickHeight = major ? height - 4 : height - 8;
+        int tickTop = Math.max(top, top + height - tickHeight);
+        g.drawLine(x, tickTop, x, top + height - 1);
+
+        if (contentHeight > 0) {
+          g.setColor(major ? gridMajor : gridMinor);
+          g.drawLine(x, contentTop, x, contentTop + contentHeight);
+        }
+
+        if (major) {
+          String label = formatTimeLabel(tick, minorMinutes);
+          if (label != null && !label.isBlank()) {
+            g.setColor(textColor);
+            g.drawString(label, x + 4, top + height - 8);
+          }
+        }
+
+        tick = tick.plusMinutes(minorMinutes);
+        tickIndex++;
+      }
+
+      Instant now = Instant.now();
+      if (!now.isBefore(startInstant) && now.isBefore(endInstant)) {
+        int xNow = xForInstant(now);
+        g.setColor(new Color(80, 140, 255, 180));
+        g.drawLine(xNow, top, xNow, top + height);
+        if (contentHeight > 0) {
+          g.drawLine(xNow, contentTop, xNow, contentTop + contentHeight);
+        }
+      }
+
+      g.setColor(darkTheme ? new Color(0, 0, 0, 120) : new Color(0, 0, 0, 60));
+      g.drawLine(0, top + height - 1, usableWidth, top + height - 1);
+    } finally {
+      g.dispose();
+    }
+  }
+
+  private int pickMinorMinutes(Duration span) {
+    long totalMinutes = Math.max(1L, span.toMinutes());
+    int[] candidates = {5, 10, 15, 30, 60, 120, 180, 240, 360, 720, 1440};
+    for (int candidate : candidates) {
+      long tickCount = totalMinutes / candidate;
+      if (tickCount <= 240) {
+        return candidate;
+      }
+    }
+    return 1440;
+  }
+
+  private int pickMajorMultiple(int minorMinutes) {
+    if (minorMinutes <= 5) {
+      return 12; // 1h
+    }
+    if (minorMinutes == 10) {
+      return 6; // 1h
+    }
+    if (minorMinutes == 15) {
+      return 4; // 1h
+    }
+    if (minorMinutes == 30) {
+      return 2; // 1h
+    }
+    if (minorMinutes == 60) {
+      return 2; // 2h
+    }
+    if (minorMinutes == 120) {
+      return 2; // 4h
+    }
+    if (minorMinutes == 180) {
+      return 2; // 6h
+    }
+    if (minorMinutes == 240) {
+      return 3; // 12h
+    }
+    if (minorMinutes == 360) {
+      return 2; // 12h
+    }
+    if (minorMinutes == 720) {
+      return 2; // 24h
+    }
+    return 1;
+  }
+
+  private ZonedDateTime roundDownToStep(ZonedDateTime time, int minutesStep) {
+    if (minutesStep <= 0) {
+      return time.withSecond(0).withNano(0);
+    }
+    long minutesSinceEpoch = ChronoUnit.MINUTES.between(Instant.EPOCH, time.toInstant());
+    long alignedMinutes = (minutesSinceEpoch / minutesStep) * minutesStep;
+    Instant alignedInstant = Instant.EPOCH.plusSeconds(alignedMinutes * 60L);
+    return ZonedDateTime.ofInstant(alignedInstant, time.getZone());
+  }
+
+  private String formatTimeLabel(ZonedDateTime time, int minorMinutes) {
+    if (minorMinutes >= 60) {
+      return String.format("%02dh", time.getHour());
+    }
+    return String.format("%02d:%02d", time.getHour(), time.getMinute());
   }
 
   private int indexOfResource(String id) {
