@@ -186,6 +186,8 @@ public class PlanningPanel extends JPanel {
   // ===== D1 — Observabilité : core =====
   private final com.location.client.telemetry.Metrics metrics =
       com.location.client.telemetry.Metrics.get();
+  private final com.location.client.telemetry.CubeRegistry cubeRegistry =
+      com.location.client.telemetry.CubeRegistry.get();
   // suivi des conflits (clé→start)
   private final java.util.Map<String, ConflictTelemetry> conflictStart = new java.util.HashMap<>();
   // dernier snapshot de clés pour détecter résolutions
@@ -401,6 +403,24 @@ public class PlanningPanel extends JPanel {
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 new com.location.client.telemetry.EventLogDialog(PlanningPanel.this)
                     .setVisible(true);
+              }
+            });
+
+    // D2 — Cubes de métriques (Ctrl+Shift+M)
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_M,
+                java.awt.event.InputEvent.CTRL_DOWN_MASK
+                    | java.awt.event.InputEvent.SHIFT_DOWN_MASK),
+            "openCubes");
+    this.getActionMap()
+        .put(
+            "openCubes",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                new com.location.client.telemetry.CubesDialog(PlanningPanel.this).setVisible(true);
               }
             });
 
@@ -7733,9 +7753,31 @@ public class PlanningPanel extends JPanel {
         String rid = entry.resourceId == null ? "" : entry.resourceId;
         String ida = entry.a != null && entry.a.id() != null ? entry.a.id() : "";
         String idb = entry.b != null && entry.b.id() != null ? entry.b.id() : "";
+        String agencyId = null;
+        if (!rid.isBlank()) {
+          for (Models.Resource resource : resources) {
+            if (resource != null && rid.equals(resource.id())) {
+              agencyId = resource.agencyId();
+              break;
+            }
+          }
+        }
+        String resourceTypeId = rid.isBlank() ? null : resourceTypeIdByResource.get(rid);
+        java.util.Set<String> clients = new java.util.LinkedHashSet<>();
+        if (entry.a != null && entry.a.clientId() != null && !entry.a.clientId().isBlank()) {
+          clients.add(entry.a.clientId());
+        }
+        if (entry.b != null && entry.b.clientId() != null && !entry.b.clientId().isBlank()) {
+          clients.add(entry.b.clientId());
+        }
+        java.util.List<String> clientList = java.util.List.copyOf(clients);
+        int severity = Math.max(0, entry.severity);
         ConflictTelemetry telemetry =
-            new ConflictTelemetry(now, rid, ida, idb, Math.max(0, entry.severity));
+            new ConflictTelemetry(now, rid, ida, idb, severity, agencyId, resourceTypeId, clientList);
         conflictStart.put(key, telemetry);
+        cubeRegistry.put(
+            new com.location.client.telemetry.CubeRegistry.Meta(
+                key, rid, agencyId, resourceTypeId, clientList, severity));
         metrics.event(
             "conflict.new",
             "key",
@@ -7747,7 +7789,13 @@ public class PlanningPanel extends JPanel {
             "b",
             idb,
             "severity",
-            String.valueOf(telemetry.severity));
+            String.valueOf(severity),
+            "agency",
+            agencyId == null ? "" : agencyId,
+            "rtype",
+            resourceTypeId == null ? "" : resourceTypeId,
+            "clients",
+            clientList.isEmpty() ? "" : String.join("|", clientList));
       }
     }
     for (String previous : new java.util.HashSet<>(lastConflictKeys)) {
@@ -7761,6 +7809,16 @@ public class PlanningPanel extends JPanel {
       long delta = Math.max(0L, System.currentTimeMillis() - telemetry.startMillis);
       metrics.observe("conflicts.ttr.ms", delta);
       metrics.increment("conflicts.resolved");
+      java.util.List<String> clientList =
+          telemetry.clients == null ? java.util.List.of() : telemetry.clients;
+      String clientsJoined = clientList.isEmpty() ? "" : String.join("|", clientList);
+      com.location.client.telemetry.CubeRegistry.Meta meta = cubeRegistry.get(previous);
+      String agencyId =
+          meta != null && meta.agencyId() != null ? meta.agencyId() : telemetry.agencyId;
+      String resourceTypeId =
+          meta != null && meta.resourceTypeId() != null
+              ? meta.resourceTypeId()
+              : telemetry.resourceTypeId;
       metrics.event(
           "conflict.resolved",
           "key",
@@ -7774,7 +7832,14 @@ public class PlanningPanel extends JPanel {
           "severity",
           String.valueOf(telemetry.severity),
           "ttr.ms",
-          String.valueOf(delta));
+          String.valueOf(delta),
+          "agency",
+          agencyId == null ? "" : agencyId,
+          "rtype",
+          resourceTypeId == null ? "" : resourceTypeId,
+          "clients",
+          clientsJoined);
+      cubeRegistry.remove(previous);
     }
     lastConflictKeys.clear();
     lastConflictKeys.addAll(current);
@@ -8892,13 +8957,27 @@ public class PlanningPanel extends JPanel {
     final String aId;
     final String bId;
     final int severity;
+    final String agencyId;
+    final String resourceTypeId;
+    final java.util.List<String> clients;
 
-    ConflictTelemetry(long startMillis, String resourceId, String aId, String bId, int severity) {
+    ConflictTelemetry(
+        long startMillis,
+        String resourceId,
+        String aId,
+        String bId,
+        int severity,
+        String agencyId,
+        String resourceTypeId,
+        java.util.List<String> clients) {
       this.startMillis = startMillis;
       this.resourceId = resourceId;
       this.aId = aId;
       this.bId = bId;
       this.severity = severity;
+      this.agencyId = agencyId;
+      this.resourceTypeId = resourceTypeId;
+      this.clients = clients == null ? java.util.List.of() : clients;
     }
   }
 
