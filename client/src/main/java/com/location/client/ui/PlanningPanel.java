@@ -183,6 +183,15 @@ public class PlanningPanel extends JPanel {
   private static final int MINIMAP_PADDING = 8;
   private final java.awt.Rectangle minimapRect = new java.awt.Rectangle();
   private boolean minimapDragging = false;
+  private enum PeekMode {
+    DAY,
+    WEEK
+  }
+  private PeekMode peekMode = PeekMode.DAY;
+  private boolean minimapHover = false;
+  private int minimapHoverX = -1;
+  private java.time.Instant peekStart = null;
+  private java.time.Instant peekEnd = null;
   private int[] miniBins = new int[0];
   private int miniBinsMax = 1;
   private int minimapSpanDays = 1;
@@ -477,6 +486,21 @@ public class PlanningPanel extends JPanel {
               }
             });
 
+    this.getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke('Y'), "togglePeekMode");
+    this.getActionMap()
+        .put(
+            "togglePeekMode",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                peekMode = peekMode == PeekMode.DAY ? PeekMode.WEEK : PeekMode.DAY;
+                if (minimapHover && minimapHoverX >= 0) {
+                  computePeekSegmentAtX(minimapHoverX);
+                }
+                repaint();
+              }
+            });
+
     this.getInputMap(WHEN_FOCUSED)
         .put(
             javax.swing.KeyStroke.getKeyStroke(
@@ -675,6 +699,19 @@ public class PlanningPanel extends JPanel {
           @Override
           public void mouseClicked(java.awt.event.MouseEvent e) {
             if (minimapVisible && minimapRect.contains(e.getPoint())) {
+              if (e.isAltDown() || e.isControlDown() || e.isMetaDown()) {
+                computePeekSegmentAtX(e.getX());
+                if (peekStart != null && peekEnd != null) {
+                  boolean targetWeek = peekMode == PeekMode.WEEK;
+                  setWeekMode(targetWeek);
+                  java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+                  java.time.LocalDate targetDay = peekStart.atZone(zone).toLocalDate();
+                  setDay(targetDay);
+                  recomputeMiniBins();
+                  repaint();
+                  return;
+                }
+              }
               seekFromMinimap(e.getX());
             }
           }
@@ -686,6 +723,22 @@ public class PlanningPanel extends JPanel {
           public void mouseDragged(java.awt.event.MouseEvent e) {
             if (minimapDragging) {
               seekFromMinimap(e.getX());
+            }
+          }
+
+          @Override
+          public void mouseMoved(java.awt.event.MouseEvent e) {
+            if (minimapVisible && minimapRect.contains(e.getPoint())) {
+              minimapHover = true;
+              minimapHoverX = e.getX();
+              computePeekSegmentAtX(minimapHoverX);
+              repaint();
+            } else if (minimapHover) {
+              minimapHover = false;
+              minimapHoverX = -1;
+              peekStart = null;
+              peekEnd = null;
+              repaint();
             }
           }
         });
@@ -3117,6 +3170,56 @@ public class PlanningPanel extends JPanel {
             minimapRect.x + minimapRect.width - MINIMAP_PADDING - labelWidth);
     int labelY = minimapRect.y + fm.getAscent() + 2;
     gh.drawString(spanLabel, labelX, labelY);
+
+    if (minimapHover && peekStart != null && peekEnd != null) {
+      java.time.Instant spanStart = multiSpanStartInstant();
+      java.time.Instant spanEnd = multiSpanEndInstant();
+      double ratioStart = instantToRatio(peekStart, spanStart, spanEnd);
+      double ratioEnd = instantToRatio(peekEnd, spanStart, spanEnd);
+      double left = Math.min(ratioStart, ratioEnd);
+      double right = Math.max(ratioStart, ratioEnd);
+      int x0 = axX + (int) Math.round(axW * left);
+      int x1 = axX + (int) Math.round(axW * right);
+      int highlightX = Math.max(axX, Math.min(axX + axW, Math.min(x0, x1)));
+      int highlightMax = Math.max(axX, Math.min(axX + axW, Math.max(x0, x1)));
+      int highlightWidth = Math.max(1, highlightMax - highlightX);
+      gh.setColor(new Color(80, 140, 255, 40));
+      gh.fillRect(highlightX, axY, highlightWidth, axH);
+      gh.setColor(new Color(80, 140, 255, 140));
+      gh.drawRect(highlightX, axY, Math.max(0, highlightWidth - 1), Math.max(0, axH - 1));
+
+      PeekStats stats = computePeekStats(peekStart, peekEnd);
+      String header = (peekMode == PeekMode.DAY ? "Jour" : "Semaine") + " · " + stats.label;
+      String body =
+          stats.countInterventions
+              + " interventions, "
+              + stats.countConflicts
+              + " conflits, "
+              + String.format(java.util.Locale.ROOT, "%.1fh", stats.hoursTotal);
+      int pad = 6;
+      gh.setFont(gh.getFont().deriveFont(11f));
+      java.awt.FontMetrics infoMetrics = gh.getFontMetrics();
+      int w1 = infoMetrics.stringWidth(header);
+      int w2 = infoMetrics.stringWidth(body);
+      int boxWidth = Math.max(w1, w2) + pad * 2;
+      int boxHeight = 28 + pad * 2;
+      int boxX =
+          Math.max(
+              axX + 2,
+              Math.min(axX + axW - boxWidth - 2, minimapHoverX - boxWidth / 2));
+      int boxY = minimapRect.y - boxHeight - 6;
+      if (boxY < 2) {
+        boxY = minimapRect.y + 2;
+      }
+      gh.setColor(darkTheme ? new Color(26, 26, 30, 230) : new Color(245, 245, 248, 230));
+      gh.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 8, 8);
+      gh.setColor(darkTheme ? new Color(235, 235, 238) : new Color(40, 40, 44));
+      gh.drawString(header, boxX + pad, boxY + 14);
+      gh.setColor(darkTheme ? new Color(210, 210, 218) : new Color(90, 90, 96));
+      gh.drawString(body, boxX + pad, boxY + 28);
+      gh.setColor(darkTheme ? new Color(0, 0, 0, 120) : new Color(0, 0, 0, 60));
+      gh.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 8, 8);
+    }
     gh.dispose();
   }
 
@@ -3349,6 +3452,102 @@ public class PlanningPanel extends JPanel {
     java.time.Instant target = start.plusMillis(targetMillis);
     centerViewOn(target);
     repaint();
+  }
+
+  private void computePeekSegmentAtX(int px) {
+    java.time.Instant spanStart = multiSpanStartInstant();
+    java.time.Instant spanEnd = multiSpanEndInstant();
+    if (spanStart == null || spanEnd == null || !spanEnd.isAfter(spanStart)) {
+      peekStart = null;
+      peekEnd = null;
+      return;
+    }
+    int axX = minimapRect.x + MINIMAP_PADDING;
+    int axW = Math.max(1, minimapRect.width - MINIMAP_PADDING * 2);
+    if (axW <= 0) {
+      peekStart = null;
+      peekEnd = null;
+      return;
+    }
+    double ratio = (px - axX) / (double) axW;
+    ratio = Math.max(0d, Math.min(1d, ratio));
+    long totalMillis = Math.max(1L, java.time.Duration.between(spanStart, spanEnd).toMillis());
+    long offset = Math.round(totalMillis * ratio);
+    java.time.Instant cursor = spanStart.plusMillis(offset);
+    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    java.time.ZonedDateTime zoned = java.time.ZonedDateTime.ofInstant(cursor, zone);
+    if (peekMode == PeekMode.DAY) {
+      java.time.ZonedDateTime dayStart = zoned.toLocalDate().atStartOfDay(zone);
+      peekStart = dayStart.toInstant();
+      peekEnd = dayStart.plusDays(1).toInstant();
+    } else {
+      java.time.DayOfWeek dow = zoned.getDayOfWeek();
+      int back = (dow.getValue() + 6) % 7;
+      java.time.ZonedDateTime weekStart = zoned.minusDays(back).toLocalDate().atStartOfDay(zone);
+      peekStart = weekStart.toInstant();
+      peekEnd = weekStart.plusDays(7).toInstant();
+    }
+  }
+
+  private static final class PeekStats {
+    String label = "";
+    int countInterventions;
+    int countConflicts;
+    double hoursTotal;
+  }
+
+  private PeekStats computePeekStats(java.time.Instant start, java.time.Instant end) {
+    PeekStats stats = new PeekStats();
+    if (start == null || end == null || !end.isAfter(start)) {
+      return stats;
+    }
+    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    java.time.format.DateTimeFormatter formatter =
+        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    if (peekMode == PeekMode.DAY) {
+      stats.label = formatter.format(java.time.ZonedDateTime.ofInstant(start, zone));
+    } else {
+      String from = formatter.format(java.time.ZonedDateTime.ofInstant(start, zone));
+      String to =
+          formatter.format(
+              java.time.ZonedDateTime.ofInstant(end.minusMillis(1), zone));
+      stats.label = from + " → " + to;
+    }
+
+    long minutes = 0L;
+    if (interventions != null) {
+      for (Models.Intervention intervention : interventions) {
+        if (intervention == null) {
+          continue;
+        }
+        java.time.Instant s = intervention.start();
+        java.time.Instant e = intervention.end();
+        if (s == null || e == null) {
+          continue;
+        }
+        if (!e.isAfter(start) || !s.isBefore(end)) {
+          continue;
+        }
+        stats.countInterventions++;
+        java.time.Instant clampedStart = s.isBefore(start) ? start : s;
+        java.time.Instant clampedEnd = e.isAfter(end) ? end : e;
+        if (clampedEnd.isAfter(clampedStart)) {
+          minutes += java.time.Duration.between(clampedStart, clampedEnd).toMinutes();
+        }
+      }
+    }
+
+    if (conflicts != null) {
+      for (ConflictUtil.Conflict conflict : conflicts) {
+        java.time.Instant midpoint = conflictMidInstant(conflict);
+        if (midpoint != null && !midpoint.isBefore(start) && midpoint.isBefore(end)) {
+          stats.countConflicts++;
+        }
+      }
+    }
+
+    stats.hoursTotal = minutes / 60.0;
+    return stats;
   }
 
   // ===== C2 — Palette GoTo/Find =====
