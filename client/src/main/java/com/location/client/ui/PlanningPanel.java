@@ -190,6 +190,9 @@ public class PlanningPanel extends JPanel {
   private static final int MINIMAP_SPAN_DAYS_MAX = 30;
   private boolean rulerVisible = true;
   private static final int RULER_HEIGHT = 24;
+  private boolean rulerSelecting = false;
+  private int rulerSelectStartX = -1;
+  private int rulerSelectCurrentX = -1;
   // C3 — Signets & navigation conflits
   private final java.util.prefs.Preferences bookmarksPrefs =
       java.util.prefs.Preferences.userRoot().node("com.location.bookmarks");
@@ -488,6 +491,89 @@ public class PlanningPanel extends JPanel {
                 rulerVisible = !rulerVisible;
                 revalidate();
                 repaint();
+              }
+            });
+
+    this.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mousePressed(java.awt.event.MouseEvent e) {
+            if (!rulerVisible) {
+              return;
+            }
+            int chipBar = chipBarHeight();
+            int top = chipBar;
+            int bottom = top + RULER_HEIGHT;
+            if (e.getY() < top || e.getY() > bottom) {
+              return;
+            }
+            rulerSelecting = true;
+            int x = clampRulerX(e.getX());
+            rulerSelectStartX = x;
+            rulerSelectCurrentX = x;
+            repaint();
+          }
+
+          @Override
+          public void mouseReleased(java.awt.event.MouseEvent e) {
+            if (!rulerSelecting) {
+              return;
+            }
+            handleRulerSelectionRelease(e);
+          }
+
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (!rulerVisible || e.getClickCount() != 2) {
+              return;
+            }
+            int chipBar = chipBarHeight();
+            int top = chipBar;
+            int bottom = top + RULER_HEIGHT;
+            if (e.getY() < top || e.getY() > bottom) {
+              return;
+            }
+            java.time.Instant focusInstant = instantForX(clampRulerX(e.getX()));
+            double targetZoom = Math.min(MAX_ZOOM_X, zoomX * 2d);
+            if (Math.abs(targetZoom - zoomX) < 0.0001d) {
+              cancelRulerSelection();
+              return;
+            }
+            double previousZoom = zoomX;
+            setZoomX(targetZoom);
+            if (focusInstant != null) {
+              centerViewportOnInstant(focusInstant);
+            }
+            if (Math.abs(previousZoom - zoomX) > 0.0001d) {
+              recomputeMiniBins();
+            }
+            cancelRulerSelection();
+          }
+        });
+
+    this.addMouseMotionListener(
+        new java.awt.event.MouseMotionAdapter() {
+          @Override
+          public void mouseDragged(java.awt.event.MouseEvent e) {
+            if (!rulerSelecting) {
+              return;
+            }
+            rulerSelectCurrentX = clampRulerX(e.getX());
+            repaint();
+          }
+        });
+
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+            "cancelRulerSelection");
+    this.getActionMap()
+        .put(
+            "cancelRulerSelection",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                cancelRulerSelection();
               }
             });
 
@@ -2744,6 +2830,7 @@ public class PlanningPanel extends JPanel {
 
     if (rulerVisible) {
       drawTimeRuler(g2, w, chipBar, headerH);
+      paintRulerSelection(g2, chipBar);
     }
 
     LocalDate headerStart = getViewStart();
@@ -3994,6 +4081,162 @@ public class PlanningPanel extends JPanel {
     } finally {
       g.dispose();
     }
+  }
+
+  private void paintRulerSelection(Graphics2D baseGraphics, int chipBar) {
+    if (!rulerSelecting && (rulerSelectStartX < 0 || rulerSelectCurrentX < 0)) {
+      return;
+    }
+    int start = rulerSelectStartX;
+    int end = rulerSelectCurrentX;
+    if (start < 0 || end < 0) {
+      return;
+    }
+    int left = Math.min(start, end);
+    int right = Math.max(start, end);
+    int width = Math.max(1, right - left);
+    Graphics2D g = (Graphics2D) baseGraphics.create();
+    try {
+      g.setColor(new Color(80, 140, 255, 50));
+      g.fillRect(left, chipBar, width, RULER_HEIGHT);
+      g.setColor(new Color(80, 140, 255, 160));
+      g.drawRect(left, chipBar, Math.max(0, width - 1), RULER_HEIGHT - 1);
+
+      Instant startInstant = instantForX(left);
+      Instant endInstant = instantForX(right);
+      String label = formatRulerSelectionLabel(startInstant, endInstant);
+      if (label != null && !label.isBlank()) {
+        g.setFont(g.getFont().deriveFont(11f));
+        FontMetrics fm = g.getFontMetrics();
+        int labelWidth = fm.stringWidth(label) + 6;
+        int labelHeight = 16;
+        int labelX =
+            Math.max(2, Math.min(getWidth() - labelWidth - 2, left + width / 2 - labelWidth / 2));
+        int labelY = chipBar + 2;
+        Color bg = darkTheme ? new Color(26, 26, 30, 220) : new Color(245, 245, 248, 220);
+        Color fg = darkTheme ? new Color(235, 235, 238) : new Color(40, 40, 44);
+        g.setColor(bg);
+        g.fillRoundRect(labelX, labelY, labelWidth, labelHeight, 8, 8);
+        g.setColor(fg);
+        g.drawString(label, labelX + 3, labelY + labelHeight - 5);
+      }
+    } finally {
+      g.dispose();
+    }
+  }
+
+  private void handleRulerSelectionRelease(java.awt.event.MouseEvent event) {
+    int end = clampRulerX(event.getX());
+    int start = clampRulerX(rulerSelectStartX);
+    rulerSelectCurrentX = end;
+    int distance = Math.abs(end - start);
+    Instant startInstant = instantForX(Math.min(start, end));
+    Instant endInstant = instantForX(Math.max(start, end));
+    cancelRulerSelection();
+    boolean zoomChanged = false;
+    if (distance >= 6 && startInstant != null && endInstant != null) {
+      java.time.Duration selection = java.time.Duration.between(startInstant, endInstant);
+      if (!selection.isZero()) {
+        java.awt.Rectangle vis = getVisibleRect();
+        int viewportWidth = vis != null ? vis.width : 0;
+        if (viewportWidth <= 0) {
+          javax.swing.JViewport viewport = findEnclosingViewport();
+          if (viewport != null) {
+            viewportWidth = viewport.getExtentSize().width;
+          }
+        }
+        if (viewportWidth > 0 && distance > 0) {
+          double factor = viewportWidth / (double) distance;
+          double previousZoom = zoomX;
+          setZoomX(zoomX * factor);
+          zoomChanged = Math.abs(previousZoom - zoomX) > 0.0001d;
+          Instant mid = mid(startInstant, endInstant);
+          if (mid != null) {
+            centerViewportOnInstant(mid);
+          }
+        }
+      }
+    } else {
+      Instant target = instantForX(end);
+      if (target != null) {
+        centerViewOn(target);
+      }
+    }
+    if (zoomChanged) {
+      recomputeMiniBins();
+    }
+    repaint();
+  }
+
+  private void cancelRulerSelection() {
+    boolean dirty = rulerSelecting || rulerSelectStartX >= 0 || rulerSelectCurrentX >= 0;
+    rulerSelecting = false;
+    rulerSelectStartX = -1;
+    rulerSelectCurrentX = -1;
+    if (dirty) {
+      repaint();
+    }
+  }
+
+  private int clampRulerX(int x) {
+    return Math.max(0, Math.min(getWidth(), x));
+  }
+
+  private String formatRulerSelectionLabel(Instant start, Instant end) {
+    if (start == null && end == null) {
+      return "";
+    }
+    if (start == null) {
+      start = end;
+    }
+    if (end == null) {
+      end = start;
+    }
+    if (end.isBefore(start)) {
+      Instant tmp = start;
+      start = end;
+      end = tmp;
+    }
+    java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+    java.time.ZonedDateTime startZdt = start.atZone(zone);
+    java.time.ZonedDateTime endZdt = end.atZone(zone);
+    java.time.Duration duration = java.time.Duration.between(start, end);
+    if (duration.isNegative()) {
+      duration = duration.negated();
+    }
+    String durationLabel = formatDurationShort(duration);
+    if (duration.isZero()) {
+      return java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+          .withLocale(java.util.Locale.getDefault())
+          .format(startZdt);
+    }
+    if (startZdt.toLocalDate().equals(endZdt.toLocalDate())) {
+      String s = HOUR_FORMATTER.format(startZdt.toLocalTime());
+      String e = HOUR_FORMATTER.format(endZdt.toLocalTime());
+      return String.format("%s – %s (%s)", s, e, durationLabel);
+    }
+    java.time.format.DateTimeFormatter fmt =
+        java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")
+            .withLocale(java.util.Locale.getDefault());
+    String s = fmt.format(startZdt);
+    String e = fmt.format(endZdt);
+    return String.format("%s – %s (%s)", s, e, durationLabel);
+  }
+
+  private String formatDurationShort(java.time.Duration duration) {
+    if (duration == null) {
+      return "";
+    }
+    long totalMinutes = Math.max(0, duration.toMinutes());
+    long hours = totalMinutes / 60;
+    long minutes = totalMinutes % 60;
+    if (hours > 0 && minutes > 0) {
+      return String.format("%dh%02d", hours, minutes);
+    }
+    if (hours > 0) {
+      return String.format("%dh", hours);
+    }
+    return String.format("%dmin", minutes);
   }
 
   private int pickMinorMinutes(Duration span) {
