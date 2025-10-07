@@ -183,6 +183,16 @@ public class PlanningPanel extends JPanel {
   private static final int MINIMAP_PADDING = 8;
   private final java.awt.Rectangle minimapRect = new java.awt.Rectangle();
   private boolean minimapDragging = false;
+  // ===== D1 — Observabilité : core =====
+  private final com.location.client.telemetry.Metrics metrics =
+      com.location.client.telemetry.Metrics.get();
+  // suivi des conflits (clé→start)
+  private final java.util.Map<String, ConflictTelemetry> conflictStart = new java.util.HashMap<>();
+  // dernier snapshot de clés pour détecter résolutions
+  private final java.util.Set<String> lastConflictKeys = new java.util.HashSet<>();
+  // HUD metrics
+  private boolean metricsHudVisible = true;
+  private final int metricsHudPad = 8;
   private enum PeekMode {
     DAY,
     WEEK
@@ -357,6 +367,40 @@ public class PlanningPanel extends JPanel {
               @Override
               public void actionPerformed(java.awt.event.ActionEvent e) {
                 promptGotoDate();
+              }
+            });
+
+    // D1 — HUD metrics (Ctrl+L) & Event Log (Ctrl+Shift+L)
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_L, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "toggleMetricsHud");
+    this.getActionMap()
+        .put(
+            "toggleMetricsHud",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                metricsHudVisible = !metricsHudVisible;
+                repaint();
+              }
+            });
+    this.getInputMap(WHEN_FOCUSED)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_L,
+                java.awt.event.InputEvent.CTRL_DOWN_MASK
+                    | java.awt.event.InputEvent.SHIFT_DOWN_MASK),
+            "openEventLog");
+    this.getActionMap()
+        .put(
+            "openEventLog",
+            new javax.swing.AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                new com.location.client.telemetry.EventLogDialog(PlanningPanel.this)
+                    .setVisible(true);
               }
             });
 
@@ -3079,6 +3123,52 @@ public class PlanningPanel extends JPanel {
       paintHudFooter(g2);
     } else {
       hudRect = null;
+    }
+
+    if (metricsHudVisible) {
+      Graphics2D metricsGraphics = (Graphics2D) g2.create();
+      try {
+        metricsGraphics.setRenderingHint(
+            RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        String line1 =
+            "Conflicts: "
+                + metrics.getCounter("conflicts.active")
+                + "  Resolved: "
+                + metrics.getCounter("conflicts.resolved");
+        double avgTtrMs = metrics.avgMs("conflicts.ttr.ms");
+        String line2 =
+            "Avg TTR: "
+                + String.format(java.util.Locale.ROOT, "%.1fs", avgTtrMs / 1000.0)
+                + "  Actions: reassign="
+                + metrics.getCounter("action.reassign")
+                + " shift="
+                + metrics.getCounter("action.shift")
+                + " undo="
+                + metrics.getCounter("action.undo");
+        metricsGraphics.setFont(metricsGraphics.getFont().deriveFont(11f));
+        java.awt.FontMetrics fm = metricsGraphics.getFontMetrics();
+        int pad = metricsHudPad;
+        int boxWidth = Math.max(fm.stringWidth(line1), fm.stringWidth(line2)) + pad * 2;
+        int boxHeight = fm.getHeight() * 2 + pad * 2;
+        int x = getWidth() - boxWidth - 6;
+        int y = getHeight() - (minimapVisible ? MINIMAP_HEIGHT : 0) - boxHeight - 6;
+        java.awt.Color background =
+            darkTheme ? new java.awt.Color(26, 26, 30, 220) : new java.awt.Color(245, 245, 248, 220);
+        java.awt.Color foreground =
+            darkTheme ? new java.awt.Color(235, 235, 238) : new java.awt.Color(40, 40, 44);
+        java.awt.Color border =
+            darkTheme ? new java.awt.Color(0, 0, 0, 120) : new java.awt.Color(0, 0, 0, 60);
+        metricsGraphics.setColor(background);
+        metricsGraphics.fillRoundRect(x, y, boxWidth, boxHeight, 10, 10);
+        metricsGraphics.setColor(foreground);
+        metricsGraphics.drawString(line1, x + pad, y + pad + fm.getAscent());
+        metricsGraphics.drawString(
+            line2, x + pad, y + pad + fm.getAscent() + fm.getHeight());
+        metricsGraphics.setColor(border);
+        metricsGraphics.drawRoundRect(x, y, boxWidth, boxHeight, 10, 10);
+      } finally {
+        metricsGraphics.dispose();
+      }
     }
   }
 
@@ -7492,6 +7582,7 @@ public class PlanningPanel extends JPanel {
       conflictsPanel.setVisible(conflictsVisible && !conflictEntries.isEmpty());
     }
     rebuildSuggestions();
+    updateConflictsTelemetry();
   }
 
   private void navigateNextConflict() {
@@ -7624,6 +7715,70 @@ public class PlanningPanel extends JPanel {
     String idb = conflict.b() != null && conflict.b().id() != null ? conflict.b().id() : "";
     String rid = conflict.resourceId() == null ? "" : conflict.resourceId();
     return ida + "|" + idb + "|" + rid;
+  }
+
+  private void updateConflictsTelemetry() {
+    java.util.Set<String> current = new java.util.HashSet<>();
+    long now = System.currentTimeMillis();
+    for (ConflictEntry entry : conflictEntries) {
+      if (entry == null) {
+        continue;
+      }
+      String key = entry.key();
+      if (key == null || key.isBlank()) {
+        continue;
+      }
+      current.add(key);
+      if (!conflictStart.containsKey(key)) {
+        String rid = entry.resourceId == null ? "" : entry.resourceId;
+        String ida = entry.a != null && entry.a.id() != null ? entry.a.id() : "";
+        String idb = entry.b != null && entry.b.id() != null ? entry.b.id() : "";
+        ConflictTelemetry telemetry =
+            new ConflictTelemetry(now, rid, ida, idb, Math.max(0, entry.severity));
+        conflictStart.put(key, telemetry);
+        metrics.event(
+            "conflict.new",
+            "key",
+            key,
+            "rid",
+            rid,
+            "a",
+            ida,
+            "b",
+            idb,
+            "severity",
+            String.valueOf(telemetry.severity));
+      }
+    }
+    for (String previous : new java.util.HashSet<>(lastConflictKeys)) {
+      if (current.contains(previous)) {
+        continue;
+      }
+      ConflictTelemetry telemetry = conflictStart.remove(previous);
+      if (telemetry == null) {
+        continue;
+      }
+      long delta = Math.max(0L, System.currentTimeMillis() - telemetry.startMillis);
+      metrics.observe("conflicts.ttr.ms", delta);
+      metrics.increment("conflicts.resolved");
+      metrics.event(
+          "conflict.resolved",
+          "key",
+          previous,
+          "rid",
+          telemetry.resourceId == null ? "" : telemetry.resourceId,
+          "a",
+          telemetry.aId == null ? "" : telemetry.aId,
+          "b",
+          telemetry.bId == null ? "" : telemetry.bId,
+          "severity",
+          String.valueOf(telemetry.severity),
+          "ttr.ms",
+          String.valueOf(delta));
+    }
+    lastConflictKeys.clear();
+    lastConflictKeys.addAll(current);
+    metrics.setCounter("conflicts.active", conflictStart.size());
   }
 
   private void toggleBookmarkHere() {
@@ -8147,6 +8302,7 @@ public class PlanningPanel extends JPanel {
             ? new java.util.LinkedHashSet<>(effectiveResourceIds(refreshed))
             : afterSet;
     if (appliedSet.equals(afterSet)) {
+      metrics.increment("action.reassign");
       String title = intervention.title() == null ? "" : intervention.title();
       java.util.List<String> beforeSnapshot = java.util.List.copyOf(before);
       pushUndo(
@@ -8163,6 +8319,7 @@ public class PlanningPanel extends JPanel {
             }
             reload();
             repaint();
+            metrics.increment("action.undo");
           });
     }
     rebuildSuggestions();
@@ -8228,6 +8385,7 @@ public class PlanningPanel extends JPanel {
       if (before != null) {
         java.time.Instant originalStart = before.start();
         java.time.Instant originalEnd = before.end();
+        metrics.increment("action.shift");
         pushUndo(
             "Décaler " + (minutes >= 0 ? "+" : "") + minutes + " min: " + title,
             () -> {
@@ -8252,6 +8410,7 @@ public class PlanningPanel extends JPanel {
               }
               reload();
               repaint();
+              metrics.increment("action.undo");
             });
       }
       setSelected(saved);
@@ -8725,6 +8884,22 @@ public class PlanningPanel extends JPanel {
     return HOUR_FORMATTER.format(start.atZone(zone))
         + "–"
         + HOUR_FORMATTER.format(end.atZone(zone));
+  }
+
+  private static final class ConflictTelemetry {
+    final long startMillis;
+    final String resourceId;
+    final String aId;
+    final String bId;
+    final int severity;
+
+    ConflictTelemetry(long startMillis, String resourceId, String aId, String bId, int severity) {
+      this.startMillis = startMillis;
+      this.resourceId = resourceId;
+      this.aId = aId;
+      this.bId = bId;
+      this.severity = severity;
+    }
   }
 
   private static final class ConflictEntry {
